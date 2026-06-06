@@ -1109,6 +1109,17 @@ function Editor() {
               <div className={`pointer-events-none absolute inset-y-0 left-1/2 w-px transition-opacity ${snapV ? "bg-primary opacity-100" : "bg-white/10 opacity-0 group-hover/preview:opacity-30"}`} />
               <div className={`pointer-events-none absolute inset-x-0 top-1/2 h-px transition-opacity ${snapH ? "bg-primary opacity-100" : "bg-white/10 opacity-0 group-hover/preview:opacity-30"}`} />
 
+              {/* Per-image background fill */}
+              {overlays.filter(ov => ov.kind === "image" && ov.fx && ov.fx.fillMode !== "bars" && ov.fx.fillMode !== "color").map(ov => (
+                <img key={`imgbg-${ov.id}`} src={ov.url} alt="" draggable={false}
+                  className="pointer-events-none absolute inset-0 h-full w-full"
+                  style={{
+                    objectFit: ov.fx!.fillMode === "stretch" ? "fill" : "cover",
+                    transform: `${ov.fx!.fillMode === "mirror" ? "scaleX(-1)" : ""} scale(1.1)`,
+                    filter: ov.fx!.fillMode === "blur" ? `blur(${Math.max(12, (ov.fx!.blurBg || 40) * 0.6)}px) brightness(0.7)` : undefined,
+                    opacity: computeVisualOpacity(ov, playhead),
+                  }} />
+              ))}
               {overlays.map(ov => {
                 const tr = ov.transform!;
                 const isSel = ov.id === selectedId;

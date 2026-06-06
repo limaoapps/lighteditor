@@ -1698,12 +1698,20 @@ function Editor() {
                       ))}
                     </div>
                     {fx.fillMode === "blur" && (
-                      <label className="flex items-center gap-2">
+                      <label className="flex items-center gap-2" title="Role o mouse para ajustar · duplo clique para zerar"
+                        onWheel={(e) => {
+                          e.preventDefault();
+                          const step = e.shiftKey ? 5 : 1;
+                          const next = Math.max(0, Math.min(100, fx.blurBg + (e.deltaY < 0 ? step : -step)));
+                          patchFx({ blurBg: next });
+                        }}>
                         <span className="w-20 text-muted-foreground">Blur</span>
                         <input type="range" min={0} max={100} step={1} value={fx.blurBg}
                           onChange={(e) => patchFx({ blurBg: Number(e.target.value) })}
+                          onDoubleClick={() => patchFx({ blurBg: 0 })}
                           className="flex-1 accent-[color:var(--primary)]" />
-                        <span className="w-10 text-right font-mono tabular-nums">{fx.blurBg}</span>
+                        <button type="button" onClick={() => patchFx({ blurBg: 0 })}
+                          className="w-10 text-right font-mono tabular-nums hover:text-primary">{fx.blurBg}</button>
                       </label>
                     )}
                     {fx.fillMode === "color" && (

@@ -1125,7 +1125,10 @@ function Editor() {
       await ff.deleteFile("output.mp4").catch(() => {});
       if (music) await ff.deleteFile("bgm.bin").catch(() => {});
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Falha na exportação");
+      const tail = logs.slice(-6).join("\n");
+      console.error("[export] FFmpeg falhou:", e, "\nÚltimos logs:\n", tail);
+      const baseMsg = e instanceof Error ? e.message : "Falha na exportação";
+      setError(`${baseMsg}${tail ? `\n\nDetalhes:\n${tail}` : ""}`);
       setExportMsg("Erro");
     } finally { setExporting(false); }
   };

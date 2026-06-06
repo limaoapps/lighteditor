@@ -113,6 +113,11 @@ const DEFAULT_FX: Fx = {
   bgColor: "#000000", zoom: null,
 };
 
+const FX_DEFAULT_VAL: Record<string, number> = {
+  brightness: 0, contrast: 0, saturation: 0, temperature: 0,
+  sharpness: 0, exposure: 0, shadows: 0, highlights: 0, opacity: 100,
+};
+
 const QUICK_EFFECTS: { id: string; label: string }[] = [
   { id: "bw", label: "Preto e Branco" },
   { id: "sepia", label: "Sépia" },

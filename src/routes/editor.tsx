@@ -1428,20 +1428,47 @@ function Editor() {
                   );
                 }
                 if (ov.kind === "text" && ov.text) {
+                  const t = ov.text;
+                  const bgRgba = (() => {
+                    const h = t.bgColor.replace("#", "");
+                    const r = parseInt(h.slice(0, 2), 16);
+                    const g = parseInt(h.slice(2, 4), 16);
+                    const b = parseInt(h.slice(4, 6), 16);
+                    return `rgba(${r},${g},${b},${t.bgOpacity})`;
+                  })();
+                  const shadow = t.shadowBlur > 0 || t.shadowOffsetX || t.shadowOffsetY
+                    ? `${t.shadowOffsetX}px ${t.shadowOffsetY}px ${t.shadowBlur}px ${t.shadowColor}`
+                    : "none";
+                  const stroke = t.strokeWidth > 0
+                    ? `${t.strokeWidth}px ${t.strokeColor}` : undefined;
                   const txtStyle: React.CSSProperties = {
                     position: "absolute",
                     left: `${tr.xPct}%`, top: `${tr.yPct}%`,
                     transform: `translate(-50%,-50%) scale(${tr.scale}) rotate(${tr.rotation}deg)`,
-                    color: ov.text.color, fontSize: ov.text.size, fontWeight: 700,
-                    textShadow: "0 2px 12px rgba(0,0,0,0.6)", whiteSpace: "nowrap",
-                    cursor: "move", padding: 4,
-                    opacity: computeVisualOpacity(ov, playhead),
+                    color: t.color,
+                    fontFamily: t.fontFamily,
+                    fontSize: t.size,
+                    fontWeight: t.bold ? 800 : 400,
+                    fontStyle: t.italic ? "italic" : "normal",
+                    textDecoration: t.underline ? "underline" : "none",
+                    textAlign: t.align,
+                    letterSpacing: `${t.letterSpacing}px`,
+                    lineHeight: t.lineHeight,
+                    textShadow: shadow,
+                    WebkitTextStroke: stroke,
+                    background: t.bgOpacity > 0 ? bgRgba : "transparent",
+                    padding: `${t.paddingY}px ${t.paddingX}px`,
+                    borderRadius: t.radius,
+                    whiteSpace: "pre-wrap",
+                    cursor: "move",
+                    opacity: (computeVisualOpacity(ov, playhead)) * t.opacity,
                     zIndex: 5,
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
+                    maxWidth: "90%",
                   };
                   return (
                     <div key={ov.id} style={txtStyle} onMouseDown={(e) => startMove(ov.id, e, tr)}>
-                      {ov.text.content}
+                      {t.content}
                       {isSel && <CornerHandles id={ov.id} tr={tr} onStartScale={startScale} />}
                     </div>
                   );

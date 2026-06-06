@@ -570,6 +570,15 @@ function Editor() {
     if (selectedId === id) setSelectedId(null);
   };
 
+  const removeMedia = (mediaId: string) => {
+    setMedia(prev => {
+      const target = prev.find(m => m.id === mediaId);
+      if (target?.url) { try { URL.revokeObjectURL(target.url); } catch {} }
+      return prev.filter(m => m.id !== mediaId);
+    });
+    setItems(prev => prev.filter(i => i.mediaId !== mediaId));
+  };
+
   const splitAt = useCallback((t: number, onlyClipId?: string) => {
     setItems(prev => {
       const out: TLItem[] = [];

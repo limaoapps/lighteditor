@@ -1066,14 +1066,14 @@ function Editor() {
               {/* Background fill (blur/mirror/stretch) for V1 video */}
               {activeV1Video && activeV1Video.fx && activeV1Video.fx.fillMode !== "bars" && activeV1Video.fx.fillMode !== "color" && (
                 <video
-                  key={`bg-${activeV1Video.id}`}
+                  key={`bg-${activeV1Video.id}-${activeV1Video.fx.fillMode}`}
                   src={activeV1Video.url}
-                  muted playsInline autoPlay
+                  muted playsInline autoPlay loop
                   className="pointer-events-none absolute inset-0 h-full w-full"
                   style={{
                     objectFit: activeV1Video.fx.fillMode === "stretch" ? "fill" : "cover",
-                    transform: activeV1Video.fx.fillMode === "mirror" ? "scaleX(-1)" : undefined,
-                    filter: activeV1Video.fx.fillMode === "blur" ? `blur(${Math.max(8, activeV1Video.fx.blurBg * 0.6)}px) brightness(0.8)` : undefined,
+                    transform: `${activeV1Video.fx.fillMode === "mirror" ? "scaleX(-1)" : ""} scale(1.1)`,
+                    filter: activeV1Video.fx.fillMode === "blur" ? `blur(${Math.max(12, (activeV1Video.fx.blurBg || 40) * 0.6)}px) brightness(0.7)` : undefined,
                   }}
                 />
               )}

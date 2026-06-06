@@ -712,9 +712,18 @@ function Editor() {
 
   // Ruler ticks
   const rulerSpan = Math.max(totalDuration + 5, 10);
+  const minZoom = Math.max(2, Math.floor((tlViewportW - labelColW - 4) / rulerSpan));
   const tickStep = zoom < 20 ? 10 : zoom < 40 ? 5 : zoom < 80 ? 2 : 1;
   const ticks: number[] = [];
   for (let t = 0; t <= rulerSpan; t += tickStep) ticks.push(t);
+
+  useEffect(() => {
+    const el = timelineRef.current; if (!el) return;
+    const ro = new ResizeObserver(() => setTlViewportW(el.clientWidth));
+    ro.observe(el); setTlViewportW(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+  useEffect(() => { if (zoom < minZoom) setZoom(minZoom); }, [minZoom, zoom]);
 
   // ---- Export ----
   const doExport = async () => {

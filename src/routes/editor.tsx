@@ -38,6 +38,7 @@ type MediaAsset = {
 
 type FillMode = "bars" | "blur" | "mirror" | "stretch" | "color";
 type ZoomFx = { dir: "in" | "out"; speed: "slow" | "med" | "fast" } | null;
+type VignetteMode = "dark" | "light";
 type Fx = {
   brightness: number; contrast: number; saturation: number; temperature: number;
   sharpness: number; exposure: number; shadows: number; highlights: number;
@@ -47,6 +48,9 @@ type Fx = {
   fillMode: FillMode;
   bgColor: string;
   zoom: ZoomFx;
+  vignette: number;        // 0..100 intensity (0 = off)
+  vignetteSize: number;    // 0..100 (size of clear center)
+  vignetteMode: VignetteMode;
 };
 
 type TLItem = {
@@ -111,6 +115,7 @@ const DEFAULT_FX: Fx = {
   sharpness: 0, exposure: 0, shadows: 0, highlights: 0,
   opacity: 100, preset: null, blurBg: 0, fillMode: "bars",
   bgColor: "#000000", zoom: null,
+  vignette: 0, vignetteSize: 50, vignetteMode: "dark",
 };
 
 const FX_DEFAULT_VAL: Record<string, number> = {
@@ -166,13 +171,13 @@ function cssFilter(fx?: Fx): string {
   // shadows/highlights approximation via gamma-like brightness/contrast tweak
   if (fx.shadows) parts.push(`brightness(${(1 + fx.shadows / 400).toFixed(3)})`);
   if (fx.highlights) parts.push(`contrast(${(1 + fx.highlights / 400).toFixed(3)})`);
-  // sharpness: emulate via contrast bump (CSS has no sharpen)
-  if (fx.sharpness > 0) parts.push(`contrast(${(1 + fx.sharpness / 300).toFixed(3)})`);
-  // preset overlays
+  // sharpness: real unsharp-mask via SVG filter (no saturation/contrast bleed)
+  if (fx.sharpness > 0) parts.push(`url(#lle-sharpen)`);
+  // preset overlays — keep purely tonal; "sharp"/"vignette" handled outside cssFilter
   switch (fx.preset) {
     case "bw":       parts.push("grayscale(1)"); break;
     case "sepia":    parts.push("sepia(1)"); break;
-    case "sharp":    parts.push("contrast(1.25) saturate(1.1)"); break;
+    case "sharp":    parts.push("url(#lle-sharpen-strong)"); break;
     case "contrast": parts.push("contrast(1.5)"); break;
     case "warm":     parts.push("sepia(0.35) saturate(1.2) hue-rotate(-10deg)"); break;
     case "cool":     parts.push("hue-rotate(20deg) saturate(1.1) brightness(1.02)"); break;
@@ -185,6 +190,23 @@ function cssFilter(fx?: Fx): string {
     default: break;
   }
   return parts.join(" ");
+}
+
+// Vignette overlay style — radial gradient (smooth, no hard edges)
+function vignetteStyle(fx?: Fx): React.CSSProperties | null {
+  if (!fx) return null;
+  const enabled = fx.vignette > 0 || fx.preset === "vignette";
+  if (!enabled) return null;
+  const intensity = fx.preset === "vignette" && fx.vignette === 0 ? 70 : fx.vignette;
+  const size = fx.vignetteSize; // 0..100 = clear-center radius
+  const inner = Math.max(0, Math.min(95, size * 0.6));      // start of darkening
+  const outer = Math.max(inner + 5, 100);                    // fully dark at corners
+  const alpha = (intensity / 100).toFixed(3);
+  const color = fx.vignetteMode === "light" ? `255,255,255` : `0,0,0`;
+  return {
+    background: `radial-gradient(ellipse at center, rgba(${color},0) ${inner}%, rgba(${color},${alpha}) ${outer}%)`,
+    mixBlendMode: fx.vignetteMode === "light" ? "screen" : "multiply",
+  };
 }
 
 function computeVisualOpacity(i: TLItem, t: number): number {
@@ -1063,6 +1085,19 @@ function Editor() {
                 width: `min(100%, calc((100vh - 360px) * ${aspect.w} / ${aspect.h}))`,
                 background: activeV1Video?.fx?.fillMode === "color" ? activeV1Video.fx.bgColor : "#000",
               }}>
+              {/* Hidden SVG defs: real sharpen (unsharp-mask convolution) */}
+              <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden>
+                <defs>
+                  <filter id="lle-sharpen" x="0" y="0" width="100%" height="100%">
+                    <feConvolveMatrix order="3" preserveAlpha="true"
+                      kernelMatrix="0 -1 0  -1 5 -1  0 -1 0" />
+                  </filter>
+                  <filter id="lle-sharpen-strong" x="0" y="0" width="100%" height="100%">
+                    <feConvolveMatrix order="3" preserveAlpha="true"
+                      kernelMatrix="-1 -1 -1  -1 9 -1  -1 -1 -1" />
+                  </filter>
+                </defs>
+              </svg>
               {/* Background fill (blur/mirror/stretch) for V1 video */}
               {activeV1Video && activeV1Video.fx && activeV1Video.fx.fillMode !== "bars" && activeV1Video.fx.fillMode !== "color" && (
                 <video
@@ -1072,8 +1107,8 @@ function Editor() {
                   className="pointer-events-none absolute inset-0 h-full w-full"
                   style={{
                     objectFit: activeV1Video.fx.fillMode === "stretch" ? "fill" : "cover",
-                    transform: `${activeV1Video.fx.fillMode === "mirror" ? "scaleX(-1)" : ""} scale(1.1)`,
-                    filter: activeV1Video.fx.fillMode === "blur" ? `blur(${Math.max(12, (activeV1Video.fx.blurBg || 40) * 0.6)}px) brightness(0.7)` : undefined,
+                    transform: `${activeV1Video.fx.fillMode === "mirror" ? "scaleX(-1)" : ""} scale(1.35)`,
+                    filter: activeV1Video.fx.fillMode === "blur" ? `blur(${Math.max(16, (activeV1Video.fx.blurBg || 40) * 0.7)}px) brightness(0.7)` : undefined,
                   }}
                 />
               )}
@@ -1092,10 +1127,11 @@ function Editor() {
                 return <video ref={videoElRef} className="absolute inset-0 h-full w-full object-contain pointer-events-none" muted={false} playsInline style={style} />;
               })()}
 
-              {/* Vignette overlay if preset = vignette */}
-              {activeV1Video?.fx?.preset === "vignette" && (
-                <div className="pointer-events-none absolute inset-0" style={{ boxShadow: "inset 0 0 180px 60px rgba(0,0,0,0.85)" }} />
-              )}
+              {/* Vignette overlay for V1 video */}
+              {(() => {
+                const vs = vignetteStyle(activeV1Video?.fx);
+                return vs ? <div className="pointer-events-none absolute inset-0" style={vs} /> : null;
+              })()}
 
               {/* Click-to-select V1 video (transparent layer above video, below overlays) */}
               {activeV1Video && activeV1Video.transform && (
@@ -1115,8 +1151,8 @@ function Editor() {
                   className="pointer-events-none absolute inset-0 h-full w-full"
                   style={{
                     objectFit: ov.fx!.fillMode === "stretch" ? "fill" : "cover",
-                    transform: `${ov.fx!.fillMode === "mirror" ? "scaleX(-1)" : ""} scale(1.1)`,
-                    filter: ov.fx!.fillMode === "blur" ? `blur(${Math.max(12, (ov.fx!.blurBg || 40) * 0.6)}px) brightness(0.7)` : undefined,
+                    transform: `${ov.fx!.fillMode === "mirror" ? "scaleX(-1)" : ""} scale(1.35)`,
+                    filter: ov.fx!.fillMode === "blur" ? `blur(${Math.max(16, (ov.fx!.blurBg || 40) * 0.7)}px) brightness(0.7)` : undefined,
                     opacity: computeVisualOpacity(ov, playhead),
                   }} />
               ))}
@@ -1143,9 +1179,10 @@ function Editor() {
                     <div key={ov.id} style={wrap} onMouseDown={(e) => startMove(ov.id, e, tr)}>
                       <img src={ov.url} alt="" draggable={false} className="pointer-events-none h-full w-full object-contain"
                         style={{ filter: cssFilter(fx) }} />
-                      {fx?.preset === "vignette" && (
-                        <div className="pointer-events-none absolute inset-0" style={{ boxShadow: "inset 0 0 120px 40px rgba(0,0,0,0.85)" }} />
-                      )}
+                      {(() => {
+                        const vs = vignetteStyle(fx);
+                        return vs ? <div className="pointer-events-none absolute inset-0" style={vs} /> : null;
+                      })()}
                       {isSel && <CornerHandles id={ov.id} tr={tr} onStartScale={startScale} />}
                     </div>
                   );
@@ -1535,6 +1572,40 @@ function Editor() {
                     )}
                   </div>
                 </details>
+
+                <details className="rounded border border-border/60 bg-background/40">
+                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Vinheta</summary>
+                  <div className="space-y-1.5 px-2 pb-2 pt-1">
+                    <div className="grid grid-cols-2 gap-1">
+                      {(["dark","light"] as VignetteMode[]).map(m => (
+                        <button key={m} onClick={() => patchFx({ vignetteMode: m })}
+                          className={`rounded border px-1.5 py-1 text-[10px] ${fx.vignetteMode === m ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                          {m === "dark" ? "Escura" : "Clara"}
+                        </button>
+                      ))}
+                    </div>
+                    <label className="flex items-center gap-2" title="Duplo clique para zerar">
+                      <span className="w-20 text-muted-foreground">Intensidade</span>
+                      <input type="range" min={0} max={100} step={1} value={fx.vignette}
+                        onChange={(e) => patchFx({ vignette: Number(e.target.value) })}
+                        onDoubleClick={() => patchFx({ vignette: 0 })}
+                        className="flex-1 accent-[color:var(--primary)]" />
+                      <button type="button" onClick={() => patchFx({ vignette: 0 })}
+                        className="w-10 text-right font-mono tabular-nums hover:text-primary">{fx.vignette}</button>
+                    </label>
+                    <label className="flex items-center gap-2" title="Duplo clique para padrão">
+                      <span className="w-20 text-muted-foreground">Tamanho</span>
+                      <input type="range" min={0} max={100} step={1} value={fx.vignetteSize}
+                        onChange={(e) => patchFx({ vignetteSize: Number(e.target.value) })}
+                        onDoubleClick={() => patchFx({ vignetteSize: 50 })}
+                        className="flex-1 accent-[color:var(--primary)]" />
+                      <button type="button" onClick={() => patchFx({ vignetteSize: 50 })}
+                        className="w-10 text-right font-mono tabular-nums hover:text-primary">{fx.vignetteSize}</button>
+                    </label>
+                  </div>
+                </details>
+
+
 
                 <details className="rounded border border-border/60 bg-background/40">
                   <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Entrada / Saída</summary>

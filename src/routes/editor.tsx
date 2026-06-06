@@ -113,7 +113,7 @@ function dbToGain(db: number) { return Math.pow(10, db / 20); }
 const DEFAULT_FX: Fx = {
   brightness: 0, contrast: 0, saturation: 0, temperature: 0,
   sharpness: 0, exposure: 0, shadows: 0, highlights: 0,
-  opacity: 100, preset: null, blurBg: 0, fillMode: "bars",
+  opacity: 100, preset: null, blurBg: 30, fillMode: "bars",
   bgColor: "#000000", zoom: null,
   vignette: 0, vignetteSize: 50, vignetteMode: "dark",
 };
@@ -190,6 +190,20 @@ function cssFilter(fx?: Fx): string {
     default: break;
   }
   return parts.join(" ");
+}
+
+function backgroundFillStyle(fx: Fx): React.CSSProperties {
+  const isBlur = fx.fillMode === "blur";
+  return {
+    position: "absolute",
+    inset: 0,
+    width: "100%",
+    height: "100%",
+    objectFit: fx.fillMode === "stretch" ? "fill" : "cover",
+    transform: `${fx.fillMode === "mirror" ? "scaleX(-1) " : ""}scale(${isBlur ? 1.4 : 1})`,
+    filter: isBlur ? `blur(${Math.max(0, fx.blurBg) * 0.5}px)` : undefined,
+    zIndex: 1,
+  };
 }
 
 // Vignette overlay style — radial gradient (smooth, no hard edges)

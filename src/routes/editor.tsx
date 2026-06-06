@@ -697,7 +697,7 @@ function Editor() {
   useEffect(() => {
     const bg = videoBgElRef.current;
     if (!bg) return;
-    const needsBg = !!activeV1Video?.fx && activeV1Video.fx.fillMode !== "bars" && activeV1Video.fx.fillMode !== "color";
+    const needsBg = hasBackgroundFill(activeV1Video?.fx);
     if (!activeV1Video || !needsBg) { bg.pause(); bg.removeAttribute("src"); bg.load(); return; }
     const wanted = activeV1Video.url!;
     if (bg.src !== wanted) bg.src = wanted;
@@ -985,10 +985,10 @@ function Editor() {
         if (g !== 1) afilters.push(`volume=${g.toFixed(3)}`);
         if (c.fadeIn && c.fadeIn > 0.01) afilters.push(`afade=t=in:st=0:d=${c.fadeIn.toFixed(3)}`);
         if (c.fadeOut && c.fadeOut > 0.01) afilters.push(`afade=t=out:st=${(dur - c.fadeOut).toFixed(3)}:d=${c.fadeOut.toFixed(3)}`);
-        const args = [
-          "-ss", ss, "-i", inName, "-t", to,
-          "-vf", `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:color=black,fps=30,setsar=1`,
-        ];
+        const filter = exportVideoFilter(c, targetW, targetH);
+        const args = ["-ss", ss, "-i", inName, "-t", to];
+        if (filter.type === "vf") args.push("-vf", filter.value);
+        else args.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "0:a?");
         if (afilters.length) args.push("-af", afilters.join(","));
         args.push("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "44100", "-ac", "2", outName);
         await ff.exec(args);

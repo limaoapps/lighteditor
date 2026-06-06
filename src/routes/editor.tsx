@@ -701,9 +701,9 @@ function Editor() {
 
   const addText = useCallback(() => {
     const videoTracks = tracks.filter(t => t.kind === "video");
-    const trackId = videoTracks[videoTracks.length - 1]?.id ?? ensureTrack("video");
-    const start = items.filter(i => i.trackId === trackId)
-      .reduce((m, i) => Math.max(m, i.start + (i.outPoint - i.inPoint)), 0);
+    // trilha de vídeo mais acima (topo da timeline)
+    const trackId = videoTracks[0]?.id ?? ensureTrack("video");
+    const start = playhead;
     const it: TLItem = {
       id: crypto.randomUUID(), kind: "text", trackId, name: "Texto",
       start, inPoint: 0, outPoint: 5, sourceDuration: 9999,
@@ -712,7 +712,7 @@ function Editor() {
     };
     setItems(prev => [...prev, it]);
     setSelectedId(it.id);
-  }, [items, tracks, ensureTrack, setItems]);
+  }, [tracks, ensureTrack, setItems, playhead]);
 
   const deleteItem = (id: string) => {
     setItems(prev => prev.filter(i => i.id !== id));

@@ -1179,9 +1179,10 @@ function Editor() {
                     <div key={ov.id} style={wrap} onMouseDown={(e) => startMove(ov.id, e, tr)}>
                       <img src={ov.url} alt="" draggable={false} className="pointer-events-none h-full w-full object-contain"
                         style={{ filter: cssFilter(fx) }} />
-                      {fx?.preset === "vignette" && (
-                        <div className="pointer-events-none absolute inset-0" style={{ boxShadow: "inset 0 0 120px 40px rgba(0,0,0,0.85)" }} />
-                      )}
+                      {(() => {
+                        const vs = vignetteStyle(fx);
+                        return vs ? <div className="pointer-events-none absolute inset-0" style={vs} /> : null;
+                      })()}
                       {isSel && <CornerHandles id={ov.id} tr={tr} onStartScale={startScale} />}
                     </div>
                   );

@@ -1173,16 +1173,19 @@ function Editor() {
                 </defs>
               </svg>
               {/* Background fill (blur/mirror) for V1 video */}
-              {activeV1Video && hasBackgroundFill(activeV1Video.fx) && (
-                <video
-                  key={`bg-${activeV1Video.id}-${activeV1Video.fx.fillMode}`}
-                  ref={videoBgElRef}
-                  src={activeV1Video.url}
-                  muted playsInline
-                  className="pointer-events-none absolute inset-0 h-full w-full"
-                  style={backgroundFillStyle(activeV1Video.fx)}
-                />
-              )}
+              {activeV1Video && (() => {
+                const fx = activeV1Video.fx;
+                return hasBackgroundFill(fx) ? (
+                  <video
+                    key={`bg-${activeV1Video.id}-${fx!.fillMode}`}
+                    ref={videoBgElRef}
+                    src={activeV1Video.url}
+                    muted playsInline
+                    className="pointer-events-none absolute inset-0 h-full w-full"
+                    style={backgroundFillStyle(fx!)}
+                  />
+                ) : null;
+              })()}
               {(() => {
                 const tr = activeV1Video?.transform;
                 const fx = activeV1Video?.fx;

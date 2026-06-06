@@ -1499,7 +1499,7 @@ function Editor() {
                   <div className="space-y-1.5 px-2 pb-2 pt-1">
                     <div className="grid grid-cols-2 gap-1">
                       {(["bars","blur","mirror","stretch","color"] as FillMode[]).map(m => (
-                        <button key={m} onClick={() => patchFx({ fillMode: m })}
+                        <button key={m} onClick={() => patchFx(m === "blur" ? { fillMode: m, blurBg: fx.blurBg || 40 } : { fillMode: m })}
                           className={`rounded border px-1.5 py-1 text-[10px] ${fx.fillMode === m ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
                           {m === "bars" ? "Barras Pretas" : m === "blur" ? "Fundo Desfocado" : m === "mirror" ? "Espelhado" : m === "stretch" ? "Esticado" : "Cor"}
                         </button>

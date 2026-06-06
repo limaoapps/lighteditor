@@ -23,7 +23,69 @@ type ItemKind = "video" | "audio" | "image" | "text";
 type TrackKind = "video" | "audio";
 
 type Transform = { xPct: number; yPct: number; scale: number; rotation: number };
-type TextProps = { content: string; size: number; color: string };
+type TextAlign = "left" | "center" | "right";
+type TextProps = {
+  content: string;
+  fontFamily: string;
+  size: number;
+  color: string;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  align: TextAlign;
+  letterSpacing: number;   // px
+  lineHeight: number;      // multiplier
+  opacity: number;         // 0..1
+  bgColor: string;         // background pill
+  bgOpacity: number;       // 0..1
+  paddingX: number;        // px
+  paddingY: number;        // px
+  radius: number;          // px
+  shadowColor: string;
+  shadowBlur: number;      // px
+  shadowOffsetX: number;   // px
+  shadowOffsetY: number;   // px
+  strokeColor: string;
+  strokeWidth: number;     // px
+};
+
+const FONT_FAMILIES = [
+  "Inter, system-ui, sans-serif",
+  "'Space Grotesk', system-ui, sans-serif",
+  "'Playfair Display', Georgia, serif",
+  "Georgia, 'Times New Roman', serif",
+  "'Courier New', monospace",
+  "'Impact', 'Arial Black', sans-serif",
+  "'Comic Sans MS', 'Comic Sans', cursive",
+  "'Bebas Neue', Impact, sans-serif",
+  "Arial, Helvetica, sans-serif",
+  "Verdana, Geneva, sans-serif",
+];
+
+const defaultText = (): TextProps => ({
+  content: "Seu texto",
+  fontFamily: FONT_FAMILIES[0],
+  size: 64,
+  color: "#ffffff",
+  bold: true,
+  italic: false,
+  underline: false,
+  align: "center",
+  letterSpacing: 0,
+  lineHeight: 1.2,
+  opacity: 1,
+  bgColor: "#000000",
+  bgOpacity: 0,
+  paddingX: 12,
+  paddingY: 6,
+  radius: 8,
+  shadowColor: "#000000",
+  shadowBlur: 12,
+  shadowOffsetX: 0,
+  shadowOffsetY: 2,
+  strokeColor: "#000000",
+  strokeWidth: 0,
+});
 
 type MediaAsset = {
   id: string;

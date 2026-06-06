@@ -124,6 +124,18 @@ async function probeMedia(file: File, kind: ItemKind): Promise<{ url: string; du
   });
 }
 
+function CornerHandles({ id, tr, onStartScale }: { id: string; tr: Transform; onStartScale: (id: string, e: React.MouseEvent, tr: Transform) => void }) {
+  const base: React.CSSProperties = { position: "absolute", width: 12, height: 12, background: "var(--primary)", border: "2px solid white", borderRadius: 2, pointerEvents: "auto", zIndex: 5 };
+  return (
+    <>
+      <div onMouseDown={(e) => onStartScale(id, e, tr)} style={{ ...base, left: -6, top: -6, cursor: "nwse-resize" }} />
+      <div onMouseDown={(e) => onStartScale(id, e, tr)} style={{ ...base, right: -6, top: -6, cursor: "nesw-resize" }} />
+      <div onMouseDown={(e) => onStartScale(id, e, tr)} style={{ ...base, left: -6, bottom: -6, cursor: "nesw-resize" }} />
+      <div onMouseDown={(e) => onStartScale(id, e, tr)} style={{ ...base, right: -6, bottom: -6, cursor: "nwse-resize" }} />
+    </>
+  );
+}
+
 function Editor() {
   const [aspectKey, setAspectKey] = useState<AspectKey>("16:9");
   const [customAR, setCustomAR] = useState({ w: 16, h: 9 });

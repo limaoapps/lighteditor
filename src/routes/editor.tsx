@@ -250,9 +250,17 @@ function Editor() {
   }, []);
 
   // ---- Snap ----
+  const [snapMark, setSnapMark] = useState<number | null>(null);
+  const snapMarkTimer = useRef<number | null>(null);
+  const flashSnap = useCallback((t: number) => {
+    setSnapMark(t);
+    if (snapMarkTimer.current) window.clearTimeout(snapMarkTimer.current);
+    snapMarkTimer.current = window.setTimeout(() => setSnapMark(null), 450);
+  }, []);
   const snapTime = useCallback((t: number, excludeId?: string) => {
     const thr = TIME_SNAP_PX / zoom;
     let best = t, bestD = thr;
+    let hitEdge: number | null = null;
     const step = zoom < 20 ? 10 : zoom < 40 ? 5 : zoom < 80 ? 2 : 1;
     const nearest = Math.round(t / step) * step;
     if (Math.abs(nearest - t) < bestD) { best = nearest; bestD = Math.abs(nearest - t); }
@@ -260,11 +268,13 @@ function Editor() {
       if (it.id === excludeId) continue;
       for (const cand of [it.start, it.start + (it.outPoint - it.inPoint)]) {
         const d = Math.abs(cand - t);
-        if (d < bestD) { best = cand; bestD = d; }
+        if (d < bestD) { best = cand; bestD = d; hitEdge = cand; }
       }
     }
-    return Math.max(0, best);
-  }, [items, zoom]);
+    const v = Math.max(0, best);
+    if (hitEdge !== null) flashSnap(hitEdge);
+    return v;
+  }, [items, zoom, flashSnap]);
 
   // ---- Add files → media library only ----
   const addFiles = useCallback(async (files: FileList | null) => {

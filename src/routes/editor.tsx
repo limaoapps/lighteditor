@@ -192,17 +192,63 @@ function cssFilter(fx?: Fx): string {
   return parts.join(" ");
 }
 
+function hasBackgroundFill(fx?: Fx): boolean {
+  return !!fx && (fx.fillMode === "blur" || fx.fillMode === "mirror");
+}
+
+function blurCssPx(fx: Fx): number {
+  if (fx.fillMode !== "blur" || fx.blurBg <= 0) return 0;
+  return Math.max(1, Math.round(6 + fx.blurBg * 0.74));
+}
+
+function mainObjectFit(fx?: Fx): React.CSSProperties["objectFit"] {
+  return fx?.fillMode === "stretch" ? "fill" : "contain";
+}
+
 function backgroundFillStyle(fx: Fx): React.CSSProperties {
   const isBlur = fx.fillMode === "blur";
+  const blurPx = blurCssPx(fx);
   return {
     position: "absolute",
     inset: 0,
     width: "100%",
     height: "100%",
-    objectFit: fx.fillMode === "stretch" ? "fill" : "cover",
-    transform: `${fx.fillMode === "mirror" ? "scaleX(-1) " : ""}scale(${isBlur ? 1.4 : 1})`,
-    filter: isBlur ? `blur(${Math.max(0, fx.blurBg) * 0.5}px)` : undefined,
+    objectFit: "cover",
+    transformOrigin: "center",
+    transform: `${fx.fillMode === "mirror" ? "scaleX(-1) " : ""}scale(${isBlur ? 1.22 : 1.04})`,
+    filter: isBlur ? `blur(${blurPx}px)` : undefined,
+    willChange: isBlur ? "filter, transform" : "transform",
     zIndex: 0,
+  };
+}
+
+function ffmpegColor(hex: string | undefined) {
+  const safe = (hex ?? "#000000").replace("#", "");
+  return /^[0-9a-fA-F]{6}$/.test(safe) ? `0x${safe}` : "black";
+}
+
+function blurSigma(fx: Fx | undefined) {
+  return Math.max(0.1, Math.min(60, ((fx?.blurBg ?? 30) / 100) * 50 + 4));
+}
+
+function exportVideoFilter(c: TLItem, targetW: number, targetH: number) {
+  const fx = c.fx;
+  if (!fx || fx.fillMode === "bars") {
+    return { type: "vf" as const, value: `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:color=black,fps=30,setsar=1` };
+  }
+  if (fx.fillMode === "color") {
+    return { type: "vf" as const, value: `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:color=${ffmpegColor(fx.bgColor)},fps=30,setsar=1` };
+  }
+  if (fx.fillMode === "stretch") {
+    return { type: "vf" as const, value: `scale=${targetW}:${targetH},fps=30,setsar=1` };
+  }
+  const bgCore = `scale=${targetW}:${targetH}:force_original_aspect_ratio=increase,crop=${targetW}:${targetH}`;
+  const bgFx = fx.fillMode === "blur"
+    ? `${bgCore},gblur=sigma=${blurSigma(fx).toFixed(1)}:steps=2`
+    : `${bgCore},hflip`;
+  return {
+    type: "filter_complex" as const,
+    value: `[0:v]split=2[sharp][blur];[blur]${bgFx}[blurred];[sharp]scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease[sharpfit];[blurred][sharpfit]overlay=(W-w)/2:(H-h)/2,fps=30,setsar=1[vout]`,
   };
 }
 
@@ -651,7 +697,7 @@ function Editor() {
   useEffect(() => {
     const bg = videoBgElRef.current;
     if (!bg) return;
-    const needsBg = !!activeV1Video?.fx && activeV1Video.fx.fillMode !== "bars" && activeV1Video.fx.fillMode !== "color";
+    const needsBg = hasBackgroundFill(activeV1Video?.fx);
     if (!activeV1Video || !needsBg) { bg.pause(); bg.removeAttribute("src"); bg.load(); return; }
     const wanted = activeV1Video.url!;
     if (bg.src !== wanted) bg.src = wanted;
@@ -939,10 +985,10 @@ function Editor() {
         if (g !== 1) afilters.push(`volume=${g.toFixed(3)}`);
         if (c.fadeIn && c.fadeIn > 0.01) afilters.push(`afade=t=in:st=0:d=${c.fadeIn.toFixed(3)}`);
         if (c.fadeOut && c.fadeOut > 0.01) afilters.push(`afade=t=out:st=${(dur - c.fadeOut).toFixed(3)}:d=${c.fadeOut.toFixed(3)}`);
-        const args = [
-          "-ss", ss, "-i", inName, "-t", to,
-          "-vf", `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:color=black,fps=30,setsar=1`,
-        ];
+        const filter = exportVideoFilter(c, targetW, targetH);
+        const args = ["-ss", ss, "-i", inName, "-t", to];
+        if (filter.type === "vf") args.push("-vf", filter.value);
+        else args.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "0:a?");
         if (afilters.length) args.push("-af", afilters.join(","));
         args.push("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "44100", "-ac", "2", outName);
         await ff.exec(args);
@@ -1126,17 +1172,20 @@ function Editor() {
                   </filter>
                 </defs>
               </svg>
-              {/* Background fill (blur/mirror/stretch) for V1 video */}
-              {activeV1Video && activeV1Video.fx && activeV1Video.fx.fillMode !== "bars" && activeV1Video.fx.fillMode !== "color" && (
-                <video
-                  key={`bg-${activeV1Video.id}-${activeV1Video.fx.fillMode}`}
-                  ref={videoBgElRef}
-                  src={activeV1Video.url}
-                  muted playsInline
-                  className="pointer-events-none absolute inset-0 h-full w-full"
-                  style={backgroundFillStyle(activeV1Video.fx)}
-                />
-              )}
+              {/* Background fill (blur/mirror) for V1 video */}
+              {activeV1Video && (() => {
+                const fx = activeV1Video.fx;
+                return hasBackgroundFill(fx) ? (
+                  <video
+                    key={`bg-${activeV1Video.id}-${fx!.fillMode}`}
+                    ref={videoBgElRef}
+                    src={activeV1Video.url}
+                    muted playsInline
+                    className="pointer-events-none absolute inset-0 h-full w-full"
+                    style={backgroundFillStyle(fx!)}
+                  />
+                ) : null;
+              })()}
               {(() => {
                 const tr = activeV1Video?.transform;
                 const fx = activeV1Video?.fx;
@@ -1149,7 +1198,7 @@ function Editor() {
                   opacity: op,
                   filter: cssFilter(fx),
                 } : {};
-                return <video ref={videoElRef} className="absolute inset-0 h-full w-full object-contain pointer-events-none" muted={false} playsInline style={{ ...style, zIndex: 2 }} />;
+                return <video ref={videoElRef} className="absolute inset-0 h-full w-full pointer-events-none" muted={false} playsInline style={{ ...style, objectFit: mainObjectFit(fx), zIndex: 2 }} />;
               })()}
 
               {/* Vignette overlay for V1 video */}
@@ -1171,7 +1220,7 @@ function Editor() {
               <div className={`pointer-events-none absolute inset-x-0 top-1/2 h-px transition-opacity ${snapH ? "bg-primary opacity-100" : "bg-white/10 opacity-0 group-hover/preview:opacity-30"}`} />
 
               {/* Per-image background fill */}
-              {overlays.filter(ov => ov.kind === "image" && ov.fx && ov.fx.fillMode !== "bars" && ov.fx.fillMode !== "color").map(ov => (
+              {overlays.filter(ov => ov.kind === "image" && hasBackgroundFill(ov.fx)).map(ov => (
                 <img key={`imgbg-${ov.id}`} src={ov.url} alt="" draggable={false}
                   className="pointer-events-none absolute inset-0 h-full w-full"
                   style={{

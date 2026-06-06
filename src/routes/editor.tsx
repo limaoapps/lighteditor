@@ -198,7 +198,9 @@ function hasBackgroundFill(fx?: Fx): boolean {
 
 function blurCssPx(fx: Fx): number {
   if (fx.fillMode !== "blur" || fx.blurBg <= 0) return 0;
-  return Math.max(1, Math.round(6 + fx.blurBg * 0.74));
+  // Suave: 1 -> ~0.3px, 50 -> ~15px, 100 -> ~40px (curva quadrática leve)
+  const n = fx.blurBg / 100;
+  return Math.max(0.3, +(n * n * 36 + n * 4).toFixed(2));
 }
 
 function mainObjectFit(fx?: Fx): React.CSSProperties["objectFit"] {
@@ -228,7 +230,10 @@ function ffmpegColor(hex: string | undefined) {
 }
 
 function blurSigma(fx: Fx | undefined) {
-  return Math.max(0.1, Math.min(60, ((fx?.blurBg ?? 30) / 100) * 50 + 4));
+  const v = fx?.blurBg ?? 30;
+  // Suave: 1 -> ~0.4, 50 -> ~13, 100 -> ~40
+  const n = v / 100;
+  return Math.max(0.3, Math.min(50, +(n * n * 36 + n * 4).toFixed(2)));
 }
 
 function exportVideoFilter(c: TLItem, targetW: number, targetH: number) {

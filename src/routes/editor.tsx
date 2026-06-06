@@ -38,6 +38,7 @@ type MediaAsset = {
 
 type FillMode = "bars" | "blur" | "mirror" | "stretch" | "color";
 type ZoomFx = { dir: "in" | "out"; speed: "slow" | "med" | "fast" } | null;
+type VignetteMode = "dark" | "light";
 type Fx = {
   brightness: number; contrast: number; saturation: number; temperature: number;
   sharpness: number; exposure: number; shadows: number; highlights: number;
@@ -47,6 +48,9 @@ type Fx = {
   fillMode: FillMode;
   bgColor: string;
   zoom: ZoomFx;
+  vignette: number;        // 0..100 intensity (0 = off)
+  vignetteSize: number;    // 0..100 (size of clear center)
+  vignetteMode: VignetteMode;
 };
 
 type TLItem = {

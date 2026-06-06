@@ -263,16 +263,22 @@ function Editor() {
   }, []);
 
   // Create a TL item from a media asset
-  const createTLFromMedia = useCallback((asset: MediaAsset, trackId: string, start: number): TLItem => ({
-    id: crypto.randomUUID(),
-    mediaId: asset.id,
-    kind: asset.kind, trackId, name: asset.name, file: asset.file, url: asset.url,
-    start, inPoint: 0, outPoint: asset.duration, sourceDuration: asset.duration,
-    width: asset.width, height: asset.height,
-    transform: asset.kind === "image" || asset.kind === "video" ? { xPct: 50, yPct: 50, scale: 1, rotation: 0 } : undefined,
-    fadeIn: 0, fadeOut: 0,
-    gainDb: asset.kind === "audio" || asset.kind === "video" ? 0 : undefined,
-  }), []);
+  const createTLFromMedia = useCallback((asset: MediaAsset, trackId: string, start: number): TLItem => {
+    const isImg = asset.kind === "image";
+    return {
+      id: crypto.randomUUID(),
+      mediaId: asset.id,
+      kind: asset.kind, trackId, name: asset.name, file: asset.file, url: asset.url,
+      start,
+      inPoint: 0,
+      outPoint: isImg ? 5 : asset.duration,
+      sourceDuration: isImg ? IMAGE_MAX_DUR : asset.duration,
+      width: asset.width, height: asset.height,
+      transform: asset.kind === "image" || asset.kind === "video" ? { xPct: 50, yPct: 50, scale: 1, rotation: 0 } : undefined,
+      fadeIn: 0, fadeOut: 0,
+      gainDb: asset.kind === "audio" || asset.kind === "video" ? 0 : undefined,
+    };
+  }, []);
 
   const addAssetToTimeline = useCallback((asset: MediaAsset, opts?: { trackId?: string; start?: number }) => {
     const wantKind: TrackKind = asset.kind === "audio" ? "audio" : "video";

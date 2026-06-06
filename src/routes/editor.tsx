@@ -1084,9 +1084,11 @@ function Editor() {
                 {tracks.map((tr, idx) => {
                   const locked = !!trackLocked[tr.id];
                   const muted = !!trackMuted[tr.id];
+                  const nextSameKind = tracks[idx + 1]?.kind === tr.kind;
+                  const lastOfKind = !nextSameKind; // show + at the bottom for the last track of each kind, OR between same-kind tracks
                   return (
-                    <div key={tr.id} className="flex border-b border-border" style={{ height: trackHeight }}>
-                      <div className="flex shrink-0 items-center gap-1.5 border-r border-border bg-panel px-2 text-[11px] text-muted-foreground" style={{ width: labelColW }}>
+                    <div key={tr.id} className="group/row relative flex border-b border-border" style={{ height: trackHeight }}>
+                      <div className="relative flex shrink-0 items-center gap-1.5 border-r border-border bg-panel px-2 text-[11px] text-muted-foreground" style={{ width: labelColW }}>
                         {tr.kind === "video" ? <VideoIcon className="h-3 w-3 shrink-0" /> : <Music2 className="h-3 w-3 shrink-0" />}
                         <span className="min-w-0 flex-1 truncate">{tr.label}</span>
                         <button onClick={() => setTrackMuted(s => ({ ...s, [tr.id]: !s[tr.id] }))}
@@ -1100,6 +1102,16 @@ function Editor() {
                           {locked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
                         </button>
                       </div>
+                      {/* + button on the bottom edge: insert another track of the same kind right below */}
+                      {(nextSameKind || lastOfKind) && (
+                        <button
+                          onClick={() => insertTrackAt(tr.kind, idx + 1)}
+                          title={`Adicionar trilha ${tr.kind === "video" ? "de vídeo" : "de áudio"}`}
+                          className="absolute -bottom-2.5 left-1/2 z-30 -translate-x-1/2 rounded-full border border-border bg-primary p-0.5 text-primary-foreground opacity-0 shadow transition hover:scale-110 group-hover/row:opacity-100"
+                          style={{ left: labelColW / 2 }}>
+                          <Plus className="h-3 w-3" />
+                        </button>
+                      )}
                       <div
                         onDragOver={onTrackDragOver}
                         onDrop={(e) => onTrackDrop(e, tr.id)}

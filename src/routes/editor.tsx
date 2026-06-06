@@ -1481,6 +1481,17 @@ function Editor() {
                           className={`rounded p-1 ${locked ? "text-primary" : "hover:bg-card hover:text-foreground"}`}>
                           {locked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
                         </button>
+                        {tracks.filter(t => t.kind === tr.kind).length > 1 && (
+                          <button onClick={() => {
+                            const hasItems = items.some(i => i.trackId === tr.id);
+                            if (hasItems && !window.confirm(`Excluir trilha ${tr.label}? Os clipes nela serão removidos.`)) return;
+                            removeTrack(tr.id);
+                          }}
+                            title="Excluir trilha"
+                            className="rounded p-1 text-muted-foreground hover:bg-destructive/15 hover:text-destructive">
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        )}
                       </div>
                       {/* + button on the bottom edge: insert another track of the same kind right below */}
                       {(nextSameKind || lastOfKind) && (

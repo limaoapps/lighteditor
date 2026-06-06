@@ -23,7 +23,69 @@ type ItemKind = "video" | "audio" | "image" | "text";
 type TrackKind = "video" | "audio";
 
 type Transform = { xPct: number; yPct: number; scale: number; rotation: number };
-type TextProps = { content: string; size: number; color: string };
+type TextAlign = "left" | "center" | "right";
+type TextProps = {
+  content: string;
+  fontFamily: string;
+  size: number;
+  color: string;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  align: TextAlign;
+  letterSpacing: number;   // px
+  lineHeight: number;      // multiplier
+  opacity: number;         // 0..1
+  bgColor: string;         // background pill
+  bgOpacity: number;       // 0..1
+  paddingX: number;        // px
+  paddingY: number;        // px
+  radius: number;          // px
+  shadowColor: string;
+  shadowBlur: number;      // px
+  shadowOffsetX: number;   // px
+  shadowOffsetY: number;   // px
+  strokeColor: string;
+  strokeWidth: number;     // px
+};
+
+const FONT_FAMILIES = [
+  "Inter, system-ui, sans-serif",
+  "'Space Grotesk', system-ui, sans-serif",
+  "'Playfair Display', Georgia, serif",
+  "Georgia, 'Times New Roman', serif",
+  "'Courier New', monospace",
+  "'Impact', 'Arial Black', sans-serif",
+  "'Comic Sans MS', 'Comic Sans', cursive",
+  "'Bebas Neue', Impact, sans-serif",
+  "Arial, Helvetica, sans-serif",
+  "Verdana, Geneva, sans-serif",
+];
+
+const defaultText = (): TextProps => ({
+  content: "Seu texto",
+  fontFamily: FONT_FAMILIES[0],
+  size: 64,
+  color: "#ffffff",
+  bold: true,
+  italic: false,
+  underline: false,
+  align: "center",
+  letterSpacing: 0,
+  lineHeight: 1.2,
+  opacity: 1,
+  bgColor: "#000000",
+  bgOpacity: 0,
+  paddingX: 12,
+  paddingY: 6,
+  radius: 8,
+  shadowColor: "#000000",
+  shadowBlur: 12,
+  shadowOffsetX: 0,
+  shadowOffsetY: 2,
+  strokeColor: "#000000",
+  strokeWidth: 0,
+});
 
 type MediaAsset = {
   id: string;
@@ -568,7 +630,7 @@ function Editor() {
     const it: TLItem = {
       id: crypto.randomUUID(), kind: "text", trackId, name: "Texto",
       start, inPoint: 0, outPoint: 5, sourceDuration: 9999,
-      text: { content: "Seu texto", size: 64, color: "#ffffff" },
+      text: defaultText(),
       transform: { xPct: 50, yPct: 80, scale: 1, rotation: 0 },
     };
     setItems(prev => [...prev, it]);
@@ -1366,20 +1428,47 @@ function Editor() {
                   );
                 }
                 if (ov.kind === "text" && ov.text) {
+                  const t = ov.text;
+                  const bgRgba = (() => {
+                    const h = t.bgColor.replace("#", "");
+                    const r = parseInt(h.slice(0, 2), 16);
+                    const g = parseInt(h.slice(2, 4), 16);
+                    const b = parseInt(h.slice(4, 6), 16);
+                    return `rgba(${r},${g},${b},${t.bgOpacity})`;
+                  })();
+                  const shadow = t.shadowBlur > 0 || t.shadowOffsetX || t.shadowOffsetY
+                    ? `${t.shadowOffsetX}px ${t.shadowOffsetY}px ${t.shadowBlur}px ${t.shadowColor}`
+                    : "none";
+                  const stroke = t.strokeWidth > 0
+                    ? `${t.strokeWidth}px ${t.strokeColor}` : undefined;
                   const txtStyle: React.CSSProperties = {
                     position: "absolute",
                     left: `${tr.xPct}%`, top: `${tr.yPct}%`,
                     transform: `translate(-50%,-50%) scale(${tr.scale}) rotate(${tr.rotation}deg)`,
-                    color: ov.text.color, fontSize: ov.text.size, fontWeight: 700,
-                    textShadow: "0 2px 12px rgba(0,0,0,0.6)", whiteSpace: "nowrap",
-                    cursor: "move", padding: 4,
-                    opacity: computeVisualOpacity(ov, playhead),
+                    color: t.color,
+                    fontFamily: t.fontFamily,
+                    fontSize: t.size,
+                    fontWeight: t.bold ? 800 : 400,
+                    fontStyle: t.italic ? "italic" : "normal",
+                    textDecoration: t.underline ? "underline" : "none",
+                    textAlign: t.align,
+                    letterSpacing: `${t.letterSpacing}px`,
+                    lineHeight: t.lineHeight,
+                    textShadow: shadow,
+                    WebkitTextStroke: stroke,
+                    background: t.bgOpacity > 0 ? bgRgba : "transparent",
+                    padding: `${t.paddingY}px ${t.paddingX}px`,
+                    borderRadius: t.radius,
+                    whiteSpace: "pre-wrap",
+                    cursor: "move",
+                    opacity: (computeVisualOpacity(ov, playhead)) * t.opacity,
                     zIndex: 5,
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
+                    maxWidth: "90%",
                   };
                   return (
                     <div key={ov.id} style={txtStyle} onMouseDown={(e) => startMove(ov.id, e, tr)}>
-                      {ov.text.content}
+                      {t.content}
                       {isSel && <CornerHandles id={ov.id} tr={tr} onStartScale={startScale} />}
                     </div>
                   );
@@ -1600,21 +1689,160 @@ function Editor() {
               Selecione um clipe na timeline para ajustar efeitos.
             </div>
           )}
-          {selected && selected.kind === "text" && selected.text && (
-            <div className="space-y-2 rounded-md border border-border bg-card p-2">
-              <input value={selected.text.content}
-                onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, text: { ...i.text!, content: e.target.value } } : i))}
-                className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs" placeholder="Texto" />
-              <div className="flex items-center gap-2">
-                <input type="color" value={selected.text.color}
-                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, text: { ...i.text!, color: e.target.value } } : i))}
-                  className="h-7 w-9 rounded border border-border bg-background" />
-                <input type="number" min={12} max={200} value={selected.text.size}
-                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, text: { ...i.text!, size: Number(e.target.value) || 48 } } : i))}
-                  className="w-20 rounded border border-border bg-background px-2 py-1 text-xs" />
+          {selected && selected.kind === "text" && selected.text && (() => {
+            const t = selected.text;
+            const updT = (patch: Partial<TextProps>) =>
+              setItems(p => p.map(i => i.id === selected.id ? { ...i, text: { ...i.text!, ...patch } } : i));
+            return (
+              <div className="space-y-3 rounded-md border border-border bg-card p-3 text-xs">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Texto</div>
+                <textarea value={t.content} onChange={(e) => updT({ content: e.target.value })}
+                  rows={3}
+                  className="w-full resize-y rounded border border-border bg-background px-2 py-1.5 text-xs"
+                  placeholder="Digite o texto..." />
+
+                <div className="space-y-1">
+                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Fonte</label>
+                  <select value={t.fontFamily} onChange={(e) => updT({ fontFamily: e.target.value })}
+                    className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
+                    style={{ fontFamily: t.fontFamily }}>
+                    {FONT_FAMILIES.map(f => <option key={f} value={f} style={{ fontFamily: f }}>{f.split(",")[0].replace(/'/g, "")}</option>)}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button onClick={() => updT({ bold: !t.bold })}
+                    className={`flex-1 rounded border px-2 py-1 font-bold ${t.bold ? "border-primary bg-primary/15 text-primary" : "border-border bg-background"}`}>B</button>
+                  <button onClick={() => updT({ italic: !t.italic })}
+                    className={`flex-1 rounded border px-2 py-1 italic ${t.italic ? "border-primary bg-primary/15 text-primary" : "border-border bg-background"}`}>I</button>
+                  <button onClick={() => updT({ underline: !t.underline })}
+                    className={`flex-1 rounded border px-2 py-1 underline ${t.underline ? "border-primary bg-primary/15 text-primary" : "border-border bg-background"}`}>U</button>
+                  {(["left", "center", "right"] as TextAlign[]).map(a => (
+                    <button key={a} onClick={() => updT({ align: a })}
+                      className={`flex-1 rounded border px-2 py-1 ${t.align === a ? "border-primary bg-primary/15 text-primary" : "border-border bg-background"}`}>
+                      {a === "left" ? "⯇" : a === "center" ? "≡" : "⯈"}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Cor</span>
+                    <input type="color" value={t.color} onChange={(e) => updT({ color: e.target.value })}
+                      className="h-7 w-full rounded border border-border bg-background" />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Tamanho</span>
+                    <input type="number" min={8} max={400} value={t.size}
+                      onChange={(e) => updT({ size: Number(e.target.value) || 48 })}
+                      className="h-7 w-full rounded border border-border bg-background px-2 text-xs" />
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Espaçamento</span>
+                    <input type="number" step="0.5" value={t.letterSpacing}
+                      onChange={(e) => updT({ letterSpacing: Number(e.target.value) || 0 })}
+                      className="h-7 w-full rounded border border-border bg-background px-2 text-xs" />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Linha</span>
+                    <input type="number" step="0.05" min={0.8} max={3} value={t.lineHeight}
+                      onChange={(e) => updT({ lineHeight: Number(e.target.value) || 1.2 })}
+                      className="h-7 w-full rounded border border-border bg-background px-2 text-xs" />
+                  </label>
+                </div>
+
+                <label className="flex items-center gap-2">
+                  <span className="w-16 text-muted-foreground">Opacidade</span>
+                  <input type="range" min={0} max={1} step={0.05} value={t.opacity}
+                    onChange={(e) => updT({ opacity: Number(e.target.value) })}
+                    className="flex-1 accent-[color:var(--primary)]" />
+                  <span className="w-8 text-right font-mono">{Math.round(t.opacity * 100)}%</span>
+                </label>
+
+                <div className="space-y-2 rounded border border-border/60 bg-background/40 p-2">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Sombra</div>
+                  <div className="flex items-center gap-2">
+                    <input type="color" value={t.shadowColor} onChange={(e) => updT({ shadowColor: e.target.value })}
+                      className="h-7 w-9 rounded border border-border bg-background" />
+                    <label className="flex flex-1 items-center gap-1">
+                      <span className="w-10 text-muted-foreground">Blur</span>
+                      <input type="range" min={0} max={40} value={t.shadowBlur}
+                        onChange={(e) => updT({ shadowBlur: Number(e.target.value) })}
+                        className="flex-1 accent-[color:var(--primary)]" />
+                      <span className="w-6 text-right font-mono">{t.shadowBlur}</span>
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="flex items-center gap-1">
+                      <span className="w-6 text-muted-foreground">X</span>
+                      <input type="number" value={t.shadowOffsetX}
+                        onChange={(e) => updT({ shadowOffsetX: Number(e.target.value) || 0 })}
+                        className="h-7 w-full rounded border border-border bg-background px-2 text-xs" />
+                    </label>
+                    <label className="flex items-center gap-1">
+                      <span className="w-6 text-muted-foreground">Y</span>
+                      <input type="number" value={t.shadowOffsetY}
+                        onChange={(e) => updT({ shadowOffsetY: Number(e.target.value) || 0 })}
+                        className="h-7 w-full rounded border border-border bg-background px-2 text-xs" />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-2 rounded border border-border/60 bg-background/40 p-2">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Contorno</div>
+                  <div className="flex items-center gap-2">
+                    <input type="color" value={t.strokeColor} onChange={(e) => updT({ strokeColor: e.target.value })}
+                      className="h-7 w-9 rounded border border-border bg-background" />
+                    <label className="flex flex-1 items-center gap-1">
+                      <span className="w-10 text-muted-foreground">Largura</span>
+                      <input type="range" min={0} max={10} step={0.5} value={t.strokeWidth}
+                        onChange={(e) => updT({ strokeWidth: Number(e.target.value) })}
+                        className="flex-1 accent-[color:var(--primary)]" />
+                      <span className="w-6 text-right font-mono">{t.strokeWidth}</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-2 rounded border border-border/60 bg-background/40 p-2">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Fundo</div>
+                  <div className="flex items-center gap-2">
+                    <input type="color" value={t.bgColor} onChange={(e) => updT({ bgColor: e.target.value })}
+                      className="h-7 w-9 rounded border border-border bg-background" />
+                    <label className="flex flex-1 items-center gap-1">
+                      <span className="w-12 text-muted-foreground">Opacidade</span>
+                      <input type="range" min={0} max={1} step={0.05} value={t.bgOpacity}
+                        onChange={(e) => updT({ bgOpacity: Number(e.target.value) })}
+                        className="flex-1 accent-[color:var(--primary)]" />
+                      <span className="w-8 text-right font-mono">{Math.round(t.bgOpacity * 100)}%</span>
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[10px] text-muted-foreground">Pad X</span>
+                      <input type="number" value={t.paddingX}
+                        onChange={(e) => updT({ paddingX: Number(e.target.value) || 0 })}
+                        className="h-7 rounded border border-border bg-background px-2 text-xs" />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[10px] text-muted-foreground">Pad Y</span>
+                      <input type="number" value={t.paddingY}
+                        onChange={(e) => updT({ paddingY: Number(e.target.value) || 0 })}
+                        className="h-7 rounded border border-border bg-background px-2 text-xs" />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[10px] text-muted-foreground">Raio</span>
+                      <input type="number" value={t.radius}
+                        onChange={(e) => updT({ radius: Number(e.target.value) || 0 })}
+                        className="h-7 rounded border border-border bg-background px-2 text-xs" />
+                    </label>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {selected && selected.transform && (
             <div className="space-y-2 rounded-md border border-border bg-card p-2 text-xs">

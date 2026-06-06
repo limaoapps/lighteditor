@@ -223,6 +223,20 @@ function Editor() {
     return id;
   }, []);
 
+  const insertTrackAt = useCallback((kind: TrackKind, insertIndex: number) => {
+    setTracks(prev => {
+      const sameKind = prev.filter(t => t.kind === kind);
+      const nums = sameKind.map(t => parseInt(t.id.slice(1), 10)).filter(n => !isNaN(n));
+      const n = (nums.length ? Math.max(...nums) : 0) + 1;
+      const prefix = kind === "video" ? "V" : "A";
+      const id = `${prefix}${n}`;
+      const newTrack: Track = { id, kind, label: `${id} · ${kind === "video" ? "Vídeo" : "Áudio"}` };
+      const out = [...prev];
+      out.splice(Math.max(0, Math.min(out.length, insertIndex)), 0, newTrack);
+      return out;
+    });
+  }, []);
+
   // ---- Snap ----
   const snapTime = useCallback((t: number, excludeId?: string) => {
     const thr = TIME_SNAP_PX / zoom;

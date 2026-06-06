@@ -463,6 +463,20 @@ function CornerHandles({ id, tr, onStartScale }: { id: string; tr: Transform; on
 }
 
 function Editor() {
+  // Carrega todas as Google Fonts uma única vez
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (document.getElementById("gfonts-editor")) return;
+    const families = GOOGLE_FONTS.map(f => `family=${encodeURIComponent(f.name)}:${f.weights}`).join("&");
+    const link = document.createElement("link");
+    link.id = "gfonts-editor";
+    link.rel = "stylesheet";
+    link.href = `https://fonts.googleapis.com/css2?${families}&display=swap`;
+    document.head.appendChild(link);
+    const pre1 = document.createElement("link"); pre1.rel = "preconnect"; pre1.href = "https://fonts.googleapis.com"; document.head.appendChild(pre1);
+    const pre2 = document.createElement("link"); pre2.rel = "preconnect"; pre2.href = "https://fonts.gstatic.com"; pre2.crossOrigin = ""; document.head.appendChild(pre2);
+  }, []);
+
   const [aspectKey, setAspectKey] = useState<AspectKey>("16:9");
   const [customAR, setCustomAR] = useState({ w: 16, h: 9 });
   const aspect = aspectKey === "custom" ? customAR : ASPECTS[aspectKey];

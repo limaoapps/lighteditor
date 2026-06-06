@@ -1459,13 +1459,15 @@ function Editor() {
                   <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"><Sliders className="h-3 w-3" /> Ajustes</summary>
                   <div className="space-y-1.5 px-2 pb-2 pt-1">
                     {adj.map(a => (
-                      <label key={a.key} className="flex items-center gap-2">
+                      <label key={a.key} className="flex items-center gap-2" title="Duplo clique para restaurar padrão">
                         <span className="w-20 truncate text-muted-foreground">{a.label}</span>
                         <input type="range" min={a.min} max={a.max} step={1}
                           value={fx[a.key] as number}
                           onChange={(e) => patchFx({ [a.key]: Number(e.target.value) } as Partial<Fx>)}
+                          onDoubleClick={() => patchFx({ [a.key]: FX_DEFAULT_VAL[a.key as string] ?? 0 } as Partial<Fx>)}
                           className="flex-1 accent-[color:var(--primary)]" />
-                        <span className="w-10 text-right font-mono tabular-nums">{fx[a.key] as number}{a.suffix ?? ""}</span>
+                        <button type="button" onClick={() => patchFx({ [a.key]: FX_DEFAULT_VAL[a.key as string] ?? 0 } as Partial<Fx>)}
+                          className="w-10 text-right font-mono tabular-nums hover:text-primary" title="Restaurar padrão">{fx[a.key] as number}{a.suffix ?? ""}</button>
                       </label>
                     ))}
                   </div>

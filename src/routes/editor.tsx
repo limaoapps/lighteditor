@@ -202,7 +202,7 @@ function backgroundFillStyle(fx: Fx): React.CSSProperties {
     objectFit: fx.fillMode === "stretch" ? "fill" : "cover",
     transform: `${fx.fillMode === "mirror" ? "scaleX(-1) " : ""}scale(${isBlur ? 1.4 : 1})`,
     filter: isBlur ? `blur(${Math.max(0, fx.blurBg) * 0.5}px)` : undefined,
-    zIndex: 1,
+    zIndex: 0,
   };
 }
 

@@ -563,6 +563,11 @@ function Editor() {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
           const snapped = snapTime(tSec, d.id);
+          if (d.isImage) {
+            const newStart = Math.max(0, Math.min(d.origEnd - 0.1, snapped));
+            const newOut = d.origEnd - newStart; // inPoint stays 0
+            return { ...i, start: newStart, inPoint: 0, outPoint: newOut };
+          }
           const delta = snapped - d.origStart;
           const newIn = Math.max(0, Math.min(i.outPoint - 0.1, d.origIn + delta));
           const newStart = Math.max(0, d.origStart + (newIn - d.origIn));

@@ -148,6 +148,7 @@ function Editor() {
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [zoom, setZoom] = useState(40);
+  const [tlViewportW, setTlViewportW] = useState(800);
   const [quality, setQuality] = useState<Quality>("1080");
 
   const [trackLocked, setTrackLocked] = useState<Record<string, boolean>>({});
@@ -250,9 +251,17 @@ function Editor() {
   }, []);
 
   // ---- Snap ----
+  const [snapMark, setSnapMark] = useState<number | null>(null);
+  const snapMarkTimer = useRef<number | null>(null);
+  const flashSnap = useCallback((t: number) => {
+    setSnapMark(t);
+    if (snapMarkTimer.current) window.clearTimeout(snapMarkTimer.current);
+    snapMarkTimer.current = window.setTimeout(() => setSnapMark(null), 450);
+  }, []);
   const snapTime = useCallback((t: number, excludeId?: string) => {
     const thr = TIME_SNAP_PX / zoom;
     let best = t, bestD = thr;
+    let hitEdge: number | null = null;
     const step = zoom < 20 ? 10 : zoom < 40 ? 5 : zoom < 80 ? 2 : 1;
     const nearest = Math.round(t / step) * step;
     if (Math.abs(nearest - t) < bestD) { best = nearest; bestD = Math.abs(nearest - t); }
@@ -260,11 +269,13 @@ function Editor() {
       if (it.id === excludeId) continue;
       for (const cand of [it.start, it.start + (it.outPoint - it.inPoint)]) {
         const d = Math.abs(cand - t);
-        if (d < bestD) { best = cand; bestD = d; }
+        if (d < bestD) { best = cand; bestD = d; hitEdge = cand; }
       }
     }
-    return Math.max(0, best);
-  }, [items, zoom]);
+    const v = Math.max(0, best);
+    if (hitEdge !== null) flashSnap(hitEdge);
+    return v;
+  }, [items, zoom, flashSnap]);
 
   // ---- Add files → media library only ----
   const addFiles = useCallback(async (files: FileList | null) => {
@@ -493,7 +504,7 @@ function Editor() {
   // ---- Timeline drags ----
   type Drag =
     | { type: "move"; id: string; offsetSec: number; origTrackId: string }
-    | { type: "resizeL"; id: string; origStart: number; origIn: number }
+    | { type: "resizeL"; id: string; origStart: number; origIn: number; origEnd: number; isImage: boolean }
     | { type: "resizeR"; id: string; origOut: number }
     | { type: "fadeIn"; id: string }
     | { type: "fadeOut"; id: string }
@@ -553,6 +564,11 @@ function Editor() {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
           const snapped = snapTime(tSec, d.id);
+          if (d.isImage) {
+            const newStart = Math.max(0, Math.min(d.origEnd - 0.1, snapped));
+            const newOut = d.origEnd - newStart; // inPoint stays 0
+            return { ...i, start: newStart, inPoint: 0, outPoint: newOut };
+          }
           const delta = snapped - d.origStart;
           const newIn = Math.max(0, Math.min(i.outPoint - 0.1, d.origIn + delta));
           const newStart = Math.max(0, d.origStart + (newIn - d.origIn));
@@ -696,9 +712,18 @@ function Editor() {
 
   // Ruler ticks
   const rulerSpan = Math.max(totalDuration + 5, 10);
+  const minZoom = Math.max(2, Math.floor((tlViewportW - labelColW - 4) / rulerSpan));
   const tickStep = zoom < 20 ? 10 : zoom < 40 ? 5 : zoom < 80 ? 2 : 1;
   const ticks: number[] = [];
   for (let t = 0; t <= rulerSpan; t += tickStep) ticks.push(t);
+
+  useEffect(() => {
+    const el = timelineRef.current; if (!el) return;
+    const ro = new ResizeObserver(() => setTlViewportW(el.clientWidth));
+    ro.observe(el); setTlViewportW(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+  useEffect(() => { if (zoom < minZoom) setZoom(minZoom); }, [minZoom, zoom]);
 
   // ---- Export ----
   const doExport = async () => {
@@ -1059,9 +1084,9 @@ function Editor() {
             </div>
             <div className="mx-2 h-5 w-px bg-border" />
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <button onClick={() => setZoom(z => Math.max(10, z - 10))} className="rounded p-1 hover:bg-card"><ZoomOut className="h-3.5 w-3.5" /></button>
-              <input type="range" min={10} max={160} step={5} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="w-28 accent-[color:var(--primary)]" />
-              <button onClick={() => setZoom(z => Math.min(160, z + 10))} className="rounded p-1 hover:bg-card"><ZoomIn className="h-3.5 w-3.5" /></button>
+              <button onClick={() => setZoom(z => Math.max(minZoom, z - 10))} className="rounded p-1 hover:bg-card"><ZoomOut className="h-3.5 w-3.5" /></button>
+              <input type="range" min={minZoom} max={Math.max(minZoom + 10, 200)} step={1} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="w-28 accent-[color:var(--primary)]" />
+              <button onClick={() => setZoom(z => Math.min(200, z + 10))} className="rounded p-1 hover:bg-card"><ZoomIn className="h-3.5 w-3.5" /></button>
             </div>
           </div>
 
@@ -1146,7 +1171,7 @@ function Editor() {
                                 <div className="pointer-events-none absolute inset-y-0 right-0" style={{ width: foW, background: "linear-gradient(to left, rgba(0,0,0,0.55), transparent)" }} />
                               )}
 
-                              <div data-handle="L" onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "resizeL", id: i.id, origStart: i.start, origIn: i.inPoint }; }}
+                              <div data-handle="L" onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "resizeL", id: i.id, origStart: i.start, origIn: i.inPoint, origEnd: i.start + (i.outPoint - i.inPoint), isImage: i.kind === "image" }; }}
                                 className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-ew-resize bg-white/40 hover:bg-white" />
                               <div data-handle="R" onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "resizeR", id: i.id, origOut: i.outPoint }; }}
                                 className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-ew-resize bg-white/40 hover:bg-white" />
@@ -1175,6 +1200,15 @@ function Editor() {
                     </div>
                   );
                 })}
+
+                {snapMark !== null && (
+                  <div className="pointer-events-none absolute top-0 z-40"
+                    style={{ left: labelColW + snapMark * zoom, height: tracks.length * trackHeight }}>
+                    <div className="absolute inset-y-0 -left-px w-0.5 bg-yellow-300 shadow-[0_0_8px_2px_rgba(253,224,71,0.85)]" />
+                    <div className="absolute -left-1.5 -top-0.5 h-2 w-3 rounded-sm bg-yellow-300 shadow" />
+                    <div className="absolute -left-1.5 -bottom-0.5 h-2 w-3 rounded-sm bg-yellow-300 shadow" />
+                  </div>
+                )}
 
                 <div data-role="playhead"
                   className="pointer-events-auto absolute top-0 z-30 w-0.5 cursor-ew-resize bg-primary"

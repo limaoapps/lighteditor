@@ -539,7 +539,13 @@ function Editor() {
       else if (k === "s" && !ctrl) { e.preventDefault(); splitAt(playhead); }
       else if ((k === "delete" || k === "backspace") && selectedId) { e.preventDefault(); deleteItem(selectedId); }
       else if (k === "escape") { setSelectedId(null); setCtxMenu(null); }
-      else if (e.code === "Space") { e.preventDefault(); setPlaying(p => !p); }
+      else if (e.code === "Space") {
+        e.preventDefault();
+        setPlaying(p => {
+          if (!p && playhead >= totalDuration - 0.05) setPlayhead(0);
+          return !p;
+        });
+      }
       else if (k === "arrowleft") { e.preventDefault(); setPlayhead(p => Math.max(0, p - (e.shiftKey ? 1 : 0.1))); }
       else if (k === "arrowright") { e.preventDefault(); setPlayhead(p => Math.min(totalDuration, p + (e.shiftKey ? 1 : 0.1))); }
     };

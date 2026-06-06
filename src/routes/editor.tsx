@@ -960,43 +960,58 @@ function Editor() {
               {overlays.map(ov => {
                 const tr = ov.transform!;
                 const isSel = ov.id === selectedId;
-                const common: React.CSSProperties = {
-                  position: "absolute",
-                  left: `${tr.xPct}%`, top: `${tr.yPct}%`,
-                  transform: `translate(-50%,-50%) scale(${tr.scale}) rotate(${tr.rotation}deg)`,
-                  cursor: "move", outline: isSel ? "2px dashed var(--primary)" : "none", outlineOffset: 4,
-                };
                 if (ov.kind === "image") {
-                  return <img key={ov.id} src={ov.url} alt="" style={common} className="max-w-[80%]" onMouseDown={(e) => startMove(ov.id, e, tr)} draggable={false} />;
+                  const b = getItemBounds(ov);
+                  const wrap: React.CSSProperties = {
+                    position: "absolute",
+                    left: `${tr.xPct}%`, top: `${tr.yPct}%`,
+                    width: `${b.w}%`, height: `${b.h}%`,
+                    transform: `translate(-50%,-50%) scale(${tr.scale}) rotate(${tr.rotation}deg)`,
+                    cursor: "move",
+                    outline: isSel ? "1.5px dashed var(--primary)" : "none",
+                  };
+                  return (
+                    <div key={ov.id} style={wrap} onMouseDown={(e) => startMove(ov.id, e, tr)}>
+                      <img src={ov.url} alt="" draggable={false} className="pointer-events-none h-full w-full object-contain" />
+                      {isSel && <CornerHandles id={ov.id} tr={tr} onStartScale={startScale} />}
+                    </div>
+                  );
                 }
                 if (ov.kind === "text" && ov.text) {
-                  return <div key={ov.id} style={{ ...common, color: ov.text.color, fontSize: ov.text.size, fontWeight: 700, textShadow: "0 2px 12px rgba(0,0,0,0.6)", whiteSpace: "nowrap" }} onMouseDown={(e) => startMove(ov.id, e, tr)}>{ov.text.content}</div>;
+                  const txtStyle: React.CSSProperties = {
+                    position: "absolute",
+                    left: `${tr.xPct}%`, top: `${tr.yPct}%`,
+                    transform: `translate(-50%,-50%) scale(${tr.scale}) rotate(${tr.rotation}deg)`,
+                    color: ov.text.color, fontSize: ov.text.size, fontWeight: 700,
+                    textShadow: "0 2px 12px rgba(0,0,0,0.6)", whiteSpace: "nowrap",
+                    cursor: "move", padding: 4,
+                    outline: isSel ? "1.5px dashed var(--primary)" : "none",
+                  };
+                  return (
+                    <div key={ov.id} style={txtStyle} onMouseDown={(e) => startMove(ov.id, e, tr)}>
+                      {ov.text.content}
+                      {isSel && <CornerHandles id={ov.id} tr={tr} onStartScale={startScale} />}
+                    </div>
+                  );
                 }
                 return null;
               })}
 
-              {/* Selection bounding box with corner handles for preview target */}
-              {previewTarget && previewTarget.transform && (() => {
+              {/* Bounding box + corner handles for the active V1 video */}
+              {previewTarget && previewTarget === activeV1Video && previewTarget.transform && (() => {
                 const tr = previewTarget.transform;
-                // Approximate box size: 30% of preview, scaled. For text/image keep simple frame around center.
-                const baseW = 30, baseH = 30;
-                const w = baseW * tr.scale;
-                const h = baseH * tr.scale;
+                const b = getItemBounds(previewTarget);
                 const style: React.CSSProperties = {
                   position: "absolute",
                   left: `${tr.xPct}%`, top: `${tr.yPct}%`,
-                  width: `${w}%`, height: `${h}%`,
-                  transform: `translate(-50%,-50%) rotate(${tr.rotation}deg)`,
+                  width: `${b.w}%`, height: `${b.h}%`,
+                  transform: `translate(-50%,-50%) scale(${tr.scale}) rotate(${tr.rotation}deg)`,
                   border: "1.5px dashed var(--primary)",
                   pointerEvents: "none",
                 };
-                const handle: React.CSSProperties = { position: "absolute", width: 12, height: 12, background: "var(--primary)", border: "2px solid white", borderRadius: 2, pointerEvents: "auto" };
                 return (
                   <div key={`sel-${previewTarget.id}`} style={style}>
-                    <div onMouseDown={(e) => startScale(previewTarget.id, e, tr)} style={{ ...handle, left: -6, top: -6, cursor: "nwse-resize" }} />
-                    <div onMouseDown={(e) => startScale(previewTarget.id, e, tr)} style={{ ...handle, right: -6, top: -6, cursor: "nesw-resize" }} />
-                    <div onMouseDown={(e) => startScale(previewTarget.id, e, tr)} style={{ ...handle, left: -6, bottom: -6, cursor: "nesw-resize" }} />
-                    <div onMouseDown={(e) => startScale(previewTarget.id, e, tr)} style={{ ...handle, right: -6, bottom: -6, cursor: "nwse-resize" }} />
+                    <CornerHandles id={previewTarget.id} tr={tr} onStartScale={startScale} />
                   </div>
                 );
               })()}

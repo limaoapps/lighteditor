@@ -5,6 +5,7 @@ import {
   Loader2, X, Volume2, VolumeX, ZoomIn, ZoomOut, Type as TypeIcon, Music2,
   Image as ImageIcon, Video as VideoIcon, RotateCw, Maximize2, AlignCenter,
   Lock, Unlock, Undo2, Redo2, Check, Copy as CopyIcon, ClipboardPaste,
+  Sparkles, Sliders, Wand2, RotateCcw, Palette,
 } from "lucide-react";
 import { getFFmpeg, fetchFile } from "@/lib/ffmpeg-client";
 
@@ -35,6 +36,19 @@ type MediaAsset = {
   height?: number;
 };
 
+type FillMode = "bars" | "blur" | "mirror" | "stretch" | "color";
+type ZoomFx = { dir: "in" | "out"; speed: "slow" | "med" | "fast" } | null;
+type Fx = {
+  brightness: number; contrast: number; saturation: number; temperature: number;
+  sharpness: number; exposure: number; shadows: number; highlights: number;
+  opacity: number;
+  preset: string | null;
+  blurBg: number;
+  fillMode: FillMode;
+  bgColor: string;
+  zoom: ZoomFx;
+};
+
 type TLItem = {
   id: string;
   mediaId?: string;
@@ -54,6 +68,7 @@ type TLItem = {
   fadeIn?: number;
   fadeOut?: number;
   gainDb?: number;
+  fx?: Fx;
 };
 
 type Track = { id: string; kind: TrackKind; label: string };
@@ -90,6 +105,100 @@ function fmt(s: number) {
 }
 
 function dbToGain(db: number) { return Math.pow(10, db / 20); }
+
+const DEFAULT_FX: Fx = {
+  brightness: 0, contrast: 0, saturation: 0, temperature: 0,
+  sharpness: 0, exposure: 0, shadows: 0, highlights: 0,
+  opacity: 100, preset: null, blurBg: 0, fillMode: "bars",
+  bgColor: "#000000", zoom: null,
+};
+
+const QUICK_EFFECTS: { id: string; label: string }[] = [
+  { id: "bw", label: "Preto e Branco" },
+  { id: "sepia", label: "Sépia" },
+  { id: "vignette", label: "Vinheta" },
+  { id: "sharp", label: "Nitidez Extra" },
+  { id: "contrast", label: "Contraste Forte" },
+  { id: "warm", label: "Tons Quentes" },
+  { id: "cool", label: "Tons Frios" },
+  { id: "vintage", label: "Vintage" },
+  { id: "cinema", label: "Cinema" },
+  { id: "retro", label: "Retrô" },
+  { id: "faded", label: "Desbotado" },
+  { id: "highsat", label: "Alta Saturação" },
+  { id: "lowsat", label: "Baixa Saturação" },
+];
+
+const PRESETS: { id: string; label: string; patch: Partial<Fx> }[] = [
+  { id: "natural", label: "Natural", patch: { ...DEFAULT_FX } },
+  { id: "youtube", label: "YouTube", patch: { brightness: 5, contrast: 15, saturation: 15 } },
+  { id: "tiktok",  label: "TikTok",  patch: { saturation: 30, contrast: 20, sharpness: 30 } },
+  { id: "cinema",  label: "Cinema",  patch: { contrast: 20, saturation: -15, brightness: -5, preset: "cinema" } },
+  { id: "vintage", label: "Vintage", patch: { preset: "vintage" } },
+  { id: "bw",      label: "Preto e Branco", patch: { preset: "bw" } },
+  { id: "retro",   label: "Retrô",   patch: { preset: "retro" } },
+];
+
+function cssFilter(fx?: Fx): string {
+  if (!fx) return "none";
+  const parts: string[] = [];
+  // adjustments (-100..100 → multipliers)
+  const bright = 1 + (fx.brightness + fx.exposure) / 100;
+  const contrast = 1 + (fx.contrast / 100);
+  const sat = 1 + (fx.saturation / 100);
+  parts.push(`brightness(${bright.toFixed(3)})`);
+  parts.push(`contrast(${contrast.toFixed(3)})`);
+  parts.push(`saturate(${sat.toFixed(3)})`);
+  // temperature: negative→cool (hue +), positive→warm (sepia + slight hue -)
+  if (fx.temperature !== 0) {
+    if (fx.temperature > 0) {
+      parts.push(`sepia(${(fx.temperature / 200).toFixed(3)})`);
+      parts.push(`hue-rotate(${(-fx.temperature * 0.1).toFixed(2)}deg)`);
+    } else {
+      parts.push(`hue-rotate(${(-fx.temperature * 0.2).toFixed(2)}deg)`);
+    }
+  }
+  // shadows/highlights approximation via gamma-like brightness/contrast tweak
+  if (fx.shadows) parts.push(`brightness(${(1 + fx.shadows / 400).toFixed(3)})`);
+  if (fx.highlights) parts.push(`contrast(${(1 + fx.highlights / 400).toFixed(3)})`);
+  // sharpness: emulate via contrast bump (CSS has no sharpen)
+  if (fx.sharpness > 0) parts.push(`contrast(${(1 + fx.sharpness / 300).toFixed(3)})`);
+  // preset overlays
+  switch (fx.preset) {
+    case "bw":       parts.push("grayscale(1)"); break;
+    case "sepia":    parts.push("sepia(1)"); break;
+    case "sharp":    parts.push("contrast(1.25) saturate(1.1)"); break;
+    case "contrast": parts.push("contrast(1.5)"); break;
+    case "warm":     parts.push("sepia(0.35) saturate(1.2) hue-rotate(-10deg)"); break;
+    case "cool":     parts.push("hue-rotate(20deg) saturate(1.1) brightness(1.02)"); break;
+    case "vintage":  parts.push("sepia(0.55) contrast(0.9) saturate(0.85)"); break;
+    case "cinema":   parts.push("contrast(1.2) saturate(0.85) brightness(0.95)"); break;
+    case "retro":    parts.push("sepia(0.4) hue-rotate(-15deg) saturate(1.3) contrast(1.1)"); break;
+    case "faded":    parts.push("contrast(0.85) brightness(1.1) saturate(0.7)"); break;
+    case "highsat":  parts.push("saturate(1.8)"); break;
+    case "lowsat":   parts.push("saturate(0.4)"); break;
+    default: break;
+  }
+  return parts.join(" ");
+}
+
+function computeVisualOpacity(i: TLItem, t: number): number {
+  const local = t - i.start;
+  const dur = i.outPoint - i.inPoint;
+  let v = (i.fx?.opacity ?? 100) / 100;
+  if (i.fadeIn && local < i.fadeIn) v *= Math.max(0, local / i.fadeIn);
+  if (i.fadeOut && local > dur - i.fadeOut) v *= Math.max(0, (dur - local) / i.fadeOut);
+  return Math.max(0, Math.min(1, v));
+}
+
+function computeZoomScale(fx: Fx | undefined, localT: number, dur: number): number {
+  if (!fx?.zoom) return 1;
+  const speedMul = fx.zoom.speed === "slow" ? 0.1 : fx.zoom.speed === "fast" ? 0.35 : 0.2;
+  const p = dur > 0 ? Math.min(1, Math.max(0, localT / dur)) : 0;
+  return fx.zoom.dir === "in" ? 1 + speedMul * p : 1 + speedMul * (1 - p);
+}
+
+
 
 function detectKind(file: File): ItemKind | null {
   const t = file.type.toLowerCase();
@@ -314,6 +423,7 @@ function Editor() {
       transform: asset.kind === "image" || asset.kind === "video" ? { xPct: 50, yPct: 50, scale: 1, rotation: 0 } : undefined,
       fadeIn: 0, fadeOut: 0,
       gainDb: asset.kind === "audio" || asset.kind === "video" ? 0 : undefined,
+      fx: asset.kind === "image" || asset.kind === "video" ? { ...DEFAULT_FX } : undefined,
     };
   }, []);
 
@@ -826,7 +936,7 @@ function Editor() {
   };
 
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground">
+    <div className="flex h-screen flex-col bg-background text-foreground select-none" style={{ WebkitUserSelect: "none", userSelect: "none" }}>
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-panel px-4">
         <div className="flex items-center gap-3">
           <Link to="/" className="text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /></Link>
@@ -973,14 +1083,217 @@ function Editor() {
               </label>
             </div>
           )}
+
+          {selected && selected.fx && (selected.kind === "image" || selected.kind === "video") && (() => {
+            const fx = selected.fx;
+            const patchFx = (patch: Partial<Fx>) =>
+              setItems(p => p.map(i => i.id === selected.id && i.fx ? { ...i, fx: { ...i.fx, ...patch } } : i));
+            const adj: { key: keyof Fx; label: string; min: number; max: number; suffix?: string }[] = [
+              { key: "brightness", label: "Brilho", min: -100, max: 100 },
+              { key: "contrast", label: "Contraste", min: -100, max: 100 },
+              { key: "saturation", label: "Saturação", min: -100, max: 100 },
+              { key: "temperature", label: "Temperatura", min: -100, max: 100 },
+              { key: "sharpness", label: "Nitidez", min: 0, max: 100 },
+              { key: "exposure", label: "Exposição", min: -100, max: 100 },
+              { key: "shadows", label: "Sombras", min: -100, max: 100 },
+              { key: "highlights", label: "Realces", min: -100, max: 100 },
+              { key: "opacity", label: "Opacidade", min: 0, max: 100, suffix: "%" },
+            ];
+            return (
+              <div className="space-y-2 rounded-md border border-border bg-card p-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <Sparkles className="h-3 w-3 text-primary" /> Efeitos e Ajustes
+                  </div>
+                  <button
+                    onClick={() => setItems(p => p.map(i => i.id === selected.id && i.fx ? { ...i, fx: { ...DEFAULT_FX }, fadeIn: 0, fadeOut: 0 } : i))}
+                    title="Restaurar Original"
+                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-background hover:text-foreground">
+                    <RotateCcw className="h-3 w-3" /> Resetar
+                  </button>
+                </div>
+
+                <details open className="rounded border border-border/60 bg-background/40">
+                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"><Sliders className="h-3 w-3" /> Ajustes</summary>
+                  <div className="space-y-1.5 px-2 pb-2 pt-1">
+                    {adj.map(a => (
+                      <label key={a.key} className="flex items-center gap-2">
+                        <span className="w-20 truncate text-muted-foreground">{a.label}</span>
+                        <input type="range" min={a.min} max={a.max} step={1}
+                          value={fx[a.key] as number}
+                          onChange={(e) => patchFx({ [a.key]: Number(e.target.value) } as Partial<Fx>)}
+                          className="flex-1 accent-[color:var(--primary)]" />
+                        <span className="w-10 text-right font-mono tabular-nums">{fx[a.key] as number}{a.suffix ?? ""}</span>
+                      </label>
+                    ))}
+                  </div>
+                </details>
+
+                <details className="rounded border border-border/60 bg-background/40">
+                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"><Wand2 className="h-3 w-3" /> Efeitos Rápidos</summary>
+                  <div className="grid grid-cols-2 gap-1 px-2 pb-2 pt-1">
+                    <button onClick={() => patchFx({ preset: null })}
+                      className={`rounded border px-1.5 py-1 text-[10px] ${fx.preset === null ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                      Nenhum
+                    </button>
+                    {QUICK_EFFECTS.map(q => (
+                      <button key={q.id} onClick={() => patchFx({ preset: q.id })}
+                        className={`rounded border px-1.5 py-1 text-[10px] ${fx.preset === q.id ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                        {q.label}
+                      </button>
+                    ))}
+                  </div>
+                </details>
+
+                <details className="rounded border border-border/60 bg-background/40">
+                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"><Palette className="h-3 w-3" /> Modo de Preenchimento</summary>
+                  <div className="space-y-1.5 px-2 pb-2 pt-1">
+                    <div className="grid grid-cols-2 gap-1">
+                      {(["bars","blur","mirror","stretch","color"] as FillMode[]).map(m => (
+                        <button key={m} onClick={() => patchFx({ fillMode: m })}
+                          className={`rounded border px-1.5 py-1 text-[10px] ${fx.fillMode === m ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                          {m === "bars" ? "Barras Pretas" : m === "blur" ? "Fundo Desfocado" : m === "mirror" ? "Espelhado" : m === "stretch" ? "Esticado" : "Cor"}
+                        </button>
+                      ))}
+                    </div>
+                    {fx.fillMode === "blur" && (
+                      <label className="flex items-center gap-2">
+                        <span className="w-20 text-muted-foreground">Blur</span>
+                        <input type="range" min={0} max={100} step={1} value={fx.blurBg}
+                          onChange={(e) => patchFx({ blurBg: Number(e.target.value) })}
+                          className="flex-1 accent-[color:var(--primary)]" />
+                        <span className="w-10 text-right font-mono tabular-nums">{fx.blurBg}</span>
+                      </label>
+                    )}
+                    {fx.fillMode === "color" && (
+                      <label className="flex items-center gap-2">
+                        <span className="w-20 text-muted-foreground">Cor</span>
+                        <input type="color" value={fx.bgColor}
+                          onChange={(e) => patchFx({ bgColor: e.target.value })}
+                          className="h-7 w-12 rounded border border-border bg-background" />
+                      </label>
+                    )}
+                  </div>
+                </details>
+
+                <details className="rounded border border-border/60 bg-background/40">
+                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Entrada / Saída</summary>
+                  <div className="space-y-1.5 px-2 pb-2 pt-1">
+                    <div className="grid grid-cols-3 gap-1">
+                      <button onClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: 1, fadeOut: 0 } : i))}
+                        className="rounded border border-border px-1.5 py-1 text-[10px] hover:border-ring/50">Fade In</button>
+                      <button onClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: 0, fadeOut: 1 } : i))}
+                        className="rounded border border-border px-1.5 py-1 text-[10px] hover:border-ring/50">Fade Out</button>
+                      <button onClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: 1, fadeOut: 1 } : i))}
+                        className="rounded border border-border px-1.5 py-1 text-[10px] hover:border-ring/50">In + Out</button>
+                    </div>
+                    <label className="flex items-center gap-2">
+                      <span className="w-14 text-muted-foreground">Fade In</span>
+                      <input type="range" min={0} max={5} step={0.1} value={selected.fadeIn ?? 0}
+                        onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: Number(e.target.value) } : i))}
+                        className="flex-1 accent-[color:var(--primary)]" />
+                      <span className="w-10 text-right font-mono tabular-nums">{(selected.fadeIn ?? 0).toFixed(1)}s</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <span className="w-14 text-muted-foreground">Fade Out</span>
+                      <input type="range" min={0} max={5} step={0.1} value={selected.fadeOut ?? 0}
+                        onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeOut: Number(e.target.value) } : i))}
+                        className="flex-1 accent-[color:var(--primary)]" />
+                      <span className="w-10 text-right font-mono tabular-nums">{(selected.fadeOut ?? 0).toFixed(1)}s</span>
+                    </label>
+                  </div>
+                </details>
+
+                <details className="rounded border border-border/60 bg-background/40">
+                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Zoom Cinematográfico</summary>
+                  <div className="space-y-1.5 px-2 pb-2 pt-1">
+                    <div className="grid grid-cols-3 gap-1">
+                      <button onClick={() => patchFx({ zoom: null })}
+                        className={`rounded border px-1.5 py-1 text-[10px] ${!fx.zoom ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>Off</button>
+                      <button onClick={() => patchFx({ zoom: { dir: "in", speed: fx.zoom?.speed ?? "med" } })}
+                        className={`rounded border px-1.5 py-1 text-[10px] ${fx.zoom?.dir === "in" ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>Aproximar</button>
+                      <button onClick={() => patchFx({ zoom: { dir: "out", speed: fx.zoom?.speed ?? "med" } })}
+                        className={`rounded border px-1.5 py-1 text-[10px] ${fx.zoom?.dir === "out" ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>Afastar</button>
+                    </div>
+                    {fx.zoom && (
+                      <div className="grid grid-cols-3 gap-1">
+                        {(["slow","med","fast"] as const).map(s => (
+                          <button key={s} onClick={() => patchFx({ zoom: { dir: fx.zoom!.dir, speed: s } })}
+                            className={`rounded border px-1.5 py-1 text-[10px] ${fx.zoom!.speed === s ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                            {s === "slow" ? "Lenta" : s === "med" ? "Média" : "Rápida"}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </details>
+
+                <details className="rounded border border-border/60 bg-background/40">
+                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Presets</summary>
+                  <div className="grid grid-cols-2 gap-1 px-2 pb-2 pt-1">
+                    {PRESETS.map(p => (
+                      <button key={p.id}
+                        onClick={() => setItems(prev => prev.map(i => i.id === selected.id && i.fx ? { ...i, fx: { ...DEFAULT_FX, ...p.patch } } : i))}
+                        className="rounded border border-border px-1.5 py-1 text-[10px] hover:border-primary hover:text-primary">
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </details>
+
+                <button
+                  onClick={() => setItems(p => p.map(i => i.id === selected.id && i.fx ? { ...i, fx: { ...DEFAULT_FX }, fadeIn: 0, fadeOut: 0 } : i))}
+                  className="mt-1 inline-flex w-full items-center justify-center gap-1.5 rounded border border-border bg-background py-1.5 text-[11px] hover:border-destructive hover:text-destructive">
+                  <RotateCcw className="h-3 w-3" /> Restaurar Original
+                </button>
+              </div>
+            );
+          })()}
         </aside>
 
-        <main className="flex min-w-0 flex-1 flex-col">
-          <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black/40 p-6" onWheel={onPreviewWheel}>
-            <div ref={previewBoxRef} className="group/preview relative overflow-hidden rounded-lg bg-black shadow-2xl"
-              style={{ aspectRatio: `${aspect.w} / ${aspect.h}`, maxHeight: "100%", maxWidth: "100%", width: `min(100%, calc((100vh - 360px) * ${aspect.w} / ${aspect.h}))` }}>
-              <video ref={videoElRef} className="absolute inset-0 h-full w-full object-contain pointer-events-none" muted={false} playsInline
-                style={activeV1Video?.transform ? { transform: `translate(${activeV1Video.transform.xPct - 50}%, ${activeV1Video.transform.yPct - 50}%) scale(${activeV1Video.transform.scale}) rotate(${activeV1Video.transform.rotation}deg)` } : undefined} />
+
+        <main className="flex min-w-0 flex-1 flex-col select-none">
+          <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black/40 p-6 select-none" onWheel={onPreviewWheel}>
+            <div ref={previewBoxRef} className="group/preview relative overflow-hidden rounded-lg shadow-2xl select-none"
+              style={{
+                aspectRatio: `${aspect.w} / ${aspect.h}`,
+                maxHeight: "100%", maxWidth: "100%",
+                width: `min(100%, calc((100vh - 360px) * ${aspect.w} / ${aspect.h}))`,
+                background: activeV1Video?.fx?.fillMode === "color" ? activeV1Video.fx.bgColor : "#000",
+              }}>
+              {/* Background fill (blur/mirror/stretch) for V1 video */}
+              {activeV1Video && activeV1Video.fx && activeV1Video.fx.fillMode !== "bars" && activeV1Video.fx.fillMode !== "color" && (
+                <video
+                  key={`bg-${activeV1Video.id}`}
+                  src={activeV1Video.url}
+                  muted playsInline autoPlay
+                  className="pointer-events-none absolute inset-0 h-full w-full"
+                  style={{
+                    objectFit: activeV1Video.fx.fillMode === "stretch" ? "fill" : "cover",
+                    transform: activeV1Video.fx.fillMode === "mirror" ? "scaleX(-1)" : undefined,
+                    filter: activeV1Video.fx.fillMode === "blur" ? `blur(${Math.max(8, activeV1Video.fx.blurBg * 0.6)}px) brightness(0.8)` : undefined,
+                  }}
+                />
+              )}
+              {(() => {
+                const tr = activeV1Video?.transform;
+                const fx = activeV1Video?.fx;
+                const localT = activeV1Video ? playhead - activeV1Video.start : 0;
+                const dur = activeV1Video ? activeV1Video.outPoint - activeV1Video.inPoint : 0;
+                const zScale = computeZoomScale(fx, localT, dur);
+                const op = activeV1Video ? computeVisualOpacity(activeV1Video, playhead) : 1;
+                const style: React.CSSProperties = tr ? {
+                  transform: `translate(${tr.xPct - 50}%, ${tr.yPct - 50}%) scale(${tr.scale * zScale}) rotate(${tr.rotation}deg)`,
+                  opacity: op,
+                  filter: cssFilter(fx),
+                } : {};
+                return <video ref={videoElRef} className="absolute inset-0 h-full w-full object-contain pointer-events-none" muted={false} playsInline style={style} />;
+              })()}
+
+              {/* Vignette overlay if preset = vignette */}
+              {activeV1Video?.fx?.preset === "vignette" && (
+                <div className="pointer-events-none absolute inset-0" style={{ boxShadow: "inset 0 0 180px 60px rgba(0,0,0,0.85)" }} />
+              )}
 
               {/* Click-to-select V1 video (transparent layer above video, below overlays) */}
               {activeV1Video && activeV1Video.transform && (
@@ -999,17 +1312,27 @@ function Editor() {
                 const isSel = ov.id === selectedId;
                 if (ov.kind === "image") {
                   const b = getItemBounds(ov);
+                  const fx = ov.fx;
+                  const localT = playhead - ov.start;
+                  const dur = ov.outPoint - ov.inPoint;
+                  const zScale = computeZoomScale(fx, localT, dur);
+                  const op = computeVisualOpacity(ov, playhead);
                   const wrap: React.CSSProperties = {
                     position: "absolute",
                     left: `${tr.xPct}%`, top: `${tr.yPct}%`,
                     width: `${b.w}%`, height: `${b.h}%`,
-                    transform: `translate(-50%,-50%) scale(${tr.scale}) rotate(${tr.rotation}deg)`,
+                    transform: `translate(-50%,-50%) scale(${tr.scale * zScale}) rotate(${tr.rotation}deg)`,
                     cursor: "move",
+                    opacity: op,
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
                   };
                   return (
                     <div key={ov.id} style={wrap} onMouseDown={(e) => startMove(ov.id, e, tr)}>
-                      <img src={ov.url} alt="" draggable={false} className="pointer-events-none h-full w-full object-contain" />
+                      <img src={ov.url} alt="" draggable={false} className="pointer-events-none h-full w-full object-contain"
+                        style={{ filter: cssFilter(fx) }} />
+                      {fx?.preset === "vignette" && (
+                        <div className="pointer-events-none absolute inset-0" style={{ boxShadow: "inset 0 0 120px 40px rgba(0,0,0,0.85)" }} />
+                      )}
                       {isSel && <CornerHandles id={ov.id} tr={tr} onStartScale={startScale} />}
                     </div>
                   );
@@ -1022,6 +1345,7 @@ function Editor() {
                     color: ov.text.color, fontSize: ov.text.size, fontWeight: 700,
                     textShadow: "0 2px 12px rgba(0,0,0,0.6)", whiteSpace: "nowrap",
                     cursor: "move", padding: 4,
+                    opacity: computeVisualOpacity(ov, playhead),
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
                   };
                   return (
@@ -1060,6 +1384,7 @@ function Editor() {
               )}
             </div>
           </div>
+
 
           <div className="flex items-center gap-3 border-t border-border bg-panel px-4 py-2">
             <button onClick={() => setPlaying(true)} disabled={!items.length} className="rounded p-1.5 hover:bg-card disabled:opacity-40"><Play className="h-4 w-4" /></button>

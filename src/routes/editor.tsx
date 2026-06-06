@@ -335,6 +335,7 @@ function Editor() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoElRef = useRef<HTMLVideoElement>(null);
+  const videoBgElRef = useRef<HTMLVideoElement>(null);
   const audioRefs = useRef<Record<string, HTMLAudioElement>>({});
   const previewBoxRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -646,6 +647,19 @@ function Editor() {
     v.volume = computeVol(activeV1Video, playhead);
     if (playing) v.play().catch(() => {}); else v.pause();
   }, [activeV1Video, playing, playhead, trackMuted]);
+
+  useEffect(() => {
+    const bg = videoBgElRef.current;
+    if (!bg) return;
+    const needsBg = !!activeV1Video?.fx && activeV1Video.fx.fillMode !== "bars" && activeV1Video.fx.fillMode !== "color";
+    if (!activeV1Video || !needsBg) { bg.pause(); bg.removeAttribute("src"); bg.load(); return; }
+    const wanted = activeV1Video.url!;
+    if (bg.src !== wanted) bg.src = wanted;
+    const target = activeV1Video.inPoint + (playhead - activeV1Video.start);
+    if (Math.abs(bg.currentTime - target) > 0.25) bg.currentTime = target;
+    bg.muted = true;
+    if (playing) bg.play().catch(() => {}); else bg.pause();
+  }, [activeV1Video, playing, playhead]);
 
   useEffect(() => {
     const audios = items.filter(i => i.kind === "audio");

@@ -470,6 +470,15 @@ function Editor() {
     });
   }, []);
 
+  const removeTrack = useCallback((trackId: string) => {
+    setTracks(prev => {
+      const sameKind = prev.filter(t => t.kind === prev.find(x => x.id === trackId)?.kind);
+      if (sameKind.length <= 1) return prev; // mantenha ao menos 1 trilha por tipo
+      return prev.filter(t => t.id !== trackId);
+    });
+    setItems(prev => prev.filter(i => i.trackId !== trackId));
+  }, [setItems]);
+
   // ---- Snap ----
   const [snapMark, setSnapMark] = useState<number | null>(null);
   const snapMarkTimer = useRef<number | null>(null);

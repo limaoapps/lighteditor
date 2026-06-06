@@ -2,8 +2,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Film, Plus, Scissors, Trash2, Play, Pause, Square, Download, ArrowLeft,
-  Loader2, X, Volume2, ZoomIn, ZoomOut, Type as TypeIcon, Music2, Image as ImageIcon,
-  Video as VideoIcon, RotateCw, Maximize2, AlignCenter,
+  Loader2, X, Volume2, VolumeX, ZoomIn, ZoomOut, Type as TypeIcon, Music2,
+  Image as ImageIcon, Video as VideoIcon, RotateCw, Maximize2, AlignCenter,
+  Lock, Unlock, Undo2, Redo2,
 } from "lucide-react";
 import { getFFmpeg, fetchFile } from "@/lib/ffmpeg-client";
 
@@ -11,7 +12,7 @@ export const Route = createFileRoute("/editor")({
   head: () => ({
     meta: [
       { title: "Editor — Video Lite Editor" },
-      { name: "description", content: "Editor de vídeo no navegador com timeline multi-trilha, agulha, tesoura e zoom." },
+      { name: "description", content: "Editor de vídeo no navegador com timeline multi-trilha, snapping, fades e undo/redo." },
     ],
   }),
   component: Editor,
@@ -30,14 +31,17 @@ type TLItem = {
   name: string;
   file?: File;
   url?: string;
-  start: number;       // timeline position (s)
-  inPoint: number;     // source in (s)
-  outPoint: number;    // source out (s)
+  start: number;
+  inPoint: number;
+  outPoint: number;
   sourceDuration: number;
   width?: number;
   height?: number;
   transform?: Transform;
   text?: TextProps;
+  fadeIn?: number;   // seconds
+  fadeOut?: number;  // seconds
+  gainDb?: number;   // -30..+12 dB (audio/video audio)
 };
 
 type AspectKey = "16:9" | "9:16" | "1:1" | "4:3" | "custom";
@@ -60,6 +64,9 @@ const TRACKS: { id: TrackId; label: string; kind: "video" | "audio" }[] = [
 type Quality = "720" | "1080" | "2160";
 const QUALITY_HEIGHT: Record<Quality, number> = { "720": 720, "1080": 1080, "2160": 2160 };
 
+const CENTER_SNAP = 1.5; // percent points
+const TIME_SNAP_PX = 8;
+
 function fmt(s: number) {
   if (!isFinite(s) || s < 0) s = 0;
   const m = Math.floor(s / 60);
@@ -67,6 +74,8 @@ function fmt(s: number) {
   const cs = Math.floor((s - Math.floor(s)) * 10);
   return `${m}:${sec.toString().padStart(2, "0")}.${cs}`;
 }
+
+function dbToGain(db: number) { return Math.pow(10, db / 20); }
 
 function detectKind(file: File): ItemKind | null {
   const t = file.type.toLowerCase();
@@ -106,12 +115,19 @@ function Editor() {
   const [customAR, setCustomAR] = useState({ w: 16, h: 9 });
   const aspect = aspectKey === "custom" ? customAR : ASPECTS[aspectKey];
 
-  const [items, setItems] = useState<TLItem[]>([]);
+  const [items, setItemsRaw] = useState<TLItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [zoom, setZoom] = useState(40); // px per second
+  const [zoom, setZoom] = useState(40);
   const [quality, setQuality] = useState<Quality>("1080");
+
+  const [trackLocked, setTrackLocked] = useState<Record<TrackId, boolean>>({ V1: false, V2: false, V3: false, A1: false, A2: false });
+  const [trackMuted, setTrackMuted] = useState<Record<TrackId, boolean>>({ V1: false, V2: false, V3: false, A1: false, A2: false });
+
+  // Center-snap visual flags
+  const [snapH, setSnapH] = useState(false);
+  const [snapV, setSnapV] = useState(false);
 
   const [exporting, setExporting] = useState(false);
   const [exportPct, setExportPct] = useState(0);
@@ -127,13 +143,78 @@ function Editor() {
   const rafRef = useRef<number | null>(null);
   const lastTick = useRef<number>(0);
 
+  // --- Undo/Redo ---
+  const undoStack = useRef<TLItem[][]>([]);
+  const redoStack = useRef<TLItem[][]>([]);
+  const skipHistory = useRef(false);
+
+  const pushHistory = useCallback((snapshot: TLItem[]) => {
+    undoStack.current.push(snapshot);
+    if (undoStack.current.length > 80) undoStack.current.shift();
+    redoStack.current = [];
+  }, []);
+
+  const setItems = useCallback((updater: TLItem[] | ((prev: TLItem[]) => TLItem[]), record = true) => {
+    setItemsRaw(prev => {
+      const next = typeof updater === "function" ? (updater as (p: TLItem[]) => TLItem[])(prev) : updater;
+      if (record && !skipHistory.current && next !== prev) pushHistory(prev);
+      return next;
+    });
+  }, [pushHistory]);
+
+  const undo = useCallback(() => {
+    setItemsRaw(prev => {
+      const last = undoStack.current.pop();
+      if (!last) return prev;
+      redoStack.current.push(prev);
+      return last;
+    });
+  }, []);
+  const redo = useCallback(() => {
+    setItemsRaw(prev => {
+      const nxt = redoStack.current.pop();
+      if (!nxt) return prev;
+      undoStack.current.push(prev);
+      return nxt;
+    });
+  }, []);
+
   const selected = items.find(i => i.id === selectedId) ?? null;
   const totalDuration = useMemo(
     () => items.reduce((m, i) => Math.max(m, i.start + (i.outPoint - i.inPoint)), 0),
     [items]
   );
 
-  // Add files
+  // --- Snap helper ---
+  const snapTargets = useMemo(() => {
+    const set = new Set<number>();
+    set.add(0);
+    set.add(playhead);
+    for (const it of items) {
+      set.add(it.start);
+      set.add(it.start + (it.outPoint - it.inPoint));
+    }
+    return Array.from(set);
+  }, [items, playhead]);
+
+  const snapTime = useCallback((t: number, excludeId?: string) => {
+    const thr = TIME_SNAP_PX / zoom;
+    let best = t, bestD = thr;
+    // ruler ticks
+    const step = zoom < 20 ? 10 : zoom < 40 ? 5 : zoom < 80 ? 2 : 1;
+    const nearest = Math.round(t / step) * step;
+    if (Math.abs(nearest - t) < bestD) { best = nearest; bestD = Math.abs(nearest - t); }
+    for (const it of items) {
+      if (it.id === excludeId) continue;
+      for (const cand of [it.start, it.start + (it.outPoint - it.inPoint)]) {
+        const d = Math.abs(cand - t);
+        if (d < bestD) { best = cand; bestD = d; }
+      }
+    }
+    return Math.max(0, best);
+  }, [items, zoom]);
+
+  // --- Add files ---
   const addFiles = useCallback(async (files: FileList | null) => {
     if (!files) return;
     setError(null);
@@ -144,7 +225,6 @@ function Editor() {
       try {
         const meta = await probeMedia(file, kind);
         const trackId: TrackId = kind === "audio" ? "A2" : kind === "image" ? "V2" : "V1";
-        // Find end of last item on that track
         const start = items.concat(newItems).filter(i => i.trackId === trackId)
           .reduce((m, i) => Math.max(m, i.start + (i.outPoint - i.inPoint)), 0);
         newItems.push({
@@ -153,6 +233,8 @@ function Editor() {
           start, inPoint: 0, outPoint: meta.duration, sourceDuration: meta.duration,
           width: meta.width, height: meta.height,
           transform: kind === "image" || kind === "video" ? { xPct: 50, yPct: 50, scale: 1, rotation: 0 } : undefined,
+          fadeIn: 0, fadeOut: 0,
+          gainDb: kind === "audio" || kind === "video" ? 0 : undefined,
         });
       } catch {
         setError(`Falha ao ler ${file.name}`);
@@ -162,7 +244,7 @@ function Editor() {
       setItems(prev => [...prev, ...newItems]);
       setSelectedId(newItems[0].id);
     }
-  }, [items]);
+  }, [items, setItems]);
 
   const addText = useCallback(() => {
     const start = items.filter(i => i.trackId === "V3")
@@ -175,7 +257,7 @@ function Editor() {
     };
     setItems(prev => [...prev, it]);
     setSelectedId(it.id);
-  }, [items]);
+  }, [items, setItems]);
 
   const deleteItem = (id: string) => {
     setItems(prev => prev.filter(i => i.id !== id));
@@ -183,7 +265,6 @@ function Editor() {
   };
 
   const splitAt = useCallback((t: number) => {
-    // Split items containing playhead t
     setItems(prev => {
       const out: TLItem[] = [];
       let newSel: string | null = selectedId;
@@ -192,8 +273,8 @@ function Editor() {
         const end = it.start + dur;
         if (t > it.start + 0.05 && t < end - 0.05) {
           const off = t - it.start;
-          const left: TLItem = { ...it, id: crypto.randomUUID(), outPoint: it.inPoint + off };
-          const right: TLItem = { ...it, id: crypto.randomUUID(), start: t, inPoint: it.inPoint + off };
+          const left: TLItem = { ...it, id: crypto.randomUUID(), outPoint: it.inPoint + off, fadeOut: 0 };
+          const right: TLItem = { ...it, id: crypto.randomUUID(), start: t, inPoint: it.inPoint + off, fadeIn: 0 };
           out.push(left, right);
           if (selectedId === it.id) newSel = left.id;
         } else out.push(it);
@@ -201,24 +282,30 @@ function Editor() {
       setSelectedId(newSel);
       return out;
     });
-  }, [selectedId]);
+  }, [selectedId, setItems]);
 
-  // Keyboard shortcut Ctrl+B
+  // --- Keyboard shortcuts ---
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
-        e.preventDefault();
-        splitAt(playhead);
-      } else if (e.code === "Space" && !(e.target instanceof HTMLInputElement) && !(e.target instanceof HTMLTextAreaElement)) {
-        e.preventDefault();
-        setPlaying(p => !p);
-      }
+      const tgt = e.target as HTMLElement;
+      if (tgt instanceof HTMLInputElement || tgt instanceof HTMLTextAreaElement) return;
+      const ctrl = e.ctrlKey || e.metaKey;
+      const k = e.key.toLowerCase();
+      if (ctrl && k === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+      else if ((ctrl && k === "y") || (ctrl && e.shiftKey && k === "z")) { e.preventDefault(); redo(); }
+      else if (ctrl && k === "b") { e.preventDefault(); splitAt(playhead); }
+      else if (k === "s" && !ctrl) { e.preventDefault(); splitAt(playhead); }
+      else if ((k === "delete" || k === "backspace") && selectedId) { e.preventDefault(); deleteItem(selectedId); }
+      else if (k === "escape") { setSelectedId(null); }
+      else if (e.code === "Space") { e.preventDefault(); setPlaying(p => !p); }
+      else if (k === "arrowleft") { e.preventDefault(); setPlayhead(p => Math.max(0, p - (e.shiftKey ? 1 : 0.1))); }
+      else if (k === "arrowright") { e.preventDefault(); setPlayhead(p => Math.min(totalDuration, p + (e.shiftKey ? 1 : 0.1))); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [splitAt, playhead]);
+  }, [splitAt, playhead, undo, redo, selectedId, totalDuration]);
 
-  // Playback master clock
+  // --- Playback clock ---
   useEffect(() => {
     if (!playing) { if (rafRef.current) cancelAnimationFrame(rafRef.current); rafRef.current = null; return; }
     lastTick.current = performance.now();
@@ -236,7 +323,6 @@ function Editor() {
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [playing, totalDuration]);
 
-  // Current visible V1 video item
   const activeV1Video = useMemo(() => {
     return items.find(i =>
       (i.trackId === "V1") && i.kind === "video" &&
@@ -244,35 +330,45 @@ function Editor() {
     ) ?? null;
   }, [items, playhead]);
 
-  // Sync <video>
+  // Fade-aware volume at playhead
+  const computeVol = (i: TLItem, t: number) => {
+    const local = t - i.start;
+    const dur = i.outPoint - i.inPoint;
+    let v = 1;
+    if (i.fadeIn && local < i.fadeIn) v *= Math.max(0, local / i.fadeIn);
+    if (i.fadeOut && local > dur - i.fadeOut) v *= Math.max(0, (dur - local) / i.fadeOut);
+    v *= dbToGain(i.gainDb ?? 0);
+    return Math.max(0, Math.min(1, v));
+  };
+
+  // Sync <video> (V1)
   useEffect(() => {
     const v = videoElRef.current;
     if (!v) return;
     if (!activeV1Video) { v.pause(); v.removeAttribute("src"); v.load(); return; }
     const wanted = activeV1Video.url!;
-    if (v.src !== wanted) { v.src = wanted; }
+    if (v.src !== wanted) v.src = wanted;
     const target = activeV1Video.inPoint + (playhead - activeV1Video.start);
     if (Math.abs(v.currentTime - target) > 0.25) v.currentTime = target;
+    v.muted = trackMuted.V1;
+    v.volume = computeVol(activeV1Video, playhead);
     if (playing) v.play().catch(() => {}); else v.pause();
-  }, [activeV1Video, playing, playhead]);
+  }, [activeV1Video, playing, playhead, trackMuted.V1]);
 
-  // Sync audio tracks
+  // Sync audio
   useEffect(() => {
     const audios = items.filter(i => i.kind === "audio");
-    // Ensure elements
     for (const a of audios) {
-      if (!audioRefs.current[a.id]) {
-        const el = new Audio(a.url!);
-        audioRefs.current[a.id] = el;
-      }
+      if (!audioRefs.current[a.id]) audioRefs.current[a.id] = new Audio(a.url!);
     }
-    // Cleanup removed
     for (const id of Object.keys(audioRefs.current)) {
       if (!audios.find(a => a.id === id)) { audioRefs.current[id].pause(); delete audioRefs.current[id]; }
     }
     for (const a of audios) {
       const el = audioRefs.current[a.id];
       const inRange = playhead >= a.start && playhead < a.start + (a.outPoint - a.inPoint);
+      el.muted = trackMuted[a.trackId];
+      el.volume = computeVol(a, playhead);
       if (inRange) {
         const target = a.inPoint + (playhead - a.start);
         if (Math.abs(el.currentTime - target) > 0.25) el.currentTime = target;
@@ -280,30 +376,34 @@ function Editor() {
         if (!playing && !el.paused) el.pause();
       } else if (!el.paused) el.pause();
     }
-  }, [items, playing, playhead]);
+  }, [items, playing, playhead, trackMuted]);
 
-  // Active overlay items at playhead (images V2 + text V3)
   const overlays = items.filter(i =>
     (i.kind === "image" || i.kind === "text") &&
-    playhead >= i.start && playhead < i.start + (i.outPoint - i.inPoint)
+    playhead >= i.start && playhead < i.start + (i.outPoint - i.inPoint) &&
+    !trackMuted[i.trackId]
   );
 
-  // --- Timeline interactions ---
+  // --- Timeline drags ---
   type Drag =
     | { type: "move"; id: string; offsetSec: number }
     | { type: "resizeL"; id: string; origStart: number; origIn: number }
     | { type: "resizeR"; id: string; origOut: number }
+    | { type: "fadeIn"; id: string }
+    | { type: "fadeOut"; id: string }
+    | { type: "gain"; id: string; baseDb: number; baseY: number }
     | { type: "playhead" }
     | null;
   const dragRef = useRef<Drag>(null);
+  const labelColW = 140;
 
   const onTimelineMouseDown = (e: React.MouseEvent) => {
     const rect = timelineRef.current?.getBoundingClientRect();
     if (!rect) return;
-    if ((e.target as HTMLElement).dataset.role === "ruler" || (e.target as HTMLElement).dataset.role === "playhead") {
+    if ((e.target as HTMLElement).dataset.role === "ruler") {
       dragRef.current = { type: "playhead" };
-      const x = e.clientX - rect.left + (timelineRef.current?.scrollLeft ?? 0) - 120;
-      setPlayhead(Math.max(0, x / zoom));
+      const x = e.clientX - rect.left + (timelineRef.current?.scrollLeft ?? 0) - labelColW;
+      setPlayhead(snapTime(Math.max(0, x / zoom)));
     }
   };
 
@@ -312,49 +412,103 @@ function Editor() {
       const d = dragRef.current; if (!d) return;
       const rect = timelineRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const xPx = e.clientX - rect.left + (timelineRef.current?.scrollLeft ?? 0) - 120;
+      const xPx = e.clientX - rect.left + (timelineRef.current?.scrollLeft ?? 0) - labelColW;
       const tSec = Math.max(0, xPx / zoom);
-      if (d.type === "playhead") setPlayhead(tSec);
+      skipHistory.current = true;
+      if (d.type === "playhead") setPlayhead(snapTime(tSec));
       else if (d.type === "move") {
-        setItems(prev => prev.map(i => i.id === d.id ? { ...i, start: Math.max(0, tSec - d.offsetSec) } : i));
+        const newStart = snapTime(Math.max(0, tSec - d.offsetSec), d.id);
+        setItems(prev => prev.map(i => i.id === d.id ? { ...i, start: newStart } : i), false);
       } else if (d.type === "resizeL") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
-          const delta = tSec - d.origStart;
+          const snapped = snapTime(tSec, d.id);
+          const delta = snapped - d.origStart;
           const newIn = Math.max(0, Math.min(i.outPoint - 0.1, d.origIn + delta));
           const newStart = Math.max(0, d.origStart + (newIn - d.origIn));
           return { ...i, start: newStart, inPoint: newIn };
-        }));
+        }), false);
       } else if (d.type === "resizeR") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
-          const newOut = Math.max(i.inPoint + 0.1, Math.min(i.sourceDuration, tSec - i.start + i.inPoint));
+          const snapped = snapTime(tSec, d.id);
+          const newOut = Math.max(i.inPoint + 0.1, Math.min(i.sourceDuration, snapped - i.start + i.inPoint));
           return { ...i, outPoint: newOut };
-        }));
+        }), false);
+      } else if (d.type === "fadeIn") {
+        setItems(prev => prev.map(i => {
+          if (i.id !== d.id) return i;
+          const dur = i.outPoint - i.inPoint;
+          const f = Math.max(0, Math.min(dur, tSec - i.start));
+          return { ...i, fadeIn: f };
+        }), false);
+      } else if (d.type === "fadeOut") {
+        setItems(prev => prev.map(i => {
+          if (i.id !== d.id) return i;
+          const dur = i.outPoint - i.inPoint;
+          const end = i.start + dur;
+          const f = Math.max(0, Math.min(dur, end - tSec));
+          return { ...i, fadeOut: f };
+        }), false);
+      } else if (d.type === "gain") {
+        const dyPx = e.clientY - d.baseY;
+        const db = Math.max(-30, Math.min(12, d.baseDb - dyPx * 0.25));
+        setItems(prev => prev.map(i => i.id === d.id ? { ...i, gainDb: db } : i), false);
       }
     };
-    const onUp = () => { dragRef.current = null; };
+    const onUp = () => {
+      if (dragRef.current) {
+        // commit one history snapshot of the post-drag state
+        skipHistory.current = false;
+        setItemsRaw(prev => { pushHistory(prev); return prev; });
+      }
+      dragRef.current = null;
+    };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
     return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
-  }, [zoom]);
+  }, [zoom, snapTime, setItems, pushHistory]);
 
-  // --- Preview transform drag ---
+  // --- Preview transform drag with center-snap ---
   const transformDrag = useRef<{ id: string; startX: number; startY: number; baseX: number; baseY: number; rect: DOMRect } | null>(null);
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       const d = transformDrag.current; if (!d) return;
       const dx = ((e.clientX - d.startX) / d.rect.width) * 100;
       const dy = ((e.clientY - d.startY) / d.rect.height) * 100;
-      setItems(prev => prev.map(i => i.id === d.id && i.transform
-        ? { ...i, transform: { ...i.transform, xPct: Math.max(0, Math.min(100, d.baseX + dx)), yPct: Math.max(0, Math.min(100, d.baseY + dy)) } }
-        : i));
+      let x = Math.max(0, Math.min(100, d.baseX + dx));
+      let y = Math.max(0, Math.min(100, d.baseY + dy));
+      const sV = Math.abs(x - 50) < CENTER_SNAP;
+      const sH = Math.abs(y - 50) < CENTER_SNAP;
+      if (sV) x = 50;
+      if (sH) y = 50;
+      setSnapV(sV); setSnapH(sH);
+      setItemsRaw(prev => prev.map(i => i.id === d.id && i.transform
+        ? { ...i, transform: { ...i.transform, xPct: x, yPct: y } } : i));
     };
-    const onUp = () => { transformDrag.current = null; };
+    const onUp = () => {
+      if (transformDrag.current) {
+        skipHistory.current = false;
+        setItemsRaw(prev => { pushHistory(prev); return prev; });
+      }
+      transformDrag.current = null;
+      setSnapV(false); setSnapH(false);
+    };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
     return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
-  }, []);
+  }, [pushHistory]);
+
+  // Preview wheel zoom (scale active target)
+  const onPreviewWheel = (e: React.WheelEvent) => {
+    // pick target: selected with transform, else activeV1Video
+    const target = (selected && selected.transform) ? selected : activeV1Video;
+    if (!target || !target.transform) return;
+    e.preventDefault();
+    const delta = -e.deltaY * 0.0015;
+    setItems(prev => prev.map(i => i.id === target.id && i.transform
+      ? { ...i, transform: { ...i.transform, scale: Math.max(0.1, Math.min(5, i.transform.scale + delta)) } } : i));
+  };
 
   // Ruler ticks
   const rulerSpan = Math.max(totalDuration + 5, 10);
@@ -362,7 +516,7 @@ function Editor() {
   const ticks: number[] = [];
   for (let t = 0; t <= rulerSpan; t += tickStep) ticks.push(t);
 
-  // --- Export pipeline (concat V1 videos + optional A2 music + first V3 text overlay) ---
+  // Export pipeline (with fades + gain)
   const doExport = async () => {
     const v1clips = items.filter(i => i.trackId === "V1" && i.kind === "video").sort((a, b) => a.start - b.start);
     if (!v1clips.length) { setError("Adicione pelo menos um vídeo na trilha V1."); return; }
@@ -380,14 +534,20 @@ function Editor() {
         setExportMsg(`Processando clipe ${i + 1}/${v1clips.length}...`);
         await ff.writeFile(inName, await fetchFile(c.file!));
         const ss = c.inPoint.toFixed(3);
-        const to = (c.outPoint - c.inPoint).toFixed(3);
-        await ff.exec([
+        const dur = (c.outPoint - c.inPoint);
+        const to = dur.toFixed(3);
+        const afilters: string[] = [];
+        const g = dbToGain(c.gainDb ?? 0);
+        if (g !== 1) afilters.push(`volume=${g.toFixed(3)}`);
+        if (c.fadeIn && c.fadeIn > 0.01) afilters.push(`afade=t=in:st=0:d=${c.fadeIn.toFixed(3)}`);
+        if (c.fadeOut && c.fadeOut > 0.01) afilters.push(`afade=t=out:st=${(dur - c.fadeOut).toFixed(3)}:d=${c.fadeOut.toFixed(3)}`);
+        const args = [
           "-ss", ss, "-i", inName, "-t", to,
           "-vf", `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:color=black,fps=30,setsar=1`,
-          "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-          "-c:a", "aac", "-ar", "44100", "-ac", "2",
-          outName,
-        ]);
+        ];
+        if (afilters.length) args.push("-af", afilters.join(","));
+        args.push("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "44100", "-ac", "2", outName);
+        await ff.exec(args);
         await ff.deleteFile(inName);
         inputs.push(outName);
       }
@@ -414,9 +574,10 @@ function Editor() {
       }
       if (vf.length) finalArgs.push("-vf", vf.join(","));
       if (music) {
+        const mg = dbToGain(music.gainDb ?? 0) * 0.4;
         finalArgs.push(
           "-filter_complex",
-          `[0:a]volume=1[a0];[1:a]volume=0.4,aloop=loop=-1:size=2e9[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=0[aout]`,
+          `[0:a]volume=1[a0];[1:a]volume=${mg.toFixed(3)},aloop=loop=-1:size=2e9[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=0[aout]`,
           "-map", "0:v", "-map", "[aout]",
         );
       }
@@ -440,8 +601,7 @@ function Editor() {
     } finally { setExporting(false); }
   };
 
-  const trackHeight = 56;
-  const labelColW = 120;
+  const trackHeight = 60;
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
@@ -457,6 +617,9 @@ function Editor() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={undo} title="Desfazer (Ctrl+Z)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Undo2 className="h-4 w-4" /></button>
+          <button onClick={redo} title="Refazer (Ctrl+Y)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Redo2 className="h-4 w-4" /></button>
+          <div className="mx-2 h-6 w-px bg-border" />
           <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Proporção</label>
           <select value={aspectKey} onChange={(e) => setAspectKey(e.target.value as AspectKey)}
             className="rounded-md border border-border bg-card px-2 py-1.5 text-xs">
@@ -485,7 +648,7 @@ function Editor() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {/* Left: media & properties */}
+        {/* Left */}
         <aside className="flex w-64 shrink-0 flex-col gap-2 border-r border-border bg-panel p-3">
           <button onClick={() => fileInputRef.current?.click()}
             className="glow-primary inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-3 py-2.5 text-sm font-semibold text-primary-foreground">
@@ -552,15 +715,48 @@ function Editor() {
               </label>
             </div>
           )}
+
+          {selected && (selected.kind === "audio" || selected.kind === "video") && (
+            <div className="space-y-2 rounded-md border border-border bg-card p-2 text-xs">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Áudio</div>
+              <label className="flex items-center gap-2">
+                <span className="w-14 text-muted-foreground">Ganho</span>
+                <input type="range" min={-30} max={12} step={0.5} value={selected.gainDb ?? 0}
+                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, gainDb: Number(e.target.value) } : i))}
+                  className="flex-1 accent-[color:var(--primary)]" />
+                <span className="w-10 text-right font-mono tabular-nums">{(selected.gainDb ?? 0).toFixed(1)}dB</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="w-14 text-muted-foreground">Fade In</span>
+                <input type="range" min={0} max={Math.min(5, selected.outPoint - selected.inPoint)} step={0.05} value={selected.fadeIn ?? 0}
+                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: Number(e.target.value) } : i))}
+                  className="flex-1 accent-[color:var(--primary)]" />
+                <span className="w-10 text-right font-mono tabular-nums">{(selected.fadeIn ?? 0).toFixed(2)}s</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="w-14 text-muted-foreground">Fade Out</span>
+                <input type="range" min={0} max={Math.min(5, selected.outPoint - selected.inPoint)} step={0.05} value={selected.fadeOut ?? 0}
+                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeOut: Number(e.target.value) } : i))}
+                  className="flex-1 accent-[color:var(--primary)]" />
+                <span className="w-10 text-right font-mono tabular-nums">{(selected.fadeOut ?? 0).toFixed(2)}s</span>
+              </label>
+            </div>
+          )}
         </aside>
 
         {/* Center */}
         <main className="flex min-w-0 flex-1 flex-col">
           {/* Preview */}
-          <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black/40 p-6">
-            <div ref={previewBoxRef} className="relative overflow-hidden rounded-lg bg-black shadow-2xl"
+          <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black/40 p-6" onWheel={onPreviewWheel}>
+            <div ref={previewBoxRef} className="group/preview relative overflow-hidden rounded-lg bg-black shadow-2xl"
               style={{ aspectRatio: `${aspect.w} / ${aspect.h}`, maxHeight: "100%", maxWidth: "100%", width: `min(100%, calc((100vh - 360px) * ${aspect.w} / ${aspect.h}))` }}>
-              <video ref={videoElRef} className="absolute inset-0 h-full w-full object-contain" muted={false} playsInline />
+              <video ref={videoElRef} className="absolute inset-0 h-full w-full object-contain" muted={false} playsInline
+                style={activeV1Video?.transform ? { transform: `translate(${activeV1Video.transform.xPct - 50}%, ${activeV1Video.transform.yPct - 50}%) scale(${activeV1Video.transform.scale}) rotate(${activeV1Video.transform.rotation}deg)` } : undefined} />
+
+              {/* Center guides */}
+              <div className={`pointer-events-none absolute inset-y-0 left-1/2 w-px transition-opacity ${snapV ? "bg-primary opacity-100" : "bg-white/10 opacity-0 group-hover/preview:opacity-30"}`} />
+              <div className={`pointer-events-none absolute inset-x-0 top-1/2 h-px transition-opacity ${snapH ? "bg-primary opacity-100" : "bg-white/10 opacity-0 group-hover/preview:opacity-30"}`} />
+
               {overlays.map(ov => {
                 const tr = ov.transform!;
                 const isSel = ov.id === selectedId;
@@ -574,6 +770,7 @@ function Editor() {
                   e.stopPropagation();
                   setSelectedId(ov.id);
                   const rect = previewBoxRef.current!.getBoundingClientRect();
+                  skipHistory.current = true;
                   transformDrag.current = { id: ov.id, startX: e.clientX, startY: e.clientY, baseX: tr.xPct, baseY: tr.yPct, rect };
                 };
                 if (ov.kind === "image") {
@@ -599,11 +796,11 @@ function Editor() {
             <button onClick={() => { setPlaying(false); setPlayhead(0); }} className="rounded p-1.5 hover:bg-card"><Square className="h-4 w-4" /></button>
             <div className="ml-2 font-mono text-xs tabular-nums text-muted-foreground">{fmt(playhead)} / {fmt(totalDuration)}</div>
             <div className="flex-1" />
-            <button onClick={() => splitAt(playhead)} title="Dividir no playhead (Ctrl+B)"
+            <button onClick={() => splitAt(playhead)} title="Dividir (S / Ctrl+B)"
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs hover:border-primary hover:text-primary">
               <Scissors className="h-3.5 w-3.5" /> Dividir
             </button>
-            <button onClick={() => selected && deleteItem(selected.id)} disabled={!selected}
+            <button onClick={() => selected && deleteItem(selected.id)} disabled={!selected} title="Excluir (Del)"
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs hover:border-destructive hover:text-destructive disabled:opacity-40">
               <Trash2 className="h-3.5 w-3.5" /> Excluir
             </button>
@@ -624,14 +821,13 @@ function Editor() {
 
           {/* Timeline */}
           <div ref={timelineRef} onMouseDown={onTimelineMouseDown}
-            className="relative h-[260px] shrink-0 overflow-x-auto border-t border-border bg-track">
+            className="relative h-[280px] shrink-0 overflow-x-auto border-t border-border bg-track">
             <div className="relative" style={{ width: labelColW + rulerSpan * zoom, minWidth: "100%" }}>
-              {/* Ruler */}
               <div data-role="ruler" className="sticky top-0 z-20 flex h-7 cursor-ew-resize select-none border-b border-border bg-panel">
                 <div className="shrink-0 border-r border-border bg-panel" style={{ width: labelColW }} />
-                <div className="relative flex-1" style={{ height: 28 }}>
+                <div data-role="ruler" className="relative flex-1" style={{ height: 28 }}>
                   {ticks.map(t => (
-                    <div key={t} className="absolute top-0 h-full" style={{ left: t * zoom }}>
+                    <div key={t} data-role="ruler" className="absolute top-0 h-full" style={{ left: t * zoom }}>
                       <div className="h-3 w-px bg-border" />
                       <div className="absolute left-1 top-2 text-[10px] tabular-nums text-muted-foreground">{t}s</div>
                     </div>
@@ -639,42 +835,89 @@ function Editor() {
                 </div>
               </div>
 
-              {/* Tracks */}
               <div className="relative">
-                {TRACKS.map((tr, idx) => (
-                  <div key={tr.id} className="flex border-b border-border" style={{ height: trackHeight }}>
-                    <div className="flex shrink-0 items-center gap-2 border-r border-border bg-panel px-3 text-[11px] text-muted-foreground" style={{ width: labelColW }}>
-                      {tr.kind === "video" ? <VideoIcon className="h-3 w-3" /> : <Music2 className="h-3 w-3" />}
-                      {tr.label}
+                {TRACKS.map((tr, idx) => {
+                  const locked = trackLocked[tr.id];
+                  const muted = trackMuted[tr.id];
+                  return (
+                    <div key={tr.id} className="flex border-b border-border" style={{ height: trackHeight }}>
+                      <div className="flex shrink-0 items-center gap-1.5 border-r border-border bg-panel px-2 text-[11px] text-muted-foreground" style={{ width: labelColW }}>
+                        {tr.kind === "video" ? <VideoIcon className="h-3 w-3 shrink-0" /> : <Music2 className="h-3 w-3 shrink-0" />}
+                        <span className="min-w-0 flex-1 truncate">{tr.label}</span>
+                        <button onClick={() => setTrackMuted(s => ({ ...s, [tr.id]: !s[tr.id] }))}
+                          title={muted ? "Reativar" : "Silenciar"}
+                          className={`rounded p-1 ${muted ? "text-destructive" : "hover:bg-card hover:text-foreground"}`}>
+                          {muted ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
+                        </button>
+                        <button onClick={() => setTrackLocked(s => ({ ...s, [tr.id]: !s[tr.id] }))}
+                          title={locked ? "Desbloquear" : "Bloquear"}
+                          className={`rounded p-1 ${locked ? "text-primary" : "hover:bg-card hover:text-foreground"}`}>
+                          {locked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
+                        </button>
+                      </div>
+                      <div className="relative flex-1" style={{ backgroundColor: idx % 2 ? "color-mix(in oklab, var(--track) 80%, transparent)" : undefined, opacity: locked ? 0.6 : 1 }}>
+                        {items.filter(i => i.trackId === tr.id).map(i => {
+                          const dur = i.outPoint - i.inPoint;
+                          const w = Math.max(20, dur * zoom);
+                          const active = i.id === selectedId;
+                          const color = i.kind === "audio" ? "oklch(0.55 0.15 200)" : i.kind === "text" ? "oklch(0.55 0.2 320)" : i.kind === "image" ? "oklch(0.6 0.18 80)" : "oklch(0.55 0.18 155)";
+                          const fiW = (i.fadeIn ?? 0) * zoom;
+                          const foW = (i.fadeOut ?? 0) * zoom;
+                          const isAudio = i.kind === "audio" || i.kind === "video";
+                          return (
+                            <div key={i.id}
+                              onMouseDown={(e) => {
+                                if (locked) return;
+                                if ((e.target as HTMLElement).dataset.handle) return;
+                                e.stopPropagation(); setSelectedId(i.id);
+                                const rect = timelineRef.current!.getBoundingClientRect();
+                                const xPx = e.clientX - rect.left + (timelineRef.current?.scrollLeft ?? 0) - labelColW;
+                                skipHistory.current = true;
+                                dragRef.current = { type: "move", id: i.id, offsetSec: xPx / zoom - i.start };
+                              }}
+                              className={`group/clip absolute top-1 flex h-[calc(100%-8px)] items-center overflow-hidden rounded-md text-[10px] text-white shadow ${active ? "ring-2 ring-primary" : "ring-1 ring-black/30"}`}
+                              style={{ left: i.start * zoom, width: w, background: color, cursor: locked ? "not-allowed" : "grab" }}>
+                              {/* Fade triangles */}
+                              {fiW > 0 && (
+                                <div className="pointer-events-none absolute inset-y-0 left-0" style={{ width: fiW, background: "linear-gradient(to right, rgba(0,0,0,0.55), transparent)" }} />
+                              )}
+                              {foW > 0 && (
+                                <div className="pointer-events-none absolute inset-y-0 right-0" style={{ width: foW, background: "linear-gradient(to left, rgba(0,0,0,0.55), transparent)" }} />
+                              )}
+
+                              {/* Resize handles */}
+                              <div data-handle="L" onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "resizeL", id: i.id, origStart: i.start, origIn: i.inPoint }; }}
+                                className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-ew-resize bg-white/40 hover:bg-white" />
+                              <div data-handle="R" onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "resizeR", id: i.id, origOut: i.outPoint }; }}
+                                className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-ew-resize bg-white/40 hover:bg-white" />
+
+                              {/* Fade-in handle */}
+                              <div data-handle="FI" title="Fade in (arraste à direita)"
+                                onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "fadeIn", id: i.id }; }}
+                                className="absolute left-2 top-1 z-20 h-3 w-3 cursor-ew-resize rounded-full bg-white opacity-0 ring-1 ring-black/50 group-hover/clip:opacity-90"
+                                style={{ left: Math.max(4, fiW - 6) }} />
+                              {/* Fade-out handle */}
+                              <div data-handle="FO" title="Fade out (arraste à esquerda)"
+                                onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "fadeOut", id: i.id }; }}
+                                className="absolute top-1 z-20 h-3 w-3 cursor-ew-resize rounded-full bg-white opacity-0 ring-1 ring-black/50 group-hover/clip:opacity-90"
+                                style={{ right: Math.max(4, foW - 6) }} />
+
+                              {/* Gain center line (audio + video) */}
+                              {isAudio && (
+                                <div data-handle="G" title={`Ganho: ${(i.gainDb ?? 0).toFixed(1)}dB (arraste vertical)`}
+                                  onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "gain", id: i.id, baseDb: i.gainDb ?? 0, baseY: e.clientY }; }}
+                                  className="absolute inset-x-1 z-10 h-0.5 cursor-ns-resize bg-yellow-300/80 hover:bg-yellow-200"
+                                  style={{ top: `calc(50% - ${((i.gainDb ?? 0) / 30) * 40}%)` }} />
+                              )}
+
+                              <div className="pointer-events-none truncate px-3 font-medium">{i.name}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                    <div className="relative flex-1" style={{ backgroundColor: idx % 2 ? "color-mix(in oklab, var(--track) 80%, transparent)" : undefined }}>
-                      {items.filter(i => i.trackId === tr.id).map(i => {
-                        const dur = i.outPoint - i.inPoint;
-                        const w = Math.max(20, dur * zoom);
-                        const active = i.id === selectedId;
-                        const color = i.kind === "audio" ? "oklch(0.55 0.15 200)" : i.kind === "text" ? "oklch(0.55 0.2 320)" : i.kind === "image" ? "oklch(0.6 0.18 80)" : "oklch(0.55 0.18 155)";
-                        return (
-                          <div key={i.id}
-                            onMouseDown={(e) => {
-                              if ((e.target as HTMLElement).dataset.handle) return;
-                              e.stopPropagation(); setSelectedId(i.id);
-                              const rect = timelineRef.current!.getBoundingClientRect();
-                              const xPx = e.clientX - rect.left + (timelineRef.current?.scrollLeft ?? 0) - labelColW;
-                              dragRef.current = { type: "move", id: i.id, offsetSec: xPx / zoom - i.start };
-                            }}
-                            className={`absolute top-1 flex h-[calc(100%-8px)] items-center overflow-hidden rounded-md text-[10px] text-white shadow ${active ? "ring-2 ring-primary" : "ring-1 ring-black/30"}`}
-                            style={{ left: i.start * zoom, width: w, background: color, cursor: "grab" }}>
-                            <div data-handle="L" onMouseDown={(e) => { e.stopPropagation(); setSelectedId(i.id); dragRef.current = { type: "resizeL", id: i.id, origStart: i.start, origIn: i.inPoint }; }}
-                              className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-ew-resize bg-white/40 hover:bg-white" />
-                            <div data-handle="R" onMouseDown={(e) => { e.stopPropagation(); setSelectedId(i.id); dragRef.current = { type: "resizeR", id: i.id, origOut: i.outPoint }; }}
-                              className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-ew-resize bg-white/40 hover:bg-white" />
-                            <div className="pointer-events-none truncate px-2 font-medium">{i.name}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 {/* Playhead */}
                 <div data-role="playhead"
@@ -689,7 +932,6 @@ function Editor() {
         </main>
       </div>
 
-      {/* Export modal */}
       {(exporting || exportUrl || error) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl">

@@ -1574,6 +1574,40 @@ function Editor() {
                 </details>
 
                 <details className="rounded border border-border/60 bg-background/40">
+                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Vinheta</summary>
+                  <div className="space-y-1.5 px-2 pb-2 pt-1">
+                    <div className="grid grid-cols-2 gap-1">
+                      {(["dark","light"] as VignetteMode[]).map(m => (
+                        <button key={m} onClick={() => patchFx({ vignetteMode: m })}
+                          className={`rounded border px-1.5 py-1 text-[10px] ${fx.vignetteMode === m ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                          {m === "dark" ? "Escura" : "Clara"}
+                        </button>
+                      ))}
+                    </div>
+                    <label className="flex items-center gap-2" title="Duplo clique para zerar">
+                      <span className="w-20 text-muted-foreground">Intensidade</span>
+                      <input type="range" min={0} max={100} step={1} value={fx.vignette}
+                        onChange={(e) => patchFx({ vignette: Number(e.target.value) })}
+                        onDoubleClick={() => patchFx({ vignette: 0 })}
+                        className="flex-1 accent-[color:var(--primary)]" />
+                      <button type="button" onClick={() => patchFx({ vignette: 0 })}
+                        className="w-10 text-right font-mono tabular-nums hover:text-primary">{fx.vignette}</button>
+                    </label>
+                    <label className="flex items-center gap-2" title="Duplo clique para padrão">
+                      <span className="w-20 text-muted-foreground">Tamanho</span>
+                      <input type="range" min={0} max={100} step={1} value={fx.vignetteSize}
+                        onChange={(e) => patchFx({ vignetteSize: Number(e.target.value) })}
+                        onDoubleClick={() => patchFx({ vignetteSize: 50 })}
+                        className="flex-1 accent-[color:var(--primary)]" />
+                      <button type="button" onClick={() => patchFx({ vignetteSize: 50 })}
+                        className="w-10 text-right font-mono tabular-nums hover:text-primary">{fx.vignetteSize}</button>
+                    </label>
+                  </div>
+                </details>
+
+
+
+                <details className="rounded border border-border/60 bg-background/40">
                   <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Entrada / Saída</summary>
                   <div className="space-y-1.5 px-2 pb-2 pt-1">
                     <div className="grid grid-cols-3 gap-1">

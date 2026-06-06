@@ -115,6 +115,7 @@ const DEFAULT_FX: Fx = {
   sharpness: 0, exposure: 0, shadows: 0, highlights: 0,
   opacity: 100, preset: null, blurBg: 0, fillMode: "bars",
   bgColor: "#000000", zoom: null,
+  vignette: 0, vignetteSize: 50, vignetteMode: "dark",
 };
 
 const FX_DEFAULT_VAL: Record<string, number> = {

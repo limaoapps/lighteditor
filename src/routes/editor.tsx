@@ -959,6 +959,20 @@ function Editor() {
   }, []);
   useEffect(() => { if (zoom < minZoom) setZoom(minZoom); }, [minZoom, zoom]);
 
+  // Ctrl/⌘ + scroll sobre a timeline = zoom (bloqueia zoom do navegador)
+  useEffect(() => {
+    const el = timelineRef.current; if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const step = -e.deltaY * 0.08;
+      setZoom(z => Math.max(minZoom, Math.min(200, Math.round(z + step))));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [minZoom]);
+
   // ---- Export ----
   const doExport = async () => {
     const v1trackId = tracks.find(t => t.kind === "video")?.id;

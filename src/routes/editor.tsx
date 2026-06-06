@@ -1130,8 +1130,9 @@ function Editor() {
               {activeV1Video && activeV1Video.fx && activeV1Video.fx.fillMode !== "bars" && activeV1Video.fx.fillMode !== "color" && (
                 <video
                   key={`bg-${activeV1Video.id}-${activeV1Video.fx.fillMode}`}
+                  ref={videoBgElRef}
                   src={activeV1Video.url}
-                  muted playsInline autoPlay loop
+                  muted playsInline
                   className="pointer-events-none absolute inset-0 h-full w-full"
                   style={backgroundFillStyle(activeV1Video.fx)}
                 />

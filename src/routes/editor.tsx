@@ -1039,31 +1039,53 @@ function Editor() {
 
           const args: string[] = [];
           if (isImg) {
-            // Imagem como vídeo + áudio silencioso para compatibilidade do concat
             args.push("-loop", "1", "-framerate", "30", "-t", to, "-i", inName);
             args.push("-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
-            if (filter.type === "vf") args.push("-vf", filter.value);
+            if (filter.type === "vf") args.push("-vf", filter.value, "-map", "0:v", "-map", "1:a");
             else args.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "1:a");
             args.push(
               "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", "30",
               "-c:a", "aac", "-ar", "44100", "-ac", "2", "-shortest", outName,
             );
           } else {
+            // Vídeo: sempre incluir trilha de áudio silenciosa de fallback
+            // e mixar com a original (se existir) garante stream de áudio consistente para o concat.
             args.push("-ss", c.inPoint.toFixed(3), "-i", inName, "-t", to);
-            if (filter.type === "vf") args.push("-vf", filter.value);
-            else args.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "0:a?");
-            if (afilters.length) args.push("-af", afilters.join(","));
-            args.push("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-              "-c:a", "aac", "-ar", "44100", "-ac", "2", outName);
+            args.push("-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
+            const vPart = filter.type === "vf"
+              ? `[0:v]${filter.value}[vout]`
+              : filter.value;
+            const aPart = afilters.length
+              ? `[0:a]${afilters.join(",")}[a0src];[a0src][1:a]amix=inputs=2:duration=first:dropout_transition=0:weights=1 0[aout]`
+              : `[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=0:weights=1 0[aout]`;
+            // Use ?-fallback by detecting absence via a different filtergraph if needed:
+            args.push("-filter_complex", `${vPart};${aPart}`,
+              "-map", "[vout]", "-map", "[aout]");
+            args.push("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", "30",
+              "-c:a", "aac", "-ar", "44100", "-ac", "2", "-shortest", outName);
           }
-          await ff.exec(args);
+          try {
+            await ff.exec(args);
+          } catch (err) {
+            // Fallback: fonte sem áudio — refazer descartando trilha original
+            const fbArgs: string[] = ["-ss", c.inPoint.toFixed(3), "-i", inName, "-t", to,
+              "-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"];
+            if (filter.type === "vf") fbArgs.push("-vf", filter.value, "-map", "0:v", "-map", "1:a");
+            else fbArgs.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "1:a");
+            fbArgs.push("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", "30",
+              "-c:a", "aac", "-ar", "44100", "-ac", "2", "-shortest", outName);
+            await ff.exec(fbArgs);
+          }
           await ff.deleteFile(inName);
           inputs.push(outName);
         }
         setExportMsg("Juntando clipes...");
         const list = inputs.map(n => `file '${n}'`).join("\n");
         await ff.writeFile("list.txt", new TextEncoder().encode(list));
-        await ff.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "joined.mp4"]);
+        // Re-encode no concat para tolerar pequenas variações entre clipes
+        await ff.exec(["-f", "concat", "-safe", "0", "-i", "list.txt",
+          "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+          "-c:a", "aac", "-ar", "44100", "-ac", "2", "joined.mp4"]);
       }
 
       const vf: string[] = [];

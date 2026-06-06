@@ -275,6 +275,23 @@ function Editor() {
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; clipId: string | null } | null>(null);
   const clipboardRef = useRef<TLItem | null>(null);
 
+  // Resizable side panels
+  const [leftW, setLeftW] = useState(256);
+  const [rightW, setRightW] = useState(304);
+  const sideDragRef = useRef<{ side: "L" | "R"; startX: number; startW: number } | null>(null);
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      const d = sideDragRef.current; if (!d) return;
+      const dx = e.clientX - d.startX;
+      if (d.side === "L") setLeftW(Math.max(180, Math.min(520, d.startW + dx)));
+      else setRightW(Math.max(220, Math.min(560, d.startW - dx)));
+    };
+    const onUp = () => { sideDragRef.current = null; document.body.style.cursor = ""; };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+  }, []);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoElRef = useRef<HTMLVideoElement>(null);
   const audioRefs = useRef<Record<string, HTMLAudioElement>>({});

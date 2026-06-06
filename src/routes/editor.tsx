@@ -653,7 +653,7 @@ function Editor() {
 
   // close context menu on click outside
   useEffect(() => {
-    const onClick = () => setCtxMenu(null);
+    const onClick = () => { setCtxMenu(null); setMediaCtx(null); };
     window.addEventListener("click", onClick);
     return () => window.removeEventListener("click", onClick);
   }, []);

@@ -171,13 +171,13 @@ function cssFilter(fx?: Fx): string {
   // shadows/highlights approximation via gamma-like brightness/contrast tweak
   if (fx.shadows) parts.push(`brightness(${(1 + fx.shadows / 400).toFixed(3)})`);
   if (fx.highlights) parts.push(`contrast(${(1 + fx.highlights / 400).toFixed(3)})`);
-  // sharpness: emulate via contrast bump (CSS has no sharpen)
-  if (fx.sharpness > 0) parts.push(`contrast(${(1 + fx.sharpness / 300).toFixed(3)})`);
-  // preset overlays
+  // sharpness: real unsharp-mask via SVG filter (no saturation/contrast bleed)
+  if (fx.sharpness > 0) parts.push(`url(#lle-sharpen)`);
+  // preset overlays — keep purely tonal; "sharp"/"vignette" handled outside cssFilter
   switch (fx.preset) {
     case "bw":       parts.push("grayscale(1)"); break;
     case "sepia":    parts.push("sepia(1)"); break;
-    case "sharp":    parts.push("contrast(1.25) saturate(1.1)"); break;
+    case "sharp":    parts.push("url(#lle-sharpen-strong)"); break;
     case "contrast": parts.push("contrast(1.5)"); break;
     case "warm":     parts.push("sepia(0.35) saturate(1.2) hue-rotate(-10deg)"); break;
     case "cool":     parts.push("hue-rotate(20deg) saturate(1.1) brightness(1.02)"); break;
@@ -190,6 +190,23 @@ function cssFilter(fx?: Fx): string {
     default: break;
   }
   return parts.join(" ");
+}
+
+// Vignette overlay style — radial gradient (smooth, no hard edges)
+function vignetteStyle(fx?: Fx): React.CSSProperties | null {
+  if (!fx) return null;
+  const enabled = fx.vignette > 0 || fx.preset === "vignette";
+  if (!enabled) return null;
+  const intensity = fx.preset === "vignette" && fx.vignette === 0 ? 70 : fx.vignette;
+  const size = fx.vignetteSize; // 0..100 = clear-center radius
+  const inner = Math.max(0, Math.min(95, size * 0.6));      // start of darkening
+  const outer = Math.max(inner + 5, 100);                    // fully dark at corners
+  const alpha = (intensity / 100).toFixed(3);
+  const color = fx.vignetteMode === "light" ? `255,255,255` : `0,0,0`;
+  return {
+    background: `radial-gradient(ellipse at center, rgba(${color},0) ${inner}%, rgba(${color},${alpha}) ${outer}%)`,
+    mixBlendMode: fx.vignetteMode === "light" ? "screen" : "multiply",
+  };
 }
 
 function computeVisualOpacity(i: TLItem, t: number): number {

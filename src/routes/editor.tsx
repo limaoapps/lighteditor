@@ -1901,7 +1901,7 @@ function Editor() {
                 <button onClick={() => { setExportUrl(null); setError(null); setExportPct(0); }} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
               )}
             </div>
-            {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
+            {error && <p className="mt-3 whitespace-pre-wrap text-sm text-destructive">{error}</p>}
             {exporting && (<>
               <p className="mt-3 text-xs text-muted-foreground">{exportMsg}</p>
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">

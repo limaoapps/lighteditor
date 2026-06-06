@@ -249,8 +249,9 @@ function Editor() {
       );
       await ff.exec(finalArgs);
 
-      const data = await ff.readFile("output.mp4");
-      const blob = new Blob([data as Uint8Array], { type: "video/mp4" });
+      const data = (await ff.readFile("output.mp4")) as Uint8Array;
+      const buf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+      const blob = new Blob([buf], { type: "video/mp4" });
       setExportUrl(URL.createObjectURL(blob));
       setExportMsg("Pronto!");
       setExportPct(1);

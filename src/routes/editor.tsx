@@ -1384,15 +1384,17 @@ function Editor() {
                 <button onClick={() => setItems(p => p.map(i => i.id === selected.id && i.transform ? { ...i, transform: { ...i.transform, xPct: 50, yPct: 50 } } : i))}
                   className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-background"><AlignCenter className="h-3 w-3" /> Centralizar</button>
               </div>
-              <label className="flex items-center gap-2"><Maximize2 className="h-3 w-3" />
+              <label className="flex items-center gap-2" title="Duplo clique para restaurar"><Maximize2 className="h-3 w-3" />
                 <input type="range" min={0.1} max={3} step={0.05} value={selected.transform.scale}
                   onChange={(e) => setItems(p => p.map(i => i.id === selected.id && i.transform ? { ...i, transform: { ...i.transform, scale: Number(e.target.value) } } : i))}
+                  onDoubleClick={() => setItems(p => p.map(i => i.id === selected.id && i.transform ? { ...i, transform: { ...i.transform, scale: 1 } } : i))}
                   className="flex-1 accent-[color:var(--primary)]" />
                 <span className="w-8 text-right font-mono tabular-nums">{selected.transform.scale.toFixed(2)}</span>
               </label>
-              <label className="flex items-center gap-2"><RotateCw className="h-3 w-3" />
+              <label className="flex items-center gap-2" title="Duplo clique para restaurar"><RotateCw className="h-3 w-3" />
                 <input type="range" min={-180} max={180} step={1} value={selected.transform.rotation}
                   onChange={(e) => setItems(p => p.map(i => i.id === selected.id && i.transform ? { ...i, transform: { ...i.transform, rotation: Number(e.target.value) } } : i))}
+                  onDoubleClick={() => setItems(p => p.map(i => i.id === selected.id && i.transform ? { ...i, transform: { ...i.transform, rotation: 0 } } : i))}
                   className="flex-1 accent-[color:var(--primary)]" />
                 <span className="w-8 text-right font-mono tabular-nums">{selected.transform.rotation}°</span>
               </label>
@@ -1402,24 +1404,27 @@ function Editor() {
           {selected && (selected.kind === "audio" || selected.kind === "video") && (
             <div className="space-y-2 rounded-md border border-border bg-card p-2 text-xs">
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Áudio</div>
-              <label className="flex items-center gap-2">
+              <label className="flex items-center gap-2" title="Duplo clique para restaurar">
                 <span className="w-14 text-muted-foreground">Ganho</span>
                 <input type="range" min={-30} max={12} step={0.5} value={selected.gainDb ?? 0}
                   onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, gainDb: Number(e.target.value) } : i))}
+                  onDoubleClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, gainDb: 0 } : i))}
                   className="flex-1 accent-[color:var(--primary)]" />
                 <span className="w-10 text-right font-mono tabular-nums">{(selected.gainDb ?? 0).toFixed(1)}dB</span>
               </label>
-              <label className="flex items-center gap-2">
+              <label className="flex items-center gap-2" title="Duplo clique para restaurar">
                 <span className="w-14 text-muted-foreground">Fade In</span>
                 <input type="range" min={0} max={Math.min(5, selected.outPoint - selected.inPoint)} step={0.05} value={selected.fadeIn ?? 0}
                   onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: Number(e.target.value) } : i))}
+                  onDoubleClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: 0 } : i))}
                   className="flex-1 accent-[color:var(--primary)]" />
                 <span className="w-10 text-right font-mono tabular-nums">{(selected.fadeIn ?? 0).toFixed(2)}s</span>
               </label>
-              <label className="flex items-center gap-2">
+              <label className="flex items-center gap-2" title="Duplo clique para restaurar">
                 <span className="w-14 text-muted-foreground">Fade Out</span>
                 <input type="range" min={0} max={Math.min(5, selected.outPoint - selected.inPoint)} step={0.05} value={selected.fadeOut ?? 0}
                   onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeOut: Number(e.target.value) } : i))}
+                  onDoubleClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeOut: 0 } : i))}
                   className="flex-1 accent-[color:var(--primary)]" />
                 <span className="w-10 text-right font-mono tabular-nums">{(selected.fadeOut ?? 0).toFixed(2)}s</span>
               </label>

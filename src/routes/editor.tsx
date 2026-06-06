@@ -36,6 +36,19 @@ type MediaAsset = {
   height?: number;
 };
 
+type FillMode = "bars" | "blur" | "mirror" | "stretch" | "color";
+type ZoomFx = { dir: "in" | "out"; speed: "slow" | "med" | "fast" } | null;
+type Fx = {
+  brightness: number; contrast: number; saturation: number; temperature: number;
+  sharpness: number; exposure: number; shadows: number; highlights: number;
+  opacity: number;
+  preset: string | null;
+  blurBg: number;
+  fillMode: FillMode;
+  bgColor: string;
+  zoom: ZoomFx;
+};
+
 type TLItem = {
   id: string;
   mediaId?: string;
@@ -55,6 +68,7 @@ type TLItem = {
   fadeIn?: number;
   fadeOut?: number;
   gainDb?: number;
+  fx?: Fx;
 };
 
 type Track = { id: string; kind: TrackKind; label: string };

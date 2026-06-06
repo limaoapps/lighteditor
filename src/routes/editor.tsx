@@ -68,12 +68,12 @@ const ASPECTS: Record<AspectKey, { w: number; h: number; label: string }> = {
 };
 
 const INITIAL_TRACKS: Track[] = [
-  { id: "V1", kind: "video", label: "V1 · Principal" },
-  { id: "V2", kind: "video", label: "V2 · Sobreposição" },
-  { id: "V3", kind: "video", label: "V3 · Textos" },
+  { id: "V1", kind: "video", label: "V1 · Vídeo" },
+  { id: "V2", kind: "video", label: "V2 · Vídeo" },
   { id: "A1", kind: "audio", label: "A1 · Áudio" },
-  { id: "A2", kind: "audio", label: "A2 · Música" },
+  { id: "A2", kind: "audio", label: "A2 · Áudio" },
 ];
+const IMAGE_MAX_DUR = 3600;
 
 type Quality = "720" | "1080" | "2160";
 const QUALITY_HEIGHT: Record<Quality, number> = { "720": 720, "1080": 1080, "2160": 2160 };
@@ -122,6 +122,18 @@ async function probeMedia(file: File, kind: ItemKind): Promise<{ url: string; du
     };
     el.onerror = () => reject(new Error("mídia inválida"));
   });
+}
+
+function CornerHandles({ id, tr, onStartScale }: { id: string; tr: Transform; onStartScale: (id: string, e: React.MouseEvent, tr: Transform) => void }) {
+  const base: React.CSSProperties = { position: "absolute", width: 12, height: 12, background: "var(--primary)", border: "2px solid white", borderRadius: 2, pointerEvents: "auto", zIndex: 5 };
+  return (
+    <>
+      <div onMouseDown={(e) => onStartScale(id, e, tr)} style={{ ...base, left: -6, top: -6, cursor: "nwse-resize" }} />
+      <div onMouseDown={(e) => onStartScale(id, e, tr)} style={{ ...base, right: -6, top: -6, cursor: "nesw-resize" }} />
+      <div onMouseDown={(e) => onStartScale(id, e, tr)} style={{ ...base, left: -6, bottom: -6, cursor: "nesw-resize" }} />
+      <div onMouseDown={(e) => onStartScale(id, e, tr)} style={{ ...base, right: -6, bottom: -6, cursor: "nwse-resize" }} />
+    </>
+  );
 }
 
 function Editor() {
@@ -223,6 +235,20 @@ function Editor() {
     return id;
   }, []);
 
+  const insertTrackAt = useCallback((kind: TrackKind, insertIndex: number) => {
+    setTracks(prev => {
+      const sameKind = prev.filter(t => t.kind === kind);
+      const nums = sameKind.map(t => parseInt(t.id.slice(1), 10)).filter(n => !isNaN(n));
+      const n = (nums.length ? Math.max(...nums) : 0) + 1;
+      const prefix = kind === "video" ? "V" : "A";
+      const id = `${prefix}${n}`;
+      const newTrack: Track = { id, kind, label: `${id} · ${kind === "video" ? "Vídeo" : "Áudio"}` };
+      const out = [...prev];
+      out.splice(Math.max(0, Math.min(out.length, insertIndex)), 0, newTrack);
+      return out;
+    });
+  }, []);
+
   // ---- Snap ----
   const snapTime = useCallback((t: number, excludeId?: string) => {
     const thr = TIME_SNAP_PX / zoom;
@@ -263,16 +289,22 @@ function Editor() {
   }, []);
 
   // Create a TL item from a media asset
-  const createTLFromMedia = useCallback((asset: MediaAsset, trackId: string, start: number): TLItem => ({
-    id: crypto.randomUUID(),
-    mediaId: asset.id,
-    kind: asset.kind, trackId, name: asset.name, file: asset.file, url: asset.url,
-    start, inPoint: 0, outPoint: asset.duration, sourceDuration: asset.duration,
-    width: asset.width, height: asset.height,
-    transform: asset.kind === "image" || asset.kind === "video" ? { xPct: 50, yPct: 50, scale: 1, rotation: 0 } : undefined,
-    fadeIn: 0, fadeOut: 0,
-    gainDb: asset.kind === "audio" || asset.kind === "video" ? 0 : undefined,
-  }), []);
+  const createTLFromMedia = useCallback((asset: MediaAsset, trackId: string, start: number): TLItem => {
+    const isImg = asset.kind === "image";
+    return {
+      id: crypto.randomUUID(),
+      mediaId: asset.id,
+      kind: asset.kind, trackId, name: asset.name, file: asset.file, url: asset.url,
+      start,
+      inPoint: 0,
+      outPoint: isImg ? 5 : asset.duration,
+      sourceDuration: isImg ? IMAGE_MAX_DUR : asset.duration,
+      width: asset.width, height: asset.height,
+      transform: asset.kind === "image" || asset.kind === "video" ? { xPct: 50, yPct: 50, scale: 1, rotation: 0 } : undefined,
+      fadeIn: 0, fadeOut: 0,
+      gainDb: asset.kind === "audio" || asset.kind === "video" ? 0 : undefined,
+    };
+  }, []);
 
   const addAssetToTimeline = useCallback((asset: MediaAsset, opts?: { trackId?: string; start?: number }) => {
     const wantKind: TrackKind = asset.kind === "audio" ? "audio" : "video";
@@ -624,6 +656,26 @@ function Editor() {
     return null;
   }, [selected, activeV1Video]);
 
+  // Compute base bounds (% of preview) for an overlay/video so handles sit on its real corners.
+  const previewAR = aspect.w / aspect.h;
+  const getItemBounds = useCallback((it: TLItem): { w: number; h: number } => {
+    const mw = it.width || 16, mh = it.height || 9;
+    const ar = mw / mh;
+    if (it.kind === "video") {
+      // object-contain inside preview
+      if (ar >= previewAR) return { w: 100, h: (previewAR / ar) * 100 };
+      return { h: 100, w: (ar / previewAR) * 100 };
+    }
+    if (it.kind === "image") {
+      // base ~60% of preview height, keep AR, clamp to 90%
+      let h = 60, w = (h / 100) * ar / previewAR * 100;
+      if (w > 90) { w = 90; h = (w / 100) * previewAR / ar * 100; }
+      return { w, h };
+    }
+    // text: rough box around it; not really used for handles
+    return { w: 40, h: 14 };
+  }, [previewAR]);
+
   const startMove = (id: string, e: React.MouseEvent, tr: Transform) => {
     e.stopPropagation();
     setSelectedId(id);
@@ -920,43 +972,58 @@ function Editor() {
               {overlays.map(ov => {
                 const tr = ov.transform!;
                 const isSel = ov.id === selectedId;
-                const common: React.CSSProperties = {
-                  position: "absolute",
-                  left: `${tr.xPct}%`, top: `${tr.yPct}%`,
-                  transform: `translate(-50%,-50%) scale(${tr.scale}) rotate(${tr.rotation}deg)`,
-                  cursor: "move", outline: isSel ? "2px dashed var(--primary)" : "none", outlineOffset: 4,
-                };
                 if (ov.kind === "image") {
-                  return <img key={ov.id} src={ov.url} alt="" style={common} className="max-w-[80%]" onMouseDown={(e) => startMove(ov.id, e, tr)} draggable={false} />;
+                  const b = getItemBounds(ov);
+                  const wrap: React.CSSProperties = {
+                    position: "absolute",
+                    left: `${tr.xPct}%`, top: `${tr.yPct}%`,
+                    width: `${b.w}%`, height: `${b.h}%`,
+                    transform: `translate(-50%,-50%) scale(${tr.scale}) rotate(${tr.rotation}deg)`,
+                    cursor: "move",
+                    outline: isSel ? "1.5px dashed var(--primary)" : "none",
+                  };
+                  return (
+                    <div key={ov.id} style={wrap} onMouseDown={(e) => startMove(ov.id, e, tr)}>
+                      <img src={ov.url} alt="" draggable={false} className="pointer-events-none h-full w-full object-contain" />
+                      {isSel && <CornerHandles id={ov.id} tr={tr} onStartScale={startScale} />}
+                    </div>
+                  );
                 }
                 if (ov.kind === "text" && ov.text) {
-                  return <div key={ov.id} style={{ ...common, color: ov.text.color, fontSize: ov.text.size, fontWeight: 700, textShadow: "0 2px 12px rgba(0,0,0,0.6)", whiteSpace: "nowrap" }} onMouseDown={(e) => startMove(ov.id, e, tr)}>{ov.text.content}</div>;
+                  const txtStyle: React.CSSProperties = {
+                    position: "absolute",
+                    left: `${tr.xPct}%`, top: `${tr.yPct}%`,
+                    transform: `translate(-50%,-50%) scale(${tr.scale}) rotate(${tr.rotation}deg)`,
+                    color: ov.text.color, fontSize: ov.text.size, fontWeight: 700,
+                    textShadow: "0 2px 12px rgba(0,0,0,0.6)", whiteSpace: "nowrap",
+                    cursor: "move", padding: 4,
+                    outline: isSel ? "1.5px dashed var(--primary)" : "none",
+                  };
+                  return (
+                    <div key={ov.id} style={txtStyle} onMouseDown={(e) => startMove(ov.id, e, tr)}>
+                      {ov.text.content}
+                      {isSel && <CornerHandles id={ov.id} tr={tr} onStartScale={startScale} />}
+                    </div>
+                  );
                 }
                 return null;
               })}
 
-              {/* Selection bounding box with corner handles for preview target */}
-              {previewTarget && previewTarget.transform && (() => {
+              {/* Bounding box + corner handles for the active V1 video */}
+              {previewTarget && previewTarget === activeV1Video && previewTarget.transform && (() => {
                 const tr = previewTarget.transform;
-                // Approximate box size: 30% of preview, scaled. For text/image keep simple frame around center.
-                const baseW = 30, baseH = 30;
-                const w = baseW * tr.scale;
-                const h = baseH * tr.scale;
+                const b = getItemBounds(previewTarget);
                 const style: React.CSSProperties = {
                   position: "absolute",
                   left: `${tr.xPct}%`, top: `${tr.yPct}%`,
-                  width: `${w}%`, height: `${h}%`,
-                  transform: `translate(-50%,-50%) rotate(${tr.rotation}deg)`,
+                  width: `${b.w}%`, height: `${b.h}%`,
+                  transform: `translate(-50%,-50%) scale(${tr.scale}) rotate(${tr.rotation}deg)`,
                   border: "1.5px dashed var(--primary)",
                   pointerEvents: "none",
                 };
-                const handle: React.CSSProperties = { position: "absolute", width: 12, height: 12, background: "var(--primary)", border: "2px solid white", borderRadius: 2, pointerEvents: "auto" };
                 return (
                   <div key={`sel-${previewTarget.id}`} style={style}>
-                    <div onMouseDown={(e) => startScale(previewTarget.id, e, tr)} style={{ ...handle, left: -6, top: -6, cursor: "nwse-resize" }} />
-                    <div onMouseDown={(e) => startScale(previewTarget.id, e, tr)} style={{ ...handle, right: -6, top: -6, cursor: "nesw-resize" }} />
-                    <div onMouseDown={(e) => startScale(previewTarget.id, e, tr)} style={{ ...handle, left: -6, bottom: -6, cursor: "nesw-resize" }} />
-                    <div onMouseDown={(e) => startScale(previewTarget.id, e, tr)} style={{ ...handle, right: -6, bottom: -6, cursor: "nwse-resize" }} />
+                    <CornerHandles id={previewTarget.id} tr={tr} onStartScale={startScale} />
                   </div>
                 );
               })()}
@@ -1017,9 +1084,11 @@ function Editor() {
                 {tracks.map((tr, idx) => {
                   const locked = !!trackLocked[tr.id];
                   const muted = !!trackMuted[tr.id];
+                  const nextSameKind = tracks[idx + 1]?.kind === tr.kind;
+                  const lastOfKind = !nextSameKind; // show + at the bottom for the last track of each kind, OR between same-kind tracks
                   return (
-                    <div key={tr.id} className="flex border-b border-border" style={{ height: trackHeight }}>
-                      <div className="flex shrink-0 items-center gap-1.5 border-r border-border bg-panel px-2 text-[11px] text-muted-foreground" style={{ width: labelColW }}>
+                    <div key={tr.id} className="group/row relative flex border-b border-border" style={{ height: trackHeight }}>
+                      <div className="relative flex shrink-0 items-center gap-1.5 border-r border-border bg-panel px-2 text-[11px] text-muted-foreground" style={{ width: labelColW }}>
                         {tr.kind === "video" ? <VideoIcon className="h-3 w-3 shrink-0" /> : <Music2 className="h-3 w-3 shrink-0" />}
                         <span className="min-w-0 flex-1 truncate">{tr.label}</span>
                         <button onClick={() => setTrackMuted(s => ({ ...s, [tr.id]: !s[tr.id] }))}
@@ -1033,6 +1102,16 @@ function Editor() {
                           {locked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
                         </button>
                       </div>
+                      {/* + button on the bottom edge: insert another track of the same kind right below */}
+                      {(nextSameKind || lastOfKind) && (
+                        <button
+                          onClick={() => insertTrackAt(tr.kind, idx + 1)}
+                          title={`Adicionar trilha ${tr.kind === "video" ? "de vídeo" : "de áudio"}`}
+                          className="absolute -bottom-2.5 left-1/2 z-30 -translate-x-1/2 rounded-full border border-border bg-primary p-0.5 text-primary-foreground opacity-0 shadow transition hover:scale-110 group-hover/row:opacity-100"
+                          style={{ left: labelColW / 2 }}>
+                          <Plus className="h-3 w-3" />
+                        </button>
+                      )}
                       <div
                         onDragOver={onTrackDragOver}
                         onDrop={(e) => onTrackDrop(e, tr.id)}

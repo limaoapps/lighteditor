@@ -644,6 +644,26 @@ function Editor() {
     return null;
   }, [selected, activeV1Video]);
 
+  // Compute base bounds (% of preview) for an overlay/video so handles sit on its real corners.
+  const previewAR = aspect.w / aspect.h;
+  const getItemBounds = useCallback((it: TLItem): { w: number; h: number } => {
+    const mw = it.width || 16, mh = it.height || 9;
+    const ar = mw / mh;
+    if (it.kind === "video") {
+      // object-contain inside preview
+      if (ar >= previewAR) return { w: 100, h: (previewAR / ar) * 100 };
+      return { h: 100, w: (ar / previewAR) * 100 };
+    }
+    if (it.kind === "image") {
+      // base ~60% of preview height, keep AR, clamp to 90%
+      let h = 60, w = (h / 100) * ar / previewAR * 100;
+      if (w > 90) { w = 90; h = (w / 100) * previewAR / ar * 100; }
+      return { w, h };
+    }
+    // text: rough box around it; not really used for handles
+    return { w: 40, h: 14 };
+  }, [previewAR]);
+
   const startMove = (id: string, e: React.MouseEvent, tr: Transform) => {
     e.stopPropagation();
     setSelectedId(id);

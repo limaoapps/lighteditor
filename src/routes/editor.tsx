@@ -1172,8 +1172,8 @@ function Editor() {
                   </filter>
                 </defs>
               </svg>
-              {/* Background fill (blur/mirror/stretch) for V1 video */}
-              {activeV1Video && activeV1Video.fx && activeV1Video.fx.fillMode !== "bars" && activeV1Video.fx.fillMode !== "color" && (
+              {/* Background fill (blur/mirror) for V1 video */}
+              {activeV1Video && hasBackgroundFill(activeV1Video.fx) && (
                 <video
                   key={`bg-${activeV1Video.id}-${activeV1Video.fx.fillMode}`}
                   ref={videoBgElRef}
@@ -1195,7 +1195,7 @@ function Editor() {
                   opacity: op,
                   filter: cssFilter(fx),
                 } : {};
-                return <video ref={videoElRef} className="absolute inset-0 h-full w-full object-contain pointer-events-none" muted={false} playsInline style={{ ...style, zIndex: 2 }} />;
+                return <video ref={videoElRef} className="absolute inset-0 h-full w-full pointer-events-none" muted={false} playsInline style={{ ...style, objectFit: mainObjectFit(fx), zIndex: 2 }} />;
               })()}
 
               {/* Vignette overlay for V1 video */}
@@ -1217,7 +1217,7 @@ function Editor() {
               <div className={`pointer-events-none absolute inset-x-0 top-1/2 h-px transition-opacity ${snapH ? "bg-primary opacity-100" : "bg-white/10 opacity-0 group-hover/preview:opacity-30"}`} />
 
               {/* Per-image background fill */}
-              {overlays.filter(ov => ov.kind === "image" && ov.fx && ov.fx.fillMode !== "bars" && ov.fx.fillMode !== "color").map(ov => (
+              {overlays.filter(ov => ov.kind === "image" && hasBackgroundFill(ov.fx)).map(ov => (
                 <img key={`imgbg-${ov.id}`} src={ov.url} alt="" draggable={false}
                   className="pointer-events-none absolute inset-0 h-full w-full"
                   style={{

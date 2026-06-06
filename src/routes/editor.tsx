@@ -1007,7 +1007,7 @@ function Editor() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-64 shrink-0 flex-col gap-2 border-r border-border bg-panel p-3">
+        <aside className="flex shrink-0 flex-col gap-2 border-r border-border bg-panel p-3 select-none" style={{ width: leftW }}>
           <button onClick={() => fileInputRef.current?.click()}
             className="glow-primary inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-3 py-2.5 text-sm font-semibold text-primary-foreground">
             <Plus className="h-4 w-4" /> Adicionar Arquivo
@@ -1046,238 +1046,12 @@ function Editor() {
             })}
             {!media.length && <div className="rounded-md border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">Clique em "Adicionar Arquivo" para importar mídia. Depois arraste para a timeline.</div>}
           </div>
-
-          {selected && selected.kind === "text" && selected.text && (
-            <div className="space-y-2 rounded-md border border-border bg-card p-2">
-              <input value={selected.text.content}
-                onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, text: { ...i.text!, content: e.target.value } } : i))}
-                className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs" placeholder="Texto" />
-              <div className="flex items-center gap-2">
-                <input type="color" value={selected.text.color}
-                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, text: { ...i.text!, color: e.target.value } } : i))}
-                  className="h-7 w-9 rounded border border-border bg-background" />
-                <input type="number" min={12} max={200} value={selected.text.size}
-                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, text: { ...i.text!, size: Number(e.target.value) || 48 } } : i))}
-                  className="w-20 rounded border border-border bg-background px-2 py-1 text-xs" />
-              </div>
-            </div>
-          )}
-
-          {selected && selected.transform && (
-            <div className="space-y-2 rounded-md border border-border bg-card p-2 text-xs">
-              <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
-                <span>Transformação</span>
-                <button onClick={() => setItems(p => p.map(i => i.id === selected.id && i.transform ? { ...i, transform: { ...i.transform, xPct: 50, yPct: 50 } } : i))}
-                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-background"><AlignCenter className="h-3 w-3" /> Centralizar</button>
-              </div>
-              <label className="flex items-center gap-2"><Maximize2 className="h-3 w-3" />
-                <input type="range" min={0.1} max={3} step={0.05} value={selected.transform.scale}
-                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id && i.transform ? { ...i, transform: { ...i.transform, scale: Number(e.target.value) } } : i))}
-                  className="flex-1 accent-[color:var(--primary)]" />
-                <span className="w-8 text-right font-mono tabular-nums">{selected.transform.scale.toFixed(2)}</span>
-              </label>
-              <label className="flex items-center gap-2"><RotateCw className="h-3 w-3" />
-                <input type="range" min={-180} max={180} step={1} value={selected.transform.rotation}
-                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id && i.transform ? { ...i, transform: { ...i.transform, rotation: Number(e.target.value) } } : i))}
-                  className="flex-1 accent-[color:var(--primary)]" />
-                <span className="w-8 text-right font-mono tabular-nums">{selected.transform.rotation}°</span>
-              </label>
-            </div>
-          )}
-
-          {selected && (selected.kind === "audio" || selected.kind === "video") && (
-            <div className="space-y-2 rounded-md border border-border bg-card p-2 text-xs">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Áudio</div>
-              <label className="flex items-center gap-2">
-                <span className="w-14 text-muted-foreground">Ganho</span>
-                <input type="range" min={-30} max={12} step={0.5} value={selected.gainDb ?? 0}
-                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, gainDb: Number(e.target.value) } : i))}
-                  className="flex-1 accent-[color:var(--primary)]" />
-                <span className="w-10 text-right font-mono tabular-nums">{(selected.gainDb ?? 0).toFixed(1)}dB</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <span className="w-14 text-muted-foreground">Fade In</span>
-                <input type="range" min={0} max={Math.min(5, selected.outPoint - selected.inPoint)} step={0.05} value={selected.fadeIn ?? 0}
-                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: Number(e.target.value) } : i))}
-                  className="flex-1 accent-[color:var(--primary)]" />
-                <span className="w-10 text-right font-mono tabular-nums">{(selected.fadeIn ?? 0).toFixed(2)}s</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <span className="w-14 text-muted-foreground">Fade Out</span>
-                <input type="range" min={0} max={Math.min(5, selected.outPoint - selected.inPoint)} step={0.05} value={selected.fadeOut ?? 0}
-                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeOut: Number(e.target.value) } : i))}
-                  className="flex-1 accent-[color:var(--primary)]" />
-                <span className="w-10 text-right font-mono tabular-nums">{(selected.fadeOut ?? 0).toFixed(2)}s</span>
-              </label>
-            </div>
-          )}
-
-          {selected && selected.fx && (selected.kind === "image" || selected.kind === "video") && (() => {
-            const fx = selected.fx;
-            const patchFx = (patch: Partial<Fx>) =>
-              setItems(p => p.map(i => i.id === selected.id && i.fx ? { ...i, fx: { ...i.fx, ...patch } } : i));
-            const adj: { key: keyof Fx; label: string; min: number; max: number; suffix?: string }[] = [
-              { key: "brightness", label: "Brilho", min: -100, max: 100 },
-              { key: "contrast", label: "Contraste", min: -100, max: 100 },
-              { key: "saturation", label: "Saturação", min: -100, max: 100 },
-              { key: "temperature", label: "Temperatura", min: -100, max: 100 },
-              { key: "sharpness", label: "Nitidez", min: 0, max: 100 },
-              { key: "exposure", label: "Exposição", min: -100, max: 100 },
-              { key: "shadows", label: "Sombras", min: -100, max: 100 },
-              { key: "highlights", label: "Realces", min: -100, max: 100 },
-              { key: "opacity", label: "Opacidade", min: 0, max: 100, suffix: "%" },
-            ];
-            return (
-              <div className="space-y-2 rounded-md border border-border bg-card p-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    <Sparkles className="h-3 w-3 text-primary" /> Efeitos e Ajustes
-                  </div>
-                  <button
-                    onClick={() => setItems(p => p.map(i => i.id === selected.id && i.fx ? { ...i, fx: { ...DEFAULT_FX }, fadeIn: 0, fadeOut: 0 } : i))}
-                    title="Restaurar Original"
-                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-background hover:text-foreground">
-                    <RotateCcw className="h-3 w-3" /> Resetar
-                  </button>
-                </div>
-
-                <details open className="rounded border border-border/60 bg-background/40">
-                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"><Sliders className="h-3 w-3" /> Ajustes</summary>
-                  <div className="space-y-1.5 px-2 pb-2 pt-1">
-                    {adj.map(a => (
-                      <label key={a.key} className="flex items-center gap-2">
-                        <span className="w-20 truncate text-muted-foreground">{a.label}</span>
-                        <input type="range" min={a.min} max={a.max} step={1}
-                          value={fx[a.key] as number}
-                          onChange={(e) => patchFx({ [a.key]: Number(e.target.value) } as Partial<Fx>)}
-                          className="flex-1 accent-[color:var(--primary)]" />
-                        <span className="w-10 text-right font-mono tabular-nums">{fx[a.key] as number}{a.suffix ?? ""}</span>
-                      </label>
-                    ))}
-                  </div>
-                </details>
-
-                <details className="rounded border border-border/60 bg-background/40">
-                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"><Wand2 className="h-3 w-3" /> Efeitos Rápidos</summary>
-                  <div className="grid grid-cols-2 gap-1 px-2 pb-2 pt-1">
-                    <button onClick={() => patchFx({ preset: null })}
-                      className={`rounded border px-1.5 py-1 text-[10px] ${fx.preset === null ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
-                      Nenhum
-                    </button>
-                    {QUICK_EFFECTS.map(q => (
-                      <button key={q.id} onClick={() => patchFx({ preset: q.id })}
-                        className={`rounded border px-1.5 py-1 text-[10px] ${fx.preset === q.id ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
-                        {q.label}
-                      </button>
-                    ))}
-                  </div>
-                </details>
-
-                <details className="rounded border border-border/60 bg-background/40">
-                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"><Palette className="h-3 w-3" /> Modo de Preenchimento</summary>
-                  <div className="space-y-1.5 px-2 pb-2 pt-1">
-                    <div className="grid grid-cols-2 gap-1">
-                      {(["bars","blur","mirror","stretch","color"] as FillMode[]).map(m => (
-                        <button key={m} onClick={() => patchFx({ fillMode: m })}
-                          className={`rounded border px-1.5 py-1 text-[10px] ${fx.fillMode === m ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
-                          {m === "bars" ? "Barras Pretas" : m === "blur" ? "Fundo Desfocado" : m === "mirror" ? "Espelhado" : m === "stretch" ? "Esticado" : "Cor"}
-                        </button>
-                      ))}
-                    </div>
-                    {fx.fillMode === "blur" && (
-                      <label className="flex items-center gap-2">
-                        <span className="w-20 text-muted-foreground">Blur</span>
-                        <input type="range" min={0} max={100} step={1} value={fx.blurBg}
-                          onChange={(e) => patchFx({ blurBg: Number(e.target.value) })}
-                          className="flex-1 accent-[color:var(--primary)]" />
-                        <span className="w-10 text-right font-mono tabular-nums">{fx.blurBg}</span>
-                      </label>
-                    )}
-                    {fx.fillMode === "color" && (
-                      <label className="flex items-center gap-2">
-                        <span className="w-20 text-muted-foreground">Cor</span>
-                        <input type="color" value={fx.bgColor}
-                          onChange={(e) => patchFx({ bgColor: e.target.value })}
-                          className="h-7 w-12 rounded border border-border bg-background" />
-                      </label>
-                    )}
-                  </div>
-                </details>
-
-                <details className="rounded border border-border/60 bg-background/40">
-                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Entrada / Saída</summary>
-                  <div className="space-y-1.5 px-2 pb-2 pt-1">
-                    <div className="grid grid-cols-3 gap-1">
-                      <button onClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: 1, fadeOut: 0 } : i))}
-                        className="rounded border border-border px-1.5 py-1 text-[10px] hover:border-ring/50">Fade In</button>
-                      <button onClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: 0, fadeOut: 1 } : i))}
-                        className="rounded border border-border px-1.5 py-1 text-[10px] hover:border-ring/50">Fade Out</button>
-                      <button onClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: 1, fadeOut: 1 } : i))}
-                        className="rounded border border-border px-1.5 py-1 text-[10px] hover:border-ring/50">In + Out</button>
-                    </div>
-                    <label className="flex items-center gap-2">
-                      <span className="w-14 text-muted-foreground">Fade In</span>
-                      <input type="range" min={0} max={5} step={0.1} value={selected.fadeIn ?? 0}
-                        onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: Number(e.target.value) } : i))}
-                        className="flex-1 accent-[color:var(--primary)]" />
-                      <span className="w-10 text-right font-mono tabular-nums">{(selected.fadeIn ?? 0).toFixed(1)}s</span>
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <span className="w-14 text-muted-foreground">Fade Out</span>
-                      <input type="range" min={0} max={5} step={0.1} value={selected.fadeOut ?? 0}
-                        onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeOut: Number(e.target.value) } : i))}
-                        className="flex-1 accent-[color:var(--primary)]" />
-                      <span className="w-10 text-right font-mono tabular-nums">{(selected.fadeOut ?? 0).toFixed(1)}s</span>
-                    </label>
-                  </div>
-                </details>
-
-                <details className="rounded border border-border/60 bg-background/40">
-                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Zoom Cinematográfico</summary>
-                  <div className="space-y-1.5 px-2 pb-2 pt-1">
-                    <div className="grid grid-cols-3 gap-1">
-                      <button onClick={() => patchFx({ zoom: null })}
-                        className={`rounded border px-1.5 py-1 text-[10px] ${!fx.zoom ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>Off</button>
-                      <button onClick={() => patchFx({ zoom: { dir: "in", speed: fx.zoom?.speed ?? "med" } })}
-                        className={`rounded border px-1.5 py-1 text-[10px] ${fx.zoom?.dir === "in" ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>Aproximar</button>
-                      <button onClick={() => patchFx({ zoom: { dir: "out", speed: fx.zoom?.speed ?? "med" } })}
-                        className={`rounded border px-1.5 py-1 text-[10px] ${fx.zoom?.dir === "out" ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>Afastar</button>
-                    </div>
-                    {fx.zoom && (
-                      <div className="grid grid-cols-3 gap-1">
-                        {(["slow","med","fast"] as const).map(s => (
-                          <button key={s} onClick={() => patchFx({ zoom: { dir: fx.zoom!.dir, speed: s } })}
-                            className={`rounded border px-1.5 py-1 text-[10px] ${fx.zoom!.speed === s ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
-                            {s === "slow" ? "Lenta" : s === "med" ? "Média" : "Rápida"}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </details>
-
-                <details className="rounded border border-border/60 bg-background/40">
-                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Presets</summary>
-                  <div className="grid grid-cols-2 gap-1 px-2 pb-2 pt-1">
-                    {PRESETS.map(p => (
-                      <button key={p.id}
-                        onClick={() => setItems(prev => prev.map(i => i.id === selected.id && i.fx ? { ...i, fx: { ...DEFAULT_FX, ...p.patch } } : i))}
-                        className="rounded border border-border px-1.5 py-1 text-[10px] hover:border-primary hover:text-primary">
-                        {p.label}
-                      </button>
-                    ))}
-                  </div>
-                </details>
-
-                <button
-                  onClick={() => setItems(p => p.map(i => i.id === selected.id && i.fx ? { ...i, fx: { ...DEFAULT_FX }, fadeIn: 0, fadeOut: 0 } : i))}
-                  className="mt-1 inline-flex w-full items-center justify-center gap-1.5 rounded border border-border bg-background py-1.5 text-[11px] hover:border-destructive hover:text-destructive">
-                  <RotateCcw className="h-3 w-3" /> Restaurar Original
-                </button>
-              </div>
-            );
-          })()}
         </aside>
+        <div
+          onMouseDown={(e) => { sideDragRef.current = { side: "L", startX: e.clientX, startW: leftW }; document.body.style.cursor = "ew-resize"; }}
+          className="w-1 shrink-0 cursor-ew-resize bg-border hover:bg-primary/40"
+          title="Arraste para redimensionar"
+        />
 
 
         <main className="flex min-w-0 flex-1 flex-col select-none">
@@ -1573,6 +1347,251 @@ function Editor() {
             </div>
           </div>
         </main>
+        <div
+          onMouseDown={(e) => { sideDragRef.current = { side: "R", startX: e.clientX, startW: rightW }; document.body.style.cursor = "ew-resize"; }}
+          className="w-1 shrink-0 cursor-ew-resize bg-border hover:bg-primary/40"
+          title="Arraste para redimensionar"
+        />
+        <aside className="flex shrink-0 flex-col gap-2 overflow-y-auto border-l border-border bg-panel p-3 select-none" style={{ width: rightW }}>
+          <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <Sparkles className="h-3 w-3 text-primary" /> Inspetor
+          </div>
+          {!selected && (
+            <div className="rounded-md border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">
+              Selecione um clipe na timeline para ajustar efeitos.
+            </div>
+          )}
+          {selected && selected.kind === "text" && selected.text && (
+            <div className="space-y-2 rounded-md border border-border bg-card p-2">
+              <input value={selected.text.content}
+                onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, text: { ...i.text!, content: e.target.value } } : i))}
+                className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs" placeholder="Texto" />
+              <div className="flex items-center gap-2">
+                <input type="color" value={selected.text.color}
+                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, text: { ...i.text!, color: e.target.value } } : i))}
+                  className="h-7 w-9 rounded border border-border bg-background" />
+                <input type="number" min={12} max={200} value={selected.text.size}
+                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, text: { ...i.text!, size: Number(e.target.value) || 48 } } : i))}
+                  className="w-20 rounded border border-border bg-background px-2 py-1 text-xs" />
+              </div>
+            </div>
+          )}
+
+          {selected && selected.transform && (
+            <div className="space-y-2 rounded-md border border-border bg-card p-2 text-xs">
+              <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
+                <span>Transformação</span>
+                <button onClick={() => setItems(p => p.map(i => i.id === selected.id && i.transform ? { ...i, transform: { ...i.transform, xPct: 50, yPct: 50 } } : i))}
+                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-background"><AlignCenter className="h-3 w-3" /> Centralizar</button>
+              </div>
+              <label className="flex items-center gap-2"><Maximize2 className="h-3 w-3" />
+                <input type="range" min={0.1} max={3} step={0.05} value={selected.transform.scale}
+                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id && i.transform ? { ...i, transform: { ...i.transform, scale: Number(e.target.value) } } : i))}
+                  className="flex-1 accent-[color:var(--primary)]" />
+                <span className="w-8 text-right font-mono tabular-nums">{selected.transform.scale.toFixed(2)}</span>
+              </label>
+              <label className="flex items-center gap-2"><RotateCw className="h-3 w-3" />
+                <input type="range" min={-180} max={180} step={1} value={selected.transform.rotation}
+                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id && i.transform ? { ...i, transform: { ...i.transform, rotation: Number(e.target.value) } } : i))}
+                  className="flex-1 accent-[color:var(--primary)]" />
+                <span className="w-8 text-right font-mono tabular-nums">{selected.transform.rotation}°</span>
+              </label>
+            </div>
+          )}
+
+          {selected && (selected.kind === "audio" || selected.kind === "video") && (
+            <div className="space-y-2 rounded-md border border-border bg-card p-2 text-xs">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Áudio</div>
+              <label className="flex items-center gap-2">
+                <span className="w-14 text-muted-foreground">Ganho</span>
+                <input type="range" min={-30} max={12} step={0.5} value={selected.gainDb ?? 0}
+                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, gainDb: Number(e.target.value) } : i))}
+                  className="flex-1 accent-[color:var(--primary)]" />
+                <span className="w-10 text-right font-mono tabular-nums">{(selected.gainDb ?? 0).toFixed(1)}dB</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="w-14 text-muted-foreground">Fade In</span>
+                <input type="range" min={0} max={Math.min(5, selected.outPoint - selected.inPoint)} step={0.05} value={selected.fadeIn ?? 0}
+                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: Number(e.target.value) } : i))}
+                  className="flex-1 accent-[color:var(--primary)]" />
+                <span className="w-10 text-right font-mono tabular-nums">{(selected.fadeIn ?? 0).toFixed(2)}s</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <span className="w-14 text-muted-foreground">Fade Out</span>
+                <input type="range" min={0} max={Math.min(5, selected.outPoint - selected.inPoint)} step={0.05} value={selected.fadeOut ?? 0}
+                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeOut: Number(e.target.value) } : i))}
+                  className="flex-1 accent-[color:var(--primary)]" />
+                <span className="w-10 text-right font-mono tabular-nums">{(selected.fadeOut ?? 0).toFixed(2)}s</span>
+              </label>
+            </div>
+          )}
+
+          {selected && selected.fx && (selected.kind === "image" || selected.kind === "video") && (() => {
+            const fx = selected.fx;
+            const patchFx = (patch: Partial<Fx>) =>
+              setItems(p => p.map(i => i.id === selected.id && i.fx ? { ...i, fx: { ...i.fx, ...patch } } : i));
+            const adj: { key: keyof Fx; label: string; min: number; max: number; suffix?: string }[] = [
+              { key: "brightness", label: "Brilho", min: -100, max: 100 },
+              { key: "contrast", label: "Contraste", min: -100, max: 100 },
+              { key: "saturation", label: "Saturação", min: -100, max: 100 },
+              { key: "temperature", label: "Temperatura", min: -100, max: 100 },
+              { key: "sharpness", label: "Nitidez", min: 0, max: 100 },
+              { key: "exposure", label: "Exposição", min: -100, max: 100 },
+              { key: "shadows", label: "Sombras", min: -100, max: 100 },
+              { key: "highlights", label: "Realces", min: -100, max: 100 },
+              { key: "opacity", label: "Opacidade", min: 0, max: 100, suffix: "%" },
+            ];
+            return (
+              <div className="space-y-2 rounded-md border border-border bg-card p-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <Sparkles className="h-3 w-3 text-primary" /> Efeitos e Ajustes
+                  </div>
+                  <button
+                    onClick={() => setItems(p => p.map(i => i.id === selected.id && i.fx ? { ...i, fx: { ...DEFAULT_FX }, fadeIn: 0, fadeOut: 0 } : i))}
+                    title="Restaurar Original"
+                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-background hover:text-foreground">
+                    <RotateCcw className="h-3 w-3" /> Resetar
+                  </button>
+                </div>
+
+                <details open className="rounded border border-border/60 bg-background/40">
+                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"><Sliders className="h-3 w-3" /> Ajustes</summary>
+                  <div className="space-y-1.5 px-2 pb-2 pt-1">
+                    {adj.map(a => (
+                      <label key={a.key} className="flex items-center gap-2">
+                        <span className="w-20 truncate text-muted-foreground">{a.label}</span>
+                        <input type="range" min={a.min} max={a.max} step={1}
+                          value={fx[a.key] as number}
+                          onChange={(e) => patchFx({ [a.key]: Number(e.target.value) } as Partial<Fx>)}
+                          className="flex-1 accent-[color:var(--primary)]" />
+                        <span className="w-10 text-right font-mono tabular-nums">{fx[a.key] as number}{a.suffix ?? ""}</span>
+                      </label>
+                    ))}
+                  </div>
+                </details>
+
+                <details className="rounded border border-border/60 bg-background/40">
+                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"><Wand2 className="h-3 w-3" /> Efeitos Rápidos</summary>
+                  <div className="grid grid-cols-2 gap-1 px-2 pb-2 pt-1">
+                    <button onClick={() => patchFx({ preset: null })}
+                      className={`rounded border px-1.5 py-1 text-[10px] ${fx.preset === null ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                      Nenhum
+                    </button>
+                    {QUICK_EFFECTS.map(q => (
+                      <button key={q.id} onClick={() => patchFx({ preset: q.id })}
+                        className={`rounded border px-1.5 py-1 text-[10px] ${fx.preset === q.id ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                        {q.label}
+                      </button>
+                    ))}
+                  </div>
+                </details>
+
+                <details className="rounded border border-border/60 bg-background/40">
+                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"><Palette className="h-3 w-3" /> Modo de Preenchimento</summary>
+                  <div className="space-y-1.5 px-2 pb-2 pt-1">
+                    <div className="grid grid-cols-2 gap-1">
+                      {(["bars","blur","mirror","stretch","color"] as FillMode[]).map(m => (
+                        <button key={m} onClick={() => patchFx({ fillMode: m })}
+                          className={`rounded border px-1.5 py-1 text-[10px] ${fx.fillMode === m ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                          {m === "bars" ? "Barras Pretas" : m === "blur" ? "Fundo Desfocado" : m === "mirror" ? "Espelhado" : m === "stretch" ? "Esticado" : "Cor"}
+                        </button>
+                      ))}
+                    </div>
+                    {fx.fillMode === "blur" && (
+                      <label className="flex items-center gap-2">
+                        <span className="w-20 text-muted-foreground">Blur</span>
+                        <input type="range" min={0} max={100} step={1} value={fx.blurBg}
+                          onChange={(e) => patchFx({ blurBg: Number(e.target.value) })}
+                          className="flex-1 accent-[color:var(--primary)]" />
+                        <span className="w-10 text-right font-mono tabular-nums">{fx.blurBg}</span>
+                      </label>
+                    )}
+                    {fx.fillMode === "color" && (
+                      <label className="flex items-center gap-2">
+                        <span className="w-20 text-muted-foreground">Cor</span>
+                        <input type="color" value={fx.bgColor}
+                          onChange={(e) => patchFx({ bgColor: e.target.value })}
+                          className="h-7 w-12 rounded border border-border bg-background" />
+                      </label>
+                    )}
+                  </div>
+                </details>
+
+                <details className="rounded border border-border/60 bg-background/40">
+                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Entrada / Saída</summary>
+                  <div className="space-y-1.5 px-2 pb-2 pt-1">
+                    <div className="grid grid-cols-3 gap-1">
+                      <button onClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: 1, fadeOut: 0 } : i))}
+                        className="rounded border border-border px-1.5 py-1 text-[10px] hover:border-ring/50">Fade In</button>
+                      <button onClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: 0, fadeOut: 1 } : i))}
+                        className="rounded border border-border px-1.5 py-1 text-[10px] hover:border-ring/50">Fade Out</button>
+                      <button onClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: 1, fadeOut: 1 } : i))}
+                        className="rounded border border-border px-1.5 py-1 text-[10px] hover:border-ring/50">In + Out</button>
+                    </div>
+                    <label className="flex items-center gap-2">
+                      <span className="w-14 text-muted-foreground">Fade In</span>
+                      <input type="range" min={0} max={5} step={0.1} value={selected.fadeIn ?? 0}
+                        onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: Number(e.target.value) } : i))}
+                        className="flex-1 accent-[color:var(--primary)]" />
+                      <span className="w-10 text-right font-mono tabular-nums">{(selected.fadeIn ?? 0).toFixed(1)}s</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <span className="w-14 text-muted-foreground">Fade Out</span>
+                      <input type="range" min={0} max={5} step={0.1} value={selected.fadeOut ?? 0}
+                        onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeOut: Number(e.target.value) } : i))}
+                        className="flex-1 accent-[color:var(--primary)]" />
+                      <span className="w-10 text-right font-mono tabular-nums">{(selected.fadeOut ?? 0).toFixed(1)}s</span>
+                    </label>
+                  </div>
+                </details>
+
+                <details className="rounded border border-border/60 bg-background/40">
+                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Zoom Cinematográfico</summary>
+                  <div className="space-y-1.5 px-2 pb-2 pt-1">
+                    <div className="grid grid-cols-3 gap-1">
+                      <button onClick={() => patchFx({ zoom: null })}
+                        className={`rounded border px-1.5 py-1 text-[10px] ${!fx.zoom ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>Off</button>
+                      <button onClick={() => patchFx({ zoom: { dir: "in", speed: fx.zoom?.speed ?? "med" } })}
+                        className={`rounded border px-1.5 py-1 text-[10px] ${fx.zoom?.dir === "in" ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>Aproximar</button>
+                      <button onClick={() => patchFx({ zoom: { dir: "out", speed: fx.zoom?.speed ?? "med" } })}
+                        className={`rounded border px-1.5 py-1 text-[10px] ${fx.zoom?.dir === "out" ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>Afastar</button>
+                    </div>
+                    {fx.zoom && (
+                      <div className="grid grid-cols-3 gap-1">
+                        {(["slow","med","fast"] as const).map(s => (
+                          <button key={s} onClick={() => patchFx({ zoom: { dir: fx.zoom!.dir, speed: s } })}
+                            className={`rounded border px-1.5 py-1 text-[10px] ${fx.zoom!.speed === s ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                            {s === "slow" ? "Lenta" : s === "med" ? "Média" : "Rápida"}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </details>
+
+                <details className="rounded border border-border/60 bg-background/40">
+                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Presets</summary>
+                  <div className="grid grid-cols-2 gap-1 px-2 pb-2 pt-1">
+                    {PRESETS.map(p => (
+                      <button key={p.id}
+                        onClick={() => setItems(prev => prev.map(i => i.id === selected.id && i.fx ? { ...i, fx: { ...DEFAULT_FX, ...p.patch } } : i))}
+                        className="rounded border border-border px-1.5 py-1 text-[10px] hover:border-primary hover:text-primary">
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </details>
+
+                <button
+                  onClick={() => setItems(p => p.map(i => i.id === selected.id && i.fx ? { ...i, fx: { ...DEFAULT_FX }, fadeIn: 0, fadeOut: 0 } : i))}
+                  className="mt-1 inline-flex w-full items-center justify-center gap-1.5 rounded border border-border bg-background py-1.5 text-[11px] hover:border-destructive hover:text-destructive">
+                  <RotateCcw className="h-3 w-3" /> Restaurar Original
+                </button>
+              </div>
+            );
+          })()}
+        </aside>
       </div>
 
       {/* Context menu */}

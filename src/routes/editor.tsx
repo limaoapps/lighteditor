@@ -1085,6 +1085,19 @@ function Editor() {
                 width: `min(100%, calc((100vh - 360px) * ${aspect.w} / ${aspect.h}))`,
                 background: activeV1Video?.fx?.fillMode === "color" ? activeV1Video.fx.bgColor : "#000",
               }}>
+              {/* Hidden SVG defs: real sharpen (unsharp-mask convolution) */}
+              <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden>
+                <defs>
+                  <filter id="lle-sharpen" x="0" y="0" width="100%" height="100%">
+                    <feConvolveMatrix order="3" preserveAlpha="true"
+                      kernelMatrix="0 -1 0  -1 5 -1  0 -1 0" />
+                  </filter>
+                  <filter id="lle-sharpen-strong" x="0" y="0" width="100%" height="100%">
+                    <feConvolveMatrix order="3" preserveAlpha="true"
+                      kernelMatrix="-1 -1 -1  -1 9 -1  -1 -1 -1" />
+                  </filter>
+                </defs>
+              </svg>
               {/* Background fill (blur/mirror/stretch) for V1 video */}
               {activeV1Video && activeV1Video.fx && activeV1Video.fx.fillMode !== "bars" && activeV1Video.fx.fillMode !== "color" && (
                 <video
@@ -1094,8 +1107,8 @@ function Editor() {
                   className="pointer-events-none absolute inset-0 h-full w-full"
                   style={{
                     objectFit: activeV1Video.fx.fillMode === "stretch" ? "fill" : "cover",
-                    transform: `${activeV1Video.fx.fillMode === "mirror" ? "scaleX(-1)" : ""} scale(1.1)`,
-                    filter: activeV1Video.fx.fillMode === "blur" ? `blur(${Math.max(12, (activeV1Video.fx.blurBg || 40) * 0.6)}px) brightness(0.7)` : undefined,
+                    transform: `${activeV1Video.fx.fillMode === "mirror" ? "scaleX(-1)" : ""} scale(1.35)`,
+                    filter: activeV1Video.fx.fillMode === "blur" ? `blur(${Math.max(16, (activeV1Video.fx.blurBg || 40) * 0.7)}px) brightness(0.7)` : undefined,
                   }}
                 />
               )}
@@ -1114,10 +1127,11 @@ function Editor() {
                 return <video ref={videoElRef} className="absolute inset-0 h-full w-full object-contain pointer-events-none" muted={false} playsInline style={style} />;
               })()}
 
-              {/* Vignette overlay if preset = vignette */}
-              {activeV1Video?.fx?.preset === "vignette" && (
-                <div className="pointer-events-none absolute inset-0" style={{ boxShadow: "inset 0 0 180px 60px rgba(0,0,0,0.85)" }} />
-              )}
+              {/* Vignette overlay for V1 video */}
+              {(() => {
+                const vs = vignetteStyle(activeV1Video?.fx);
+                return vs ? <div className="pointer-events-none absolute inset-0" style={vs} /> : null;
+              })()}
 
               {/* Click-to-select V1 video (transparent layer above video, below overlays) */}
               {activeV1Video && activeV1Video.transform && (

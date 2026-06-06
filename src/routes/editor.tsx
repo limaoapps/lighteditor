@@ -5,6 +5,7 @@ import {
   Loader2, X, Volume2, VolumeX, ZoomIn, ZoomOut, Type as TypeIcon, Music2,
   Image as ImageIcon, Video as VideoIcon, RotateCw, Maximize2, AlignCenter,
   Lock, Unlock, Undo2, Redo2, Check, Copy as CopyIcon, ClipboardPaste,
+  Sparkles, Sliders, Wand2, RotateCcw, Palette,
 } from "lucide-react";
 import { getFFmpeg, fetchFile } from "@/lib/ffmpeg-client";
 

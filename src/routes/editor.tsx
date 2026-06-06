@@ -1155,7 +1155,7 @@ function Editor() {
               {/* Vignette overlay for V1 video */}
               {(() => {
                 const vs = vignetteStyle(activeV1Video?.fx);
-                return vs ? <div className="pointer-events-none absolute inset-0" style={vs} /> : null;
+                return vs ? <div className="pointer-events-none absolute inset-0" style={{ ...vs, zIndex: 2 }} /> : null;
               })()}
 
               {/* Click-to-select V1 video (transparent layer above video, below overlays) */}
@@ -1176,6 +1176,7 @@ function Editor() {
                   className="pointer-events-none absolute inset-0 h-full w-full"
                   style={{
                     ...backgroundFillStyle(ov.fx!),
+                    zIndex: 3,
                     opacity: computeVisualOpacity(ov, playhead),
                   }} />
               ))}
@@ -1196,6 +1197,7 @@ function Editor() {
                     transform: `translate(-50%,-50%) scale(${tr.scale * zScale}) rotate(${tr.rotation}deg)`,
                     cursor: "move",
                     opacity: op,
+                    zIndex: 4,
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
                   };
                   return (
@@ -1219,6 +1221,7 @@ function Editor() {
                     textShadow: "0 2px 12px rgba(0,0,0,0.6)", whiteSpace: "nowrap",
                     cursor: "move", padding: 4,
                     opacity: computeVisualOpacity(ov, playhead),
+                    zIndex: 5,
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
                   };
                   return (

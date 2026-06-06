@@ -1769,7 +1769,7 @@ function Editor() {
                   <select value={t.fontFamily} onChange={(e) => updT({ fontFamily: e.target.value })}
                     className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
                     style={{ fontFamily: t.fontFamily }}>
-                    {FONT_FAMILIES.map(f => <option key={f} value={f} style={{ fontFamily: f }}>{f.split(",")[0].replace(/'/g, "")}</option>)}
+                    {FONT_FAMILIES.map(f => <option key={f.stack} value={f.stack} style={{ fontFamily: f.stack }}>{f.label}</option>)}
                   </select>
                 </div>
 

@@ -1119,11 +1119,7 @@ function Editor() {
                   src={activeV1Video.url}
                   muted playsInline autoPlay loop
                   className="pointer-events-none absolute inset-0 h-full w-full"
-                  style={{
-                    objectFit: activeV1Video.fx.fillMode === "stretch" ? "fill" : "cover",
-                    transform: `${activeV1Video.fx.fillMode === "mirror" ? "scaleX(-1)" : ""} scale(1.35)`,
-                    filter: activeV1Video.fx.fillMode === "blur" ? `blur(${Math.max(16, (activeV1Video.fx.blurBg || 40) * 0.7)}px) brightness(0.7)` : undefined,
-                  }}
+                  style={backgroundFillStyle(activeV1Video.fx)}
                 />
               )}
               {(() => {
@@ -1138,7 +1134,7 @@ function Editor() {
                   opacity: op,
                   filter: cssFilter(fx),
                 } : {};
-                return <video ref={videoElRef} className="absolute inset-0 h-full w-full object-contain pointer-events-none" muted={false} playsInline style={style} />;
+                return <video ref={videoElRef} className="absolute inset-0 h-full w-full object-contain pointer-events-none" muted={false} playsInline style={{ ...style, zIndex: 2 }} />;
               })()}
 
               {/* Vignette overlay for V1 video */}
@@ -1164,9 +1160,7 @@ function Editor() {
                 <img key={`imgbg-${ov.id}`} src={ov.url} alt="" draggable={false}
                   className="pointer-events-none absolute inset-0 h-full w-full"
                   style={{
-                    objectFit: ov.fx!.fillMode === "stretch" ? "fill" : "cover",
-                    transform: `${ov.fx!.fillMode === "mirror" ? "scaleX(-1)" : ""} scale(1.35)`,
-                    filter: ov.fx!.fillMode === "blur" ? `blur(${Math.max(16, (ov.fx!.blurBg || 40) * 0.7)}px) brightness(0.7)` : undefined,
+                    ...backgroundFillStyle(ov.fx!),
                     opacity: computeVisualOpacity(ov, playhead),
                   }} />
               ))}

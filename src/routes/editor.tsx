@@ -113,7 +113,7 @@ function dbToGain(db: number) { return Math.pow(10, db / 20); }
 const DEFAULT_FX: Fx = {
   brightness: 0, contrast: 0, saturation: 0, temperature: 0,
   sharpness: 0, exposure: 0, shadows: 0, highlights: 0,
-  opacity: 100, preset: null, blurBg: 0, fillMode: "bars",
+  opacity: 100, preset: null, blurBg: 30, fillMode: "bars",
   bgColor: "#000000", zoom: null,
   vignette: 0, vignetteSize: 50, vignetteMode: "dark",
 };
@@ -190,6 +190,20 @@ function cssFilter(fx?: Fx): string {
     default: break;
   }
   return parts.join(" ");
+}
+
+function backgroundFillStyle(fx: Fx): React.CSSProperties {
+  const isBlur = fx.fillMode === "blur";
+  return {
+    position: "absolute",
+    inset: 0,
+    width: "100%",
+    height: "100%",
+    objectFit: fx.fillMode === "stretch" ? "fill" : "cover",
+    transform: `${fx.fillMode === "mirror" ? "scaleX(-1) " : ""}scale(${isBlur ? 1.4 : 1})`,
+    filter: isBlur ? `blur(${Math.max(0, fx.blurBg) * 0.5}px)` : undefined,
+    zIndex: 0,
+  };
 }
 
 // Vignette overlay style — radial gradient (smooth, no hard edges)
@@ -321,6 +335,7 @@ function Editor() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoElRef = useRef<HTMLVideoElement>(null);
+  const videoBgElRef = useRef<HTMLVideoElement>(null);
   const audioRefs = useRef<Record<string, HTMLAudioElement>>({});
   const previewBoxRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -632,6 +647,19 @@ function Editor() {
     v.volume = computeVol(activeV1Video, playhead);
     if (playing) v.play().catch(() => {}); else v.pause();
   }, [activeV1Video, playing, playhead, trackMuted]);
+
+  useEffect(() => {
+    const bg = videoBgElRef.current;
+    if (!bg) return;
+    const needsBg = !!activeV1Video?.fx && activeV1Video.fx.fillMode !== "bars" && activeV1Video.fx.fillMode !== "color";
+    if (!activeV1Video || !needsBg) { bg.pause(); bg.removeAttribute("src"); bg.load(); return; }
+    const wanted = activeV1Video.url!;
+    if (bg.src !== wanted) bg.src = wanted;
+    const target = activeV1Video.inPoint + (playhead - activeV1Video.start);
+    if (Math.abs(bg.currentTime - target) > 0.25) bg.currentTime = target;
+    bg.muted = true;
+    if (playing) bg.play().catch(() => {}); else bg.pause();
+  }, [activeV1Video, playing, playhead]);
 
   useEffect(() => {
     const audios = items.filter(i => i.kind === "audio");
@@ -1102,14 +1130,11 @@ function Editor() {
               {activeV1Video && activeV1Video.fx && activeV1Video.fx.fillMode !== "bars" && activeV1Video.fx.fillMode !== "color" && (
                 <video
                   key={`bg-${activeV1Video.id}-${activeV1Video.fx.fillMode}`}
+                  ref={videoBgElRef}
                   src={activeV1Video.url}
-                  muted playsInline autoPlay loop
+                  muted playsInline
                   className="pointer-events-none absolute inset-0 h-full w-full"
-                  style={{
-                    objectFit: activeV1Video.fx.fillMode === "stretch" ? "fill" : "cover",
-                    transform: `${activeV1Video.fx.fillMode === "mirror" ? "scaleX(-1)" : ""} scale(1.35)`,
-                    filter: activeV1Video.fx.fillMode === "blur" ? `blur(${Math.max(16, (activeV1Video.fx.blurBg || 40) * 0.7)}px) brightness(0.7)` : undefined,
-                  }}
+                  style={backgroundFillStyle(activeV1Video.fx)}
                 />
               )}
               {(() => {
@@ -1124,13 +1149,13 @@ function Editor() {
                   opacity: op,
                   filter: cssFilter(fx),
                 } : {};
-                return <video ref={videoElRef} className="absolute inset-0 h-full w-full object-contain pointer-events-none" muted={false} playsInline style={style} />;
+                return <video ref={videoElRef} className="absolute inset-0 h-full w-full object-contain pointer-events-none" muted={false} playsInline style={{ ...style, zIndex: 2 }} />;
               })()}
 
               {/* Vignette overlay for V1 video */}
               {(() => {
                 const vs = vignetteStyle(activeV1Video?.fx);
-                return vs ? <div className="pointer-events-none absolute inset-0" style={vs} /> : null;
+                return vs ? <div className="pointer-events-none absolute inset-0" style={{ ...vs, zIndex: 2 }} /> : null;
               })()}
 
               {/* Click-to-select V1 video (transparent layer above video, below overlays) */}
@@ -1138,7 +1163,7 @@ function Editor() {
                 <div
                   onMouseDown={(e) => startMove(activeV1Video.id, e, activeV1Video.transform!)}
                   className="absolute inset-0 cursor-move"
-                  style={{ background: "transparent" }}
+                  style={{ background: "transparent", zIndex: 3 }}
                 />
               )}
 
@@ -1150,9 +1175,8 @@ function Editor() {
                 <img key={`imgbg-${ov.id}`} src={ov.url} alt="" draggable={false}
                   className="pointer-events-none absolute inset-0 h-full w-full"
                   style={{
-                    objectFit: ov.fx!.fillMode === "stretch" ? "fill" : "cover",
-                    transform: `${ov.fx!.fillMode === "mirror" ? "scaleX(-1)" : ""} scale(1.35)`,
-                    filter: ov.fx!.fillMode === "blur" ? `blur(${Math.max(16, (ov.fx!.blurBg || 40) * 0.7)}px) brightness(0.7)` : undefined,
+                    ...backgroundFillStyle(ov.fx!),
+                    zIndex: 3,
                     opacity: computeVisualOpacity(ov, playhead),
                   }} />
               ))}
@@ -1173,6 +1197,7 @@ function Editor() {
                     transform: `translate(-50%,-50%) scale(${tr.scale * zScale}) rotate(${tr.rotation}deg)`,
                     cursor: "move",
                     opacity: op,
+                    zIndex: 4,
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
                   };
                   return (
@@ -1196,6 +1221,7 @@ function Editor() {
                     textShadow: "0 2px 12px rgba(0,0,0,0.6)", whiteSpace: "nowrap",
                     cursor: "move", padding: 4,
                     opacity: computeVisualOpacity(ov, playhead),
+                    zIndex: 5,
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
                   };
                   return (
@@ -1219,6 +1245,7 @@ function Editor() {
                   transform: `translate(-50%,-50%) scale(${tr.scale}) rotate(${tr.rotation}deg)`,
                   border: "1.5px dashed var(--primary)",
                   pointerEvents: "none",
+                  zIndex: 6,
                 };
                 return (
                   <div key={`sel-${previewTarget.id}`} style={style}>
@@ -1547,7 +1574,7 @@ function Editor() {
                   <div className="space-y-1.5 px-2 pb-2 pt-1">
                     <div className="grid grid-cols-2 gap-1">
                       {(["bars","blur","mirror","stretch","color"] as FillMode[]).map(m => (
-                        <button key={m} onClick={() => patchFx(m === "blur" ? { fillMode: m, blurBg: fx.blurBg || 40 } : { fillMode: m })}
+                        <button key={m} onClick={() => patchFx(m === "blur" ? { fillMode: m, blurBg: fx.fillMode === "blur" ? fx.blurBg : 30 } : { fillMode: m })}
                           className={`rounded border px-1.5 py-1 text-[10px] ${fx.fillMode === m ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
                           {m === "bars" ? "Barras Pretas" : m === "blur" ? "Fundo Desfocado" : m === "mirror" ? "Espelhado" : m === "stretch" ? "Esticado" : "Cor"}
                         </button>

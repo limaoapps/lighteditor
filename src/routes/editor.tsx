@@ -198,7 +198,9 @@ function hasBackgroundFill(fx?: Fx): boolean {
 
 function blurCssPx(fx: Fx): number {
   if (fx.fillMode !== "blur" || fx.blurBg <= 0) return 0;
-  return Math.max(1, Math.round(6 + fx.blurBg * 0.74));
+  // Suave: 1 -> ~0.3px, 50 -> ~15px, 100 -> ~40px (curva quadrática leve)
+  const n = fx.blurBg / 100;
+  return Math.max(0.3, +(n * n * 36 + n * 4).toFixed(2));
 }
 
 function mainObjectFit(fx?: Fx): React.CSSProperties["objectFit"] {
@@ -228,7 +230,10 @@ function ffmpegColor(hex: string | undefined) {
 }
 
 function blurSigma(fx: Fx | undefined) {
-  return Math.max(0.1, Math.min(60, ((fx?.blurBg ?? 30) / 100) * 50 + 4));
+  const v = fx?.blurBg ?? 30;
+  // Suave: 1 -> ~0.4, 50 -> ~13, 100 -> ~40
+  const n = v / 100;
+  return Math.max(0.3, Math.min(50, +(n * n * 36 + n * 4).toFixed(2)));
 }
 
 function exportVideoFilter(c: TLItem, targetW: number, targetH: number) {
@@ -360,6 +365,7 @@ function Editor() {
   const [error, setError] = useState<string | null>(null);
 
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; clipId: string | null } | null>(null);
+  const [mediaCtx, setMediaCtx] = useState<{ x: number; y: number; mediaId: string } | null>(null);
   const clipboardRef = useRef<TLItem | null>(null);
 
   // Resizable side panels
@@ -565,6 +571,15 @@ function Editor() {
     if (selectedId === id) setSelectedId(null);
   };
 
+  const removeMedia = (mediaId: string) => {
+    setMedia(prev => {
+      const target = prev.find(m => m.id === mediaId);
+      if (target?.url) { try { URL.revokeObjectURL(target.url); } catch {} }
+      return prev.filter(m => m.id !== mediaId);
+    });
+    setItems(prev => prev.filter(i => i.mediaId !== mediaId));
+  };
+
   const splitAt = useCallback((t: number, onlyClipId?: string) => {
     setItems(prev => {
       const out: TLItem[] = [];
@@ -638,7 +653,7 @@ function Editor() {
 
   // close context menu on click outside
   useEffect(() => {
-    const onClick = () => setCtxMenu(null);
+    const onClick = () => { setCtxMenu(null); setMediaCtx(null); };
     window.addEventListener("click", onClick);
     return () => window.removeEventListener("click", onClick);
   }, []);
@@ -985,8 +1000,10 @@ function Editor() {
       return;
     }
     setExporting(true); setExportPct(0); setExportMsg("Carregando engine..."); setExportUrl(null); setError(null);
+    const logs: string[] = [];
     try {
       const ff = await getFFmpeg();
+      ff.on("log", ({ message }) => { logs.push(message); if (logs.length > 200) logs.shift(); });
       ff.on("progress", ({ progress: p }) => setExportPct(Math.max(0, Math.min(1, p))));
       const targetH = QUALITY_HEIGHT[quality];
       const targetW = Math.round((targetH * aspect.w) / aspect.h / 2) * 2;
@@ -1022,31 +1039,53 @@ function Editor() {
 
           const args: string[] = [];
           if (isImg) {
-            // Imagem como vídeo + áudio silencioso para compatibilidade do concat
             args.push("-loop", "1", "-framerate", "30", "-t", to, "-i", inName);
             args.push("-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
-            if (filter.type === "vf") args.push("-vf", filter.value);
+            if (filter.type === "vf") args.push("-vf", filter.value, "-map", "0:v", "-map", "1:a");
             else args.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "1:a");
             args.push(
               "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", "30",
               "-c:a", "aac", "-ar", "44100", "-ac", "2", "-shortest", outName,
             );
           } else {
+            // Vídeo: sempre incluir trilha de áudio silenciosa de fallback
+            // e mixar com a original (se existir) garante stream de áudio consistente para o concat.
             args.push("-ss", c.inPoint.toFixed(3), "-i", inName, "-t", to);
-            if (filter.type === "vf") args.push("-vf", filter.value);
-            else args.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "0:a?");
-            if (afilters.length) args.push("-af", afilters.join(","));
-            args.push("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-              "-c:a", "aac", "-ar", "44100", "-ac", "2", outName);
+            args.push("-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
+            const vPart = filter.type === "vf"
+              ? `[0:v]${filter.value}[vout]`
+              : filter.value;
+            const aPart = afilters.length
+              ? `[0:a]${afilters.join(",")}[a0src];[a0src][1:a]amix=inputs=2:duration=first:dropout_transition=0:weights=1 0[aout]`
+              : `[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=0:weights=1 0[aout]`;
+            // Use ?-fallback by detecting absence via a different filtergraph if needed:
+            args.push("-filter_complex", `${vPart};${aPart}`,
+              "-map", "[vout]", "-map", "[aout]");
+            args.push("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", "30",
+              "-c:a", "aac", "-ar", "44100", "-ac", "2", "-shortest", outName);
           }
-          await ff.exec(args);
+          try {
+            await ff.exec(args);
+          } catch (err) {
+            // Fallback: fonte sem áudio — refazer descartando trilha original
+            const fbArgs: string[] = ["-ss", c.inPoint.toFixed(3), "-i", inName, "-t", to,
+              "-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"];
+            if (filter.type === "vf") fbArgs.push("-vf", filter.value, "-map", "0:v", "-map", "1:a");
+            else fbArgs.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "1:a");
+            fbArgs.push("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", "30",
+              "-c:a", "aac", "-ar", "44100", "-ac", "2", "-shortest", outName);
+            await ff.exec(fbArgs);
+          }
           await ff.deleteFile(inName);
           inputs.push(outName);
         }
         setExportMsg("Juntando clipes...");
         const list = inputs.map(n => `file '${n}'`).join("\n");
         await ff.writeFile("list.txt", new TextEncoder().encode(list));
-        await ff.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "joined.mp4"]);
+        // Re-encode no concat para tolerar pequenas variações entre clipes
+        await ff.exec(["-f", "concat", "-safe", "0", "-i", "list.txt",
+          "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+          "-c:a", "aac", "-ar", "44100", "-ac", "2", "joined.mp4"]);
       }
 
       const vf: string[] = [];
@@ -1086,7 +1125,10 @@ function Editor() {
       await ff.deleteFile("output.mp4").catch(() => {});
       if (music) await ff.deleteFile("bgm.bin").catch(() => {});
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Falha na exportação");
+      const tail = logs.slice(-6).join("\n");
+      console.error("[export] FFmpeg falhou:", e, "\nÚltimos logs:\n", tail);
+      const baseMsg = e instanceof Error ? e.message : "Falha na exportação";
+      setError(`${baseMsg}${tail ? `\n\nDetalhes:\n${tail}` : ""}`);
       setExportMsg("Erro");
     } finally { setExporting(false); }
   };
@@ -1178,13 +1220,17 @@ function Editor() {
                   draggable
                   onDragStart={(e) => { e.dataTransfer.setData("application/x-vle-media", a.id); e.dataTransfer.effectAllowed = "copy"; }}
                   onDoubleClick={() => addAssetToTimeline(a)}
-                  title="Arraste até a timeline ou clique duas vezes"
+                  onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setMediaCtx({ x: e.clientX, y: e.clientY, mediaId: a.id }); }}
+                  title="Arraste até a timeline, clique duas vezes ou clique direito para opções"
                   className={`group flex w-full cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs active:cursor-grabbing ${used ? "border-primary/40 bg-primary/5" : "border-border bg-card hover:border-ring/50"}`}>
                   <Icon className="h-3.5 w-3.5 text-primary" />
                   <span className="min-w-0 flex-1 truncate">{a.name}</span>
                   {used && <Check className="h-3 w-3 text-primary" />}
                   <button onClick={(e) => { e.stopPropagation(); addAssetToTimeline(a); }} className="rounded p-0.5 opacity-0 hover:bg-background group-hover:opacity-100" title="Adicionar à timeline">
                     <Plus className="h-3 w-3" />
+                  </button>
+                  <button onClick={(e) => { e.stopPropagation(); removeMedia(a.id); }} className="rounded p-0.5 opacity-0 text-destructive hover:bg-background group-hover:opacity-100" title="Excluir mídia">
+                    <Trash2 className="h-3 w-3" />
                   </button>
                 </div>
               );
@@ -1679,12 +1725,20 @@ function Editor() {
                       ))}
                     </div>
                     {fx.fillMode === "blur" && (
-                      <label className="flex items-center gap-2">
+                      <label className="flex items-center gap-2" title="Role o mouse para ajustar · duplo clique para zerar"
+                        onWheel={(e) => {
+                          e.preventDefault();
+                          const step = e.shiftKey ? 5 : 1;
+                          const next = Math.max(0, Math.min(100, fx.blurBg + (e.deltaY < 0 ? step : -step)));
+                          patchFx({ blurBg: next });
+                        }}>
                         <span className="w-20 text-muted-foreground">Blur</span>
                         <input type="range" min={0} max={100} step={1} value={fx.blurBg}
                           onChange={(e) => patchFx({ blurBg: Number(e.target.value) })}
+                          onDoubleClick={() => patchFx({ blurBg: 0 })}
                           className="flex-1 accent-[color:var(--primary)]" />
-                        <span className="w-10 text-right font-mono tabular-nums">{fx.blurBg}</span>
+                        <button type="button" onClick={() => patchFx({ blurBg: 0 })}
+                          className="w-10 text-right font-mono tabular-nums hover:text-primary">{fx.blurBg}</button>
                       </label>
                     )}
                     {fx.fillMode === "color" && (
@@ -1827,6 +1881,17 @@ function Editor() {
         </div>
       )}
 
+      {mediaCtx && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="fixed z-50 min-w-[180px] overflow-hidden rounded-md border border-border bg-popover py-1 text-xs text-popover-foreground shadow-xl"
+          style={{ left: mediaCtx.x, top: mediaCtx.y }}
+        >
+          <button onClick={() => { removeMedia(mediaCtx.mediaId); setMediaCtx(null); }}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-destructive hover:bg-accent"><Trash2 className="h-3.5 w-3.5" /> Excluir mídia</button>
+        </div>
+      )}
+
       {(exporting || exportUrl || error) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl">
@@ -1836,7 +1901,7 @@ function Editor() {
                 <button onClick={() => { setExportUrl(null); setError(null); setExportPct(0); }} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
               )}
             </div>
-            {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
+            {error && <p className="mt-3 whitespace-pre-wrap text-sm text-destructive">{error}</p>}
             {exporting && (<>
               <p className="mt-3 text-xs text-muted-foreground">{exportMsg}</p>
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">

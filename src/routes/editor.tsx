@@ -1201,6 +1201,15 @@ function Editor() {
                   );
                 })}
 
+                {snapMark !== null && (
+                  <div className="pointer-events-none absolute top-0 z-40"
+                    style={{ left: labelColW + snapMark * zoom, height: tracks.length * trackHeight }}>
+                    <div className="absolute inset-y-0 -left-px w-0.5 bg-yellow-300 shadow-[0_0_8px_2px_rgba(253,224,71,0.85)]" />
+                    <div className="absolute -left-1.5 -top-0.5 h-2 w-3 rounded-sm bg-yellow-300 shadow" />
+                    <div className="absolute -left-1.5 -bottom-0.5 h-2 w-3 rounded-sm bg-yellow-300 shadow" />
+                  </div>
+                )}
+
                 <div data-role="playhead"
                   className="pointer-events-auto absolute top-0 z-30 w-0.5 cursor-ew-resize bg-primary"
                   style={{ left: labelColW + playhead * zoom, height: tracks.length * trackHeight }}

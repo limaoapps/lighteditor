@@ -470,6 +470,15 @@ function Editor() {
     });
   }, []);
 
+  const removeTrack = useCallback((trackId: string) => {
+    setTracks(prev => {
+      const sameKind = prev.filter(t => t.kind === prev.find(x => x.id === trackId)?.kind);
+      if (sameKind.length <= 1) return prev; // mantenha ao menos 1 trilha por tipo
+      return prev.filter(t => t.id !== trackId);
+    });
+    setItems(prev => prev.filter(i => i.trackId !== trackId));
+  }, [setItems]);
+
   // ---- Snap ----
   const [snapMark, setSnapMark] = useState<number | null>(null);
   const snapMarkTimer = useRef<number | null>(null);
@@ -1472,6 +1481,17 @@ function Editor() {
                           className={`rounded p-1 ${locked ? "text-primary" : "hover:bg-card hover:text-foreground"}`}>
                           {locked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
                         </button>
+                        {tracks.filter(t => t.kind === tr.kind).length > 1 && (
+                          <button onClick={() => {
+                            const hasItems = items.some(i => i.trackId === tr.id);
+                            if (hasItems && !window.confirm(`Excluir trilha ${tr.label}? Os clipes nela serão removidos.`)) return;
+                            removeTrack(tr.id);
+                          }}
+                            title="Excluir trilha"
+                            className="rounded p-1 text-muted-foreground hover:bg-destructive/15 hover:text-destructive">
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        )}
                       </div>
                       {/* + button on the bottom edge: insert another track of the same kind right below */}
                       {(nextSameKind || lastOfKind) && (

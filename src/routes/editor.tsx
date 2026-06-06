@@ -1085,12 +1085,48 @@ function Editor() {
           )}
         </aside>
 
-        <main className="flex min-w-0 flex-1 flex-col">
-          <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black/40 p-6" onWheel={onPreviewWheel}>
-            <div ref={previewBoxRef} className="group/preview relative overflow-hidden rounded-lg bg-black shadow-2xl"
-              style={{ aspectRatio: `${aspect.w} / ${aspect.h}`, maxHeight: "100%", maxWidth: "100%", width: `min(100%, calc((100vh - 360px) * ${aspect.w} / ${aspect.h}))` }}>
-              <video ref={videoElRef} className="absolute inset-0 h-full w-full object-contain pointer-events-none" muted={false} playsInline
-                style={activeV1Video?.transform ? { transform: `translate(${activeV1Video.transform.xPct - 50}%, ${activeV1Video.transform.yPct - 50}%) scale(${activeV1Video.transform.scale}) rotate(${activeV1Video.transform.rotation}deg)` } : undefined} />
+        <main className="flex min-w-0 flex-1 flex-col select-none">
+          <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black/40 p-6 select-none" onWheel={onPreviewWheel}>
+            <div ref={previewBoxRef} className="group/preview relative overflow-hidden rounded-lg shadow-2xl select-none"
+              style={{
+                aspectRatio: `${aspect.w} / ${aspect.h}`,
+                maxHeight: "100%", maxWidth: "100%",
+                width: `min(100%, calc((100vh - 360px) * ${aspect.w} / ${aspect.h}))`,
+                background: activeV1Video?.fx?.fillMode === "color" ? activeV1Video.fx.bgColor : "#000",
+              }}>
+              {/* Background fill (blur/mirror/stretch) for V1 video */}
+              {activeV1Video && activeV1Video.fx && activeV1Video.fx.fillMode !== "bars" && activeV1Video.fx.fillMode !== "color" && (
+                <video
+                  key={`bg-${activeV1Video.id}`}
+                  src={activeV1Video.url}
+                  muted playsInline autoPlay
+                  className="pointer-events-none absolute inset-0 h-full w-full"
+                  style={{
+                    objectFit: activeV1Video.fx.fillMode === "stretch" ? "fill" : "cover",
+                    transform: activeV1Video.fx.fillMode === "mirror" ? "scaleX(-1)" : undefined,
+                    filter: activeV1Video.fx.fillMode === "blur" ? `blur(${Math.max(8, activeV1Video.fx.blurBg * 0.6)}px) brightness(0.8)` : undefined,
+                  }}
+                />
+              )}
+              {(() => {
+                const tr = activeV1Video?.transform;
+                const fx = activeV1Video?.fx;
+                const localT = activeV1Video ? playhead - activeV1Video.start : 0;
+                const dur = activeV1Video ? activeV1Video.outPoint - activeV1Video.inPoint : 0;
+                const zScale = computeZoomScale(fx, localT, dur);
+                const op = activeV1Video ? computeVisualOpacity(activeV1Video, playhead) : 1;
+                const style: React.CSSProperties = tr ? {
+                  transform: `translate(${tr.xPct - 50}%, ${tr.yPct - 50}%) scale(${tr.scale * zScale}) rotate(${tr.rotation}deg)`,
+                  opacity: op,
+                  filter: cssFilter(fx),
+                } : {};
+                return <video ref={videoElRef} className="absolute inset-0 h-full w-full object-contain pointer-events-none" muted={false} playsInline style={style} />;
+              })()}
+
+              {/* Vignette overlay if preset = vignette */}
+              {activeV1Video?.fx?.preset === "vignette" && (
+                <div className="pointer-events-none absolute inset-0" style={{ boxShadow: "inset 0 0 180px 60px rgba(0,0,0,0.85)" }} />
+              )}
 
               {/* Click-to-select V1 video (transparent layer above video, below overlays) */}
               {activeV1Video && activeV1Video.transform && (
@@ -1109,17 +1145,27 @@ function Editor() {
                 const isSel = ov.id === selectedId;
                 if (ov.kind === "image") {
                   const b = getItemBounds(ov);
+                  const fx = ov.fx;
+                  const localT = playhead - ov.start;
+                  const dur = ov.outPoint - ov.inPoint;
+                  const zScale = computeZoomScale(fx, localT, dur);
+                  const op = computeVisualOpacity(ov, playhead);
                   const wrap: React.CSSProperties = {
                     position: "absolute",
                     left: `${tr.xPct}%`, top: `${tr.yPct}%`,
                     width: `${b.w}%`, height: `${b.h}%`,
-                    transform: `translate(-50%,-50%) scale(${tr.scale}) rotate(${tr.rotation}deg)`,
+                    transform: `translate(-50%,-50%) scale(${tr.scale * zScale}) rotate(${tr.rotation}deg)`,
                     cursor: "move",
+                    opacity: op,
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
                   };
                   return (
                     <div key={ov.id} style={wrap} onMouseDown={(e) => startMove(ov.id, e, tr)}>
-                      <img src={ov.url} alt="" draggable={false} className="pointer-events-none h-full w-full object-contain" />
+                      <img src={ov.url} alt="" draggable={false} className="pointer-events-none h-full w-full object-contain"
+                        style={{ filter: cssFilter(fx) }} />
+                      {fx?.preset === "vignette" && (
+                        <div className="pointer-events-none absolute inset-0" style={{ boxShadow: "inset 0 0 120px 40px rgba(0,0,0,0.85)" }} />
+                      )}
                       {isSel && <CornerHandles id={ov.id} tr={tr} onStartScale={startScale} />}
                     </div>
                   );
@@ -1132,6 +1178,7 @@ function Editor() {
                     color: ov.text.color, fontSize: ov.text.size, fontWeight: 700,
                     textShadow: "0 2px 12px rgba(0,0,0,0.6)", whiteSpace: "nowrap",
                     cursor: "move", padding: 4,
+                    opacity: computeVisualOpacity(ov, playhead),
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
                   };
                   return (
@@ -1170,6 +1217,7 @@ function Editor() {
               )}
             </div>
           </div>
+
 
           <div className="flex items-center gap-3 border-t border-border bg-panel px-4 py-2">
             <button onClick={() => setPlaying(true)} disabled={!items.length} className="rounded p-1.5 hover:bg-card disabled:opacity-40"><Play className="h-4 w-4" /></button>

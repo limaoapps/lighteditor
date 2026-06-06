@@ -1854,6 +1854,17 @@ function Editor() {
         </div>
       )}
 
+      {mediaCtx && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="fixed z-50 min-w-[180px] overflow-hidden rounded-md border border-border bg-popover py-1 text-xs text-popover-foreground shadow-xl"
+          style={{ left: mediaCtx.x, top: mediaCtx.y }}
+        >
+          <button onClick={() => { removeMedia(mediaCtx.mediaId); setMediaCtx(null); }}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-destructive hover:bg-accent"><Trash2 className="h-3.5 w-3.5" /> Excluir mídia</button>
+        </div>
+      )}
+
       {(exporting || exportUrl || error) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl">

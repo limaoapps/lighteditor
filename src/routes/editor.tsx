@@ -127,7 +127,7 @@ const FONT_FAMILIES: Array<{ label: string; stack: string }> = [
 
 const defaultText = (): TextProps => ({
   content: "Seu texto",
-  fontFamily: FONT_FAMILIES[0],
+  fontFamily: "'Inter', system-ui, sans-serif",
   size: 64,
   color: "#ffffff",
   bold: true,

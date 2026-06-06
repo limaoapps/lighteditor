@@ -106,6 +106,100 @@ function fmt(s: number) {
 
 function dbToGain(db: number) { return Math.pow(10, db / 20); }
 
+const DEFAULT_FX: Fx = {
+  brightness: 0, contrast: 0, saturation: 0, temperature: 0,
+  sharpness: 0, exposure: 0, shadows: 0, highlights: 0,
+  opacity: 100, preset: null, blurBg: 0, fillMode: "bars",
+  bgColor: "#000000", zoom: null,
+};
+
+const QUICK_EFFECTS: { id: string; label: string }[] = [
+  { id: "bw", label: "Preto e Branco" },
+  { id: "sepia", label: "Sépia" },
+  { id: "vignette", label: "Vinheta" },
+  { id: "sharp", label: "Nitidez Extra" },
+  { id: "contrast", label: "Contraste Forte" },
+  { id: "warm", label: "Tons Quentes" },
+  { id: "cool", label: "Tons Frios" },
+  { id: "vintage", label: "Vintage" },
+  { id: "cinema", label: "Cinema" },
+  { id: "retro", label: "Retrô" },
+  { id: "faded", label: "Desbotado" },
+  { id: "highsat", label: "Alta Saturação" },
+  { id: "lowsat", label: "Baixa Saturação" },
+];
+
+const PRESETS: { id: string; label: string; patch: Partial<Fx> }[] = [
+  { id: "natural", label: "Natural", patch: { ...DEFAULT_FX } },
+  { id: "youtube", label: "YouTube", patch: { brightness: 5, contrast: 15, saturation: 15 } },
+  { id: "tiktok",  label: "TikTok",  patch: { saturation: 30, contrast: 20, sharpness: 30 } },
+  { id: "cinema",  label: "Cinema",  patch: { contrast: 20, saturation: -15, brightness: -5, preset: "cinema" } },
+  { id: "vintage", label: "Vintage", patch: { preset: "vintage" } },
+  { id: "bw",      label: "Preto e Branco", patch: { preset: "bw" } },
+  { id: "retro",   label: "Retrô",   patch: { preset: "retro" } },
+];
+
+function cssFilter(fx?: Fx): string {
+  if (!fx) return "none";
+  const parts: string[] = [];
+  // adjustments (-100..100 → multipliers)
+  const bright = 1 + (fx.brightness + fx.exposure) / 100;
+  const contrast = 1 + (fx.contrast / 100);
+  const sat = 1 + (fx.saturation / 100);
+  parts.push(`brightness(${bright.toFixed(3)})`);
+  parts.push(`contrast(${contrast.toFixed(3)})`);
+  parts.push(`saturate(${sat.toFixed(3)})`);
+  // temperature: negative→cool (hue +), positive→warm (sepia + slight hue -)
+  if (fx.temperature !== 0) {
+    if (fx.temperature > 0) {
+      parts.push(`sepia(${(fx.temperature / 200).toFixed(3)})`);
+      parts.push(`hue-rotate(${(-fx.temperature * 0.1).toFixed(2)}deg)`);
+    } else {
+      parts.push(`hue-rotate(${(-fx.temperature * 0.2).toFixed(2)}deg)`);
+    }
+  }
+  // shadows/highlights approximation via gamma-like brightness/contrast tweak
+  if (fx.shadows) parts.push(`brightness(${(1 + fx.shadows / 400).toFixed(3)})`);
+  if (fx.highlights) parts.push(`contrast(${(1 + fx.highlights / 400).toFixed(3)})`);
+  // sharpness: emulate via contrast bump (CSS has no sharpen)
+  if (fx.sharpness > 0) parts.push(`contrast(${(1 + fx.sharpness / 300).toFixed(3)})`);
+  // preset overlays
+  switch (fx.preset) {
+    case "bw":       parts.push("grayscale(1)"); break;
+    case "sepia":    parts.push("sepia(1)"); break;
+    case "sharp":    parts.push("contrast(1.25) saturate(1.1)"); break;
+    case "contrast": parts.push("contrast(1.5)"); break;
+    case "warm":     parts.push("sepia(0.35) saturate(1.2) hue-rotate(-10deg)"); break;
+    case "cool":     parts.push("hue-rotate(20deg) saturate(1.1) brightness(1.02)"); break;
+    case "vintage":  parts.push("sepia(0.55) contrast(0.9) saturate(0.85)"); break;
+    case "cinema":   parts.push("contrast(1.2) saturate(0.85) brightness(0.95)"); break;
+    case "retro":    parts.push("sepia(0.4) hue-rotate(-15deg) saturate(1.3) contrast(1.1)"); break;
+    case "faded":    parts.push("contrast(0.85) brightness(1.1) saturate(0.7)"); break;
+    case "highsat":  parts.push("saturate(1.8)"); break;
+    case "lowsat":   parts.push("saturate(0.4)"); break;
+    default: break;
+  }
+  return parts.join(" ");
+}
+
+function computeVisualOpacity(i: TLItem, t: number): number {
+  const local = t - i.start;
+  const dur = i.outPoint - i.inPoint;
+  let v = (i.fx?.opacity ?? 100) / 100;
+  if (i.fadeIn && local < i.fadeIn) v *= Math.max(0, local / i.fadeIn);
+  if (i.fadeOut && local > dur - i.fadeOut) v *= Math.max(0, (dur - local) / i.fadeOut);
+  return Math.max(0, Math.min(1, v));
+}
+
+function computeZoomScale(fx: Fx | undefined, localT: number, dur: number): number {
+  if (!fx?.zoom) return 1;
+  const speedMul = fx.zoom.speed === "slow" ? 0.1 : fx.zoom.speed === "fast" ? 0.35 : 0.2;
+  const p = dur > 0 ? Math.min(1, Math.max(0, localT / dur)) : 0;
+  return fx.zoom.dir === "in" ? 1 + speedMul * p : 1 + speedMul * (1 - p);
+}
+
+
+
 function detectKind(file: File): ItemKind | null {
   const t = file.type.toLowerCase();
   const n = file.name.toLowerCase();

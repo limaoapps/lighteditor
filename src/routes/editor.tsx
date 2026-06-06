@@ -1151,8 +1151,8 @@ function Editor() {
                   className="pointer-events-none absolute inset-0 h-full w-full"
                   style={{
                     objectFit: ov.fx!.fillMode === "stretch" ? "fill" : "cover",
-                    transform: `${ov.fx!.fillMode === "mirror" ? "scaleX(-1)" : ""} scale(1.1)`,
-                    filter: ov.fx!.fillMode === "blur" ? `blur(${Math.max(12, (ov.fx!.blurBg || 40) * 0.6)}px) brightness(0.7)` : undefined,
+                    transform: `${ov.fx!.fillMode === "mirror" ? "scaleX(-1)" : ""} scale(1.35)`,
+                    filter: ov.fx!.fillMode === "blur" ? `blur(${Math.max(16, (ov.fx!.blurBg || 40) * 0.7)}px) brightness(0.7)` : undefined,
                     opacity: computeVisualOpacity(ov, playhead),
                   }} />
               ))}

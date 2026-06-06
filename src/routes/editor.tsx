@@ -1000,9 +1000,9 @@ function Editor() {
       return;
     }
     setExporting(true); setExportPct(0); setExportMsg("Carregando engine..."); setExportUrl(null); setError(null);
+    const logs: string[] = [];
     try {
       const ff = await getFFmpeg();
-      const logs: string[] = [];
       ff.on("log", ({ message }) => { logs.push(message); if (logs.length > 200) logs.shift(); });
       ff.on("progress", ({ progress: p }) => setExportPct(Math.max(0, Math.min(1, p))));
       const targetH = QUALITY_HEIGHT[quality];

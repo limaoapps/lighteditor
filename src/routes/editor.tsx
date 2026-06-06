@@ -192,17 +192,63 @@ function cssFilter(fx?: Fx): string {
   return parts.join(" ");
 }
 
+function hasBackgroundFill(fx?: Fx): boolean {
+  return !!fx && (fx.fillMode === "blur" || fx.fillMode === "mirror");
+}
+
+function blurCssPx(fx: Fx): number {
+  if (fx.fillMode !== "blur" || fx.blurBg <= 0) return 0;
+  return Math.max(1, Math.round(6 + fx.blurBg * 0.74));
+}
+
+function mainObjectFit(fx?: Fx): React.CSSProperties["objectFit"] {
+  return fx?.fillMode === "stretch" ? "fill" : "contain";
+}
+
 function backgroundFillStyle(fx: Fx): React.CSSProperties {
   const isBlur = fx.fillMode === "blur";
+  const blurPx = blurCssPx(fx);
   return {
     position: "absolute",
     inset: 0,
     width: "100%",
     height: "100%",
-    objectFit: fx.fillMode === "stretch" ? "fill" : "cover",
-    transform: `${fx.fillMode === "mirror" ? "scaleX(-1) " : ""}scale(${isBlur ? 1.4 : 1})`,
-    filter: isBlur ? `blur(${Math.max(0, fx.blurBg) * 0.5}px)` : undefined,
+    objectFit: "cover",
+    transformOrigin: "center",
+    transform: `${fx.fillMode === "mirror" ? "scaleX(-1) " : ""}scale(${isBlur ? 1.22 : 1.04})`,
+    filter: isBlur ? `blur(${blurPx}px)` : undefined,
+    willChange: isBlur ? "filter, transform" : "transform",
     zIndex: 0,
+  };
+}
+
+function ffmpegColor(hex: string | undefined) {
+  const safe = (hex ?? "#000000").replace("#", "");
+  return /^[0-9a-fA-F]{6}$/.test(safe) ? `0x${safe}` : "black";
+}
+
+function blurSigma(fx: Fx | undefined) {
+  return Math.max(0.1, Math.min(60, ((fx?.blurBg ?? 30) / 100) * 50 + 4));
+}
+
+function exportVideoFilter(c: TLItem, targetW: number, targetH: number) {
+  const fx = c.fx;
+  if (!fx || fx.fillMode === "bars") {
+    return { type: "vf" as const, value: `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:color=black,fps=30,setsar=1` };
+  }
+  if (fx.fillMode === "color") {
+    return { type: "vf" as const, value: `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:color=${ffmpegColor(fx.bgColor)},fps=30,setsar=1` };
+  }
+  if (fx.fillMode === "stretch") {
+    return { type: "vf" as const, value: `scale=${targetW}:${targetH},fps=30,setsar=1` };
+  }
+  const bgCore = `scale=${targetW}:${targetH}:force_original_aspect_ratio=increase,crop=${targetW}:${targetH}`;
+  const bgFx = fx.fillMode === "blur"
+    ? `${bgCore},gblur=sigma=${blurSigma(fx).toFixed(1)}:steps=2`
+    : `${bgCore},hflip`;
+  return {
+    type: "filter_complex" as const,
+    value: `[0:v]split=2[sharp][blur];[blur]${bgFx}[blurred];[sharp]scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease[sharpfit];[blurred][sharpfit]overlay=(W-w)/2:(H-h)/2,fps=30,setsar=1[vout]`,
   };
 }
 

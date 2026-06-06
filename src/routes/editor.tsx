@@ -503,7 +503,7 @@ function Editor() {
   // ---- Timeline drags ----
   type Drag =
     | { type: "move"; id: string; offsetSec: number; origTrackId: string }
-    | { type: "resizeL"; id: string; origStart: number; origIn: number }
+    | { type: "resizeL"; id: string; origStart: number; origIn: number; origEnd: number; isImage: boolean }
     | { type: "resizeR"; id: string; origOut: number }
     | { type: "fadeIn"; id: string }
     | { type: "fadeOut"; id: string }

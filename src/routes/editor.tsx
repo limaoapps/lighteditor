@@ -959,11 +959,31 @@ function Editor() {
   }, []);
   useEffect(() => { if (zoom < minZoom) setZoom(minZoom); }, [minZoom, zoom]);
 
+  // Ctrl/⌘ + scroll sobre a timeline = zoom (bloqueia zoom do navegador)
+  useEffect(() => {
+    const el = timelineRef.current; if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const step = -e.deltaY * 0.08;
+      setZoom(z => Math.max(minZoom, Math.min(200, Math.round(z + step))));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [minZoom]);
+
   // ---- Export ----
   const doExport = async () => {
     const v1trackId = tracks.find(t => t.kind === "video")?.id;
-    const v1clips = items.filter(i => i.trackId === v1trackId && i.kind === "video").sort((a, b) => a.start - b.start);
-    if (!v1clips.length) { setError("Adicione pelo menos um vídeo na primeira trilha de vídeo."); return; }
+    const v1clips = items
+      .filter(i => i.trackId === v1trackId && (i.kind === "video" || i.kind === "image"))
+      .sort((a, b) => a.start - b.start);
+    const audioClips = items.filter(i => i.kind === "audio");
+    if (!v1clips.length && !audioClips.length) {
+      setError("Adicione pelo menos um vídeo, imagem ou áudio na timeline.");
+      return;
+    }
     setExporting(true); setExportPct(0); setExportMsg("Carregando engine..."); setExportUrl(null); setError(null);
     try {
       const ff = await getFFmpeg();
@@ -971,34 +991,63 @@ function Editor() {
       const targetH = QUALITY_HEIGHT[quality];
       const targetW = Math.round((targetH * aspect.w) / aspect.h / 2) * 2;
       const inputs: string[] = [];
-      for (let i = 0; i < v1clips.length; i++) {
-        const c = v1clips[i];
-        const inName = `in_${i}.bin`;
-        const outName = `cut_${i}.mp4`;
-        setExportMsg(`Processando clipe ${i + 1}/${v1clips.length}...`);
-        await ff.writeFile(inName, await fetchFile(c.file!));
-        const ss = c.inPoint.toFixed(3);
-        const dur = (c.outPoint - c.inPoint);
-        const to = dur.toFixed(3);
-        const afilters: string[] = [];
-        const g = dbToGain(c.gainDb ?? 0);
-        if (g !== 1) afilters.push(`volume=${g.toFixed(3)}`);
-        if (c.fadeIn && c.fadeIn > 0.01) afilters.push(`afade=t=in:st=0:d=${c.fadeIn.toFixed(3)}`);
-        if (c.fadeOut && c.fadeOut > 0.01) afilters.push(`afade=t=out:st=${(dur - c.fadeOut).toFixed(3)}:d=${c.fadeOut.toFixed(3)}`);
-        const filter = exportVideoFilter(c, targetW, targetH);
-        const args = ["-ss", ss, "-i", inName, "-t", to];
-        if (filter.type === "vf") args.push("-vf", filter.value);
-        else args.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "0:a?");
-        if (afilters.length) args.push("-af", afilters.join(","));
-        args.push("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "44100", "-ac", "2", outName);
-        await ff.exec(args);
-        await ff.deleteFile(inName);
-        inputs.push(outName);
+
+      if (!v1clips.length) {
+        // Sem V1: gera fundo preto do tamanho do áudio total
+        const dur = Math.max(1, totalDuration).toFixed(3);
+        setExportMsg("Gerando vídeo base (áudio)...");
+        await ff.exec([
+          "-f", "lavfi", "-t", dur, "-i", `color=c=black:s=${targetW}x${targetH}:r=30`,
+          "-f", "lavfi", "-t", dur, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+          "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+          "-c:a", "aac", "-ar", "44100", "-ac", "2", "-shortest", "joined.mp4",
+        ]);
+      } else {
+        for (let i = 0; i < v1clips.length; i++) {
+          const c = v1clips[i];
+          const isImg = c.kind === "image";
+          const ext = isImg ? (c.file?.name.split(".").pop() || "png").toLowerCase() : "bin";
+          const inName = `in_${i}.${ext}`;
+          const outName = `cut_${i}.mp4`;
+          setExportMsg(`Processando clipe ${i + 1}/${v1clips.length}...`);
+          await ff.writeFile(inName, await fetchFile(c.file!));
+          const dur = (c.outPoint - c.inPoint);
+          const to = dur.toFixed(3);
+          const afilters: string[] = [];
+          const g = dbToGain(c.gainDb ?? 0);
+          if (g !== 1) afilters.push(`volume=${g.toFixed(3)}`);
+          if (c.fadeIn && c.fadeIn > 0.01) afilters.push(`afade=t=in:st=0:d=${c.fadeIn.toFixed(3)}`);
+          if (c.fadeOut && c.fadeOut > 0.01) afilters.push(`afade=t=out:st=${(dur - c.fadeOut).toFixed(3)}:d=${c.fadeOut.toFixed(3)}`);
+          const filter = exportVideoFilter(c, targetW, targetH);
+
+          const args: string[] = [];
+          if (isImg) {
+            // Imagem como vídeo + áudio silencioso para compatibilidade do concat
+            args.push("-loop", "1", "-framerate", "30", "-t", to, "-i", inName);
+            args.push("-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
+            if (filter.type === "vf") args.push("-vf", filter.value);
+            else args.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "1:a");
+            args.push(
+              "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", "30",
+              "-c:a", "aac", "-ar", "44100", "-ac", "2", "-shortest", outName,
+            );
+          } else {
+            args.push("-ss", c.inPoint.toFixed(3), "-i", inName, "-t", to);
+            if (filter.type === "vf") args.push("-vf", filter.value);
+            else args.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "0:a?");
+            if (afilters.length) args.push("-af", afilters.join(","));
+            args.push("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+              "-c:a", "aac", "-ar", "44100", "-ac", "2", outName);
+          }
+          await ff.exec(args);
+          await ff.deleteFile(inName);
+          inputs.push(outName);
+        }
+        setExportMsg("Juntando clipes...");
+        const list = inputs.map(n => `file '${n}'`).join("\n");
+        await ff.writeFile("list.txt", new TextEncoder().encode(list));
+        await ff.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "joined.mp4"]);
       }
-      setExportMsg("Juntando clipes...");
-      const list = inputs.map(n => `file '${n}'`).join("\n");
-      await ff.writeFile("list.txt", new TextEncoder().encode(list));
-      await ff.exec(["-f", "concat", "-safe", "0", "-i", "list.txt", "-c", "copy", "joined.mp4"]);
 
       const vf: string[] = [];
       const firstText = items.find(i => i.kind === "text" && i.text?.content);
@@ -1009,13 +1058,13 @@ function Editor() {
         vf.push(`drawtext=text='${esc}':fontcolor=${t.color}:fontsize=${t.size}:x=(w-text_w)/2:y=${y}:box=1:boxcolor=black@0.4:boxborderw=12`);
       }
 
-      const music = items.find(i => i.kind === "audio");
+      const music = audioClips[0];
       setExportMsg("Renderizando saída...");
       const finalArgs: string[] = ["-i", "joined.mp4"];
       if (music) { await ff.writeFile("bgm.bin", await fetchFile(music.file!)); finalArgs.push("-i", "bgm.bin"); }
       if (vf.length) finalArgs.push("-vf", vf.join(","));
       if (music) {
-        const mg = dbToGain(music.gainDb ?? 0) * 0.4;
+        const mg = dbToGain(music.gainDb ?? 0) * (v1clips.length ? 0.4 : 1.0);
         finalArgs.push(
           "-filter_complex",
           `[0:a]volume=1[a0];[1:a]volume=${mg.toFixed(3)},aloop=loop=-1:size=2e9[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=0[aout]`,

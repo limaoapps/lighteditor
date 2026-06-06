@@ -936,7 +936,7 @@ function Editor() {
   };
 
   return (
-    <div className="flex h-screen flex-col bg-background text-foreground">
+    <div className="flex h-screen flex-col bg-background text-foreground select-none" style={{ WebkitUserSelect: "none", userSelect: "none" }}>
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-panel px-4">
         <div className="flex items-center gap-3">
           <Link to="/" className="text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /></Link>

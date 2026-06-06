@@ -1193,13 +1193,17 @@ function Editor() {
                   draggable
                   onDragStart={(e) => { e.dataTransfer.setData("application/x-vle-media", a.id); e.dataTransfer.effectAllowed = "copy"; }}
                   onDoubleClick={() => addAssetToTimeline(a)}
-                  title="Arraste até a timeline ou clique duas vezes"
+                  onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setMediaCtx({ x: e.clientX, y: e.clientY, mediaId: a.id }); }}
+                  title="Arraste até a timeline, clique duas vezes ou clique direito para opções"
                   className={`group flex w-full cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs active:cursor-grabbing ${used ? "border-primary/40 bg-primary/5" : "border-border bg-card hover:border-ring/50"}`}>
                   <Icon className="h-3.5 w-3.5 text-primary" />
                   <span className="min-w-0 flex-1 truncate">{a.name}</span>
                   {used && <Check className="h-3 w-3 text-primary" />}
                   <button onClick={(e) => { e.stopPropagation(); addAssetToTimeline(a); }} className="rounded p-0.5 opacity-0 hover:bg-background group-hover:opacity-100" title="Adicionar à timeline">
                     <Plus className="h-3 w-3" />
+                  </button>
+                  <button onClick={(e) => { e.stopPropagation(); removeMedia(a.id); }} className="rounded p-0.5 opacity-0 text-destructive hover:bg-background group-hover:opacity-100" title="Excluir mídia">
+                    <Trash2 className="h-3 w-3" />
                   </button>
                 </div>
               );

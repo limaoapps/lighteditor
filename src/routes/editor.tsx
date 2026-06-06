@@ -365,6 +365,7 @@ function Editor() {
   const [error, setError] = useState<string | null>(null);
 
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; clipId: string | null } | null>(null);
+  const [mediaCtx, setMediaCtx] = useState<{ x: number; y: number; mediaId: string } | null>(null);
   const clipboardRef = useRef<TLItem | null>(null);
 
   // Resizable side panels

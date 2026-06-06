@@ -49,22 +49,85 @@ type TextProps = {
   strokeWidth: number;     // px
 };
 
-const FONT_FAMILIES = [
-  "Inter, system-ui, sans-serif",
-  "'Space Grotesk', system-ui, sans-serif",
-  "'Playfair Display', Georgia, serif",
-  "Georgia, 'Times New Roman', serif",
-  "'Courier New', monospace",
-  "'Impact', 'Arial Black', sans-serif",
-  "'Comic Sans MS', 'Comic Sans', cursive",
-  "'Bebas Neue', Impact, sans-serif",
-  "Arial, Helvetica, sans-serif",
-  "Verdana, Geneva, sans-serif",
+// Google Fonts a serem carregadas dinamicamente (família : pesos)
+const GOOGLE_FONTS: Array<{ name: string; weights: string }> = [
+  { name: "Inter", weights: "wght@300;400;500;600;700;800;900" },
+  { name: "Lato", weights: "wght@300;400;700;900" },
+  { name: "Roboto", weights: "wght@300;400;500;700;900" },
+  { name: "Open Sans", weights: "wght@300;400;600;700;800" },
+  { name: "Montserrat", weights: "wght@300;400;500;600;700;800;900" },
+  { name: "Poppins", weights: "wght@300;400;500;600;700;800;900" },
+  { name: "Raleway", weights: "wght@300;400;500;600;700;800;900" },
+  { name: "Nunito", weights: "wght@300;400;600;700;800;900" },
+  { name: "Ubuntu", weights: "wght@300;400;500;700" },
+  { name: "PT Sans", weights: "wght@400;700" },
+  { name: "Work Sans", weights: "wght@300;400;500;600;700;800" },
+  { name: "Source Sans 3", weights: "wght@300;400;600;700;900" },
+  { name: "Rubik", weights: "wght@300;400;500;600;700;800;900" },
+  { name: "Quicksand", weights: "wght@300;400;500;600;700" },
+  { name: "Manrope", weights: "wght@300;400;500;600;700;800" },
+  { name: "DM Sans", weights: "wght@400;500;700;900" },
+  { name: "Space Grotesk", weights: "wght@300;400;500;600;700" },
+  { name: "Barlow", weights: "wght@300;400;500;600;700;800;900" },
+  { name: "Oswald", weights: "wght@300;400;500;600;700" },
+  { name: "Bebas Neue", weights: "wght@400" },
+  { name: "Anton", weights: "wght@400" },
+  { name: "Archivo Black", weights: "wght@400" },
+  { name: "Bangers", weights: "wght@400" },
+  { name: "Righteous", weights: "wght@400" },
+  { name: "Fjalla One", weights: "wght@400" },
+  { name: "Teko", weights: "wght@300;400;500;600;700" },
+  { name: "Playfair Display", weights: "wght@400;500;600;700;800;900" },
+  { name: "Merriweather", weights: "wght@300;400;700;900" },
+  { name: "Lora", weights: "wght@400;500;600;700" },
+  { name: "Cormorant Garamond", weights: "wght@300;400;500;600;700" },
+  { name: "EB Garamond", weights: "wght@400;500;600;700;800" },
+  { name: "Crimson Text", weights: "wght@400;600;700" },
+  { name: "Abril Fatface", weights: "wght@400" },
+  { name: "Pacifico", weights: "wght@400" },
+  { name: "Dancing Script", weights: "wght@400;500;600;700" },
+  { name: "Caveat", weights: "wght@400;500;600;700" },
+  { name: "Lobster", weights: "wght@400" },
+  { name: "Great Vibes", weights: "wght@400" },
+  { name: "Sacramento", weights: "wght@400" },
+  { name: "Satisfy", weights: "wght@400" },
+  { name: "Shadows Into Light", weights: "wght@400" },
+  { name: "Permanent Marker", weights: "wght@400" },
+  { name: "Indie Flower", weights: "wght@400" },
+  { name: "Kalam", weights: "wght@300;400;700" },
+  { name: "Patrick Hand", weights: "wght@400" },
+  { name: "Press Start 2P", weights: "wght@400" },
+  { name: "VT323", weights: "wght@400" },
+  { name: "Orbitron", weights: "wght@400;500;600;700;800;900" },
+  { name: "Russo One", weights: "wght@400" },
+  { name: "Audiowide", weights: "wght@400" },
+  { name: "Monoton", weights: "wght@400" },
+  { name: "JetBrains Mono", weights: "wght@300;400;500;600;700;800" },
+  { name: "Fira Code", weights: "wght@300;400;500;600;700" },
+  { name: "Source Code Pro", weights: "wght@300;400;500;600;700;900" },
 ];
+
+const SYSTEM_FONTS: Array<{ name: string; stack: string }> = [
+  { name: "Arial", stack: "Arial, Helvetica, sans-serif" },
+  { name: "Helvetica", stack: "Helvetica, Arial, sans-serif" },
+  { name: "Verdana", stack: "Verdana, Geneva, sans-serif" },
+  { name: "Tahoma", stack: "Tahoma, Geneva, sans-serif" },
+  { name: "Trebuchet MS", stack: "'Trebuchet MS', sans-serif" },
+  { name: "Georgia", stack: "Georgia, 'Times New Roman', serif" },
+  { name: "Times New Roman", stack: "'Times New Roman', Times, serif" },
+  { name: "Courier New", stack: "'Courier New', Courier, monospace" },
+  { name: "Impact", stack: "Impact, 'Arial Black', sans-serif" },
+  { name: "Comic Sans MS", stack: "'Comic Sans MS', 'Comic Sans', cursive" },
+];
+
+const FONT_FAMILIES: Array<{ label: string; stack: string }> = [
+  ...GOOGLE_FONTS.map(f => ({ label: f.name, stack: `'${f.name}', system-ui, sans-serif` })),
+  ...SYSTEM_FONTS.map(f => ({ label: f.name, stack: f.stack })),
+].sort((a, b) => a.label.localeCompare(b.label));
 
 const defaultText = (): TextProps => ({
   content: "Seu texto",
-  fontFamily: FONT_FAMILIES[0],
+  fontFamily: "'Inter', system-ui, sans-serif",
   size: 64,
   color: "#ffffff",
   bold: true,
@@ -400,6 +463,20 @@ function CornerHandles({ id, tr, onStartScale }: { id: string; tr: Transform; on
 }
 
 function Editor() {
+  // Carrega todas as Google Fonts uma única vez
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (document.getElementById("gfonts-editor")) return;
+    const families = GOOGLE_FONTS.map(f => `family=${encodeURIComponent(f.name)}:${f.weights}`).join("&");
+    const link = document.createElement("link");
+    link.id = "gfonts-editor";
+    link.rel = "stylesheet";
+    link.href = `https://fonts.googleapis.com/css2?${families}&display=swap`;
+    document.head.appendChild(link);
+    const pre1 = document.createElement("link"); pre1.rel = "preconnect"; pre1.href = "https://fonts.googleapis.com"; document.head.appendChild(pre1);
+    const pre2 = document.createElement("link"); pre2.rel = "preconnect"; pre2.href = "https://fonts.gstatic.com"; pre2.crossOrigin = ""; document.head.appendChild(pre2);
+  }, []);
+
   const [aspectKey, setAspectKey] = useState<AspectKey>("16:9");
   const [customAR, setCustomAR] = useState({ w: 16, h: 9 });
   const aspect = aspectKey === "custom" ? customAR : ASPECTS[aspectKey];
@@ -1706,7 +1783,7 @@ function Editor() {
                   <select value={t.fontFamily} onChange={(e) => updT({ fontFamily: e.target.value })}
                     className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
                     style={{ fontFamily: t.fontFamily }}>
-                    {FONT_FAMILIES.map(f => <option key={f} value={f} style={{ fontFamily: f }}>{f.split(",")[0].replace(/'/g, "")}</option>)}
+                    {FONT_FAMILIES.map(f => <option key={f.stack} value={f.stack} style={{ fontFamily: f.stack }}>{f.label}</option>)}
                   </select>
                 </div>
 

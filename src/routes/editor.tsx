@@ -68,12 +68,12 @@ const ASPECTS: Record<AspectKey, { w: number; h: number; label: string }> = {
 };
 
 const INITIAL_TRACKS: Track[] = [
-  { id: "V1", kind: "video", label: "V1 · Principal" },
-  { id: "V2", kind: "video", label: "V2 · Sobreposição" },
-  { id: "V3", kind: "video", label: "V3 · Textos" },
+  { id: "V1", kind: "video", label: "V1 · Vídeo" },
+  { id: "V2", kind: "video", label: "V2 · Vídeo" },
   { id: "A1", kind: "audio", label: "A1 · Áudio" },
-  { id: "A2", kind: "audio", label: "A2 · Música" },
+  { id: "A2", kind: "audio", label: "A2 · Áudio" },
 ];
+const IMAGE_MAX_DUR = 3600;
 
 type Quality = "720" | "1080" | "2160";
 const QUALITY_HEIGHT: Record<Quality, number> = { "720": 720, "1080": 1080, "2160": 2160 };

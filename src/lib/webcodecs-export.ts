@@ -623,7 +623,7 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
       const srcT = active.inPoint + localT;
       const fill = active.fx?.fillMode ?? "bars";
       const bg = active.fx?.bgColor ?? "#000000";
-      const blurPx = active.fx?.fillMode === "blur" ? Math.max(0, Math.min(40, (active.fx.blurBg ?? 30) / 3)) : 0;
+      const blurPx = blurCanvasPx(active.fx);
       const op = computeOpacity(active, localT);
 
       try {

@@ -2138,6 +2138,7 @@ function Editor() {
         <div className="flex items-center gap-2">
           <button onClick={undo} title="Desfazer (Ctrl+Z)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Undo2 className="h-4 w-4" /></button>
           <button onClick={redo} title="Refazer (Ctrl+Y)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Redo2 className="h-4 w-4" /></button>
+          <button onClick={togglePreviewFullscreen} title="Tela cheia do preview (F)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Maximize2 className="h-4 w-4" /></button>
           <div className="mx-2 h-6 w-px bg-border" />
           <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Proporção</label>
           <select value={aspectKey} onChange={(e) => setProjectAspect(e.target.value as AspectKey)}
@@ -2371,12 +2372,15 @@ function Editor() {
 
 
         <main className="flex min-w-0 flex-1 flex-col select-none">
-          <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black/40 p-6 select-none" onWheel={onPreviewWheel}>
+          <div ref={previewShellRef} className="relative flex min-h-0 flex-1 items-center justify-center bg-black/40 p-6 select-none">
             <div ref={previewBoxRef} className="group/preview relative overflow-hidden rounded-lg shadow-2xl select-none"
+              onWheel={onPreviewWheel}
               style={{
                 aspectRatio: `${aspect.w} / ${aspect.h}`,
                 maxHeight: "100%", maxWidth: "100%",
-                width: `min(100%, calc((100vh - 360px) * ${aspect.w} / ${aspect.h}))`,
+                width: previewFullscreen
+                  ? `min(100vw, calc(100vh * ${aspect.w} / ${aspect.h}))`
+                  : `min(100%, calc((100vh - 360px) * ${aspect.w} / ${aspect.h}))`,
                 background: activeV1Video?.fx?.fillMode === "color" ? activeV1Video.fx.bgColor : "#000",
               }}>
               {/* Hidden SVG defs: real sharpen (unsharp-mask convolution) */}

@@ -2120,48 +2120,109 @@ function Editor() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="flex shrink-0 flex-col gap-2 border-r border-border bg-panel p-3 select-none" style={{ width: leftW }}>
-          <button onClick={() => fileInputRef.current?.click()}
-            className="glow-primary inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-3 py-2.5 text-sm font-semibold text-primary-foreground">
-            <Plus className="h-4 w-4" /> Adicionar Arquivo
-          </button>
-          <button onClick={addText}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs hover:border-ring/50">
-            <TypeIcon className="h-3.5 w-3.5" /> Adicionar Título
-          </button>
-          <input ref={fileInputRef} type="file" multiple hidden
-            accept="video/*,audio/*,image/*,.mp4,.mov,.avi,.mkv,.webm,.mp3,.wav,.ogg,.png,.jpg,.jpeg"
-            onChange={(e) => { addFiles(e.target.files); if (fileInputRef.current) fileInputRef.current.value = ""; }} />
-
-          <div className="mt-2 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            <span>Mídia</span>
-            <span className="text-[10px] normal-case text-muted-foreground/70">{media.length} item(ns)</span>
-          </div>
-          <div className="flex-1 space-y-1 overflow-y-auto pr-1">
-            {media.map(a => {
-              const Icon = a.kind === "audio" ? Music2 : a.kind === "image" ? ImageIcon : VideoIcon;
-              const used = usedMediaIds.has(a.id);
+        <aside className="flex shrink-0 border-r border-border bg-panel select-none" style={{ width: leftW }}>
+          <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-border bg-background/30 py-2">
+            {([
+              { id: "media" as LeftPanel, icon: Film, label: "Mídia" },
+              { id: "titles" as LeftPanel, icon: TypeIcon, label: "Títulos" },
+              { id: "transitions" as LeftPanel, icon: RefreshCw, label: "Transições" },
+              { id: "effects" as LeftPanel, icon: Wand2, label: "Efeitos" },
+            ]).map(tab => {
+              const Icon = tab.icon;
+              const active = leftPanel === tab.id;
               return (
-                <div key={a.id}
-                  draggable
-                  onDragStart={(e) => { e.dataTransfer.setData("application/x-vle-media", a.id); e.dataTransfer.effectAllowed = "copy"; }}
-                  onDoubleClick={() => addAssetToTimeline(a)}
-                  onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setMediaCtx({ x: e.clientX, y: e.clientY, mediaId: a.id }); }}
-                  title="Arraste até a timeline, clique duas vezes ou clique direito para opções"
-                  className={`group flex w-full cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs active:cursor-grabbing ${used ? "border-primary/40 bg-primary/5" : "border-border bg-card hover:border-ring/50"}`}>
-                  <Icon className="h-3.5 w-3.5 text-primary" />
-                  <span className="min-w-0 flex-1 truncate">{a.name}</span>
-                  {used && <Check className="h-3 w-3 text-primary" />}
-                  <button onClick={(e) => { e.stopPropagation(); addAssetToTimeline(a); }} className="rounded p-0.5 opacity-0 hover:bg-background group-hover:opacity-100" title="Adicionar à timeline">
-                    <Plus className="h-3 w-3" />
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); removeMedia(a.id); }} className="rounded p-0.5 opacity-0 text-destructive hover:bg-background group-hover:opacity-100" title="Excluir mídia">
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </div>
+                <button key={tab.id} onClick={() => setLeftPanel(tab.id)} title={tab.label}
+                  className={`grid h-9 w-9 place-items-center rounded-md transition ${active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-card hover:text-foreground"}`}>
+                  <Icon className="h-4 w-4" />
+                </button>
               );
             })}
-            {!media.length && <div className="rounded-md border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">Clique em "Adicionar Arquivo" para importar mídia. Depois arraste para a timeline.</div>}
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col gap-2 p-3">
+            <input ref={fileInputRef} type="file" multiple hidden
+              accept="video/*,audio/*,image/*,.mp4,.mov,.avi,.mkv,.webm,.mp3,.wav,.ogg,.png,.jpg,.jpeg"
+              onChange={(e) => { addFiles(e.target.files); if (fileInputRef.current) fileInputRef.current.value = ""; }} />
+
+            {leftPanel === "media" && (
+              <>
+                <button onClick={() => fileInputRef.current?.click()}
+                  className="glow-primary inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-3 py-2.5 text-sm font-semibold text-primary-foreground">
+                  <Plus className="h-4 w-4" /> Adicionar Arquivo
+                </button>
+                <div className="mt-2 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <span>Mídia</span>
+                  <span className="text-[10px] normal-case text-muted-foreground/70">{media.length} item(ns)</span>
+                </div>
+                <div className="flex-1 space-y-1 overflow-y-auto pr-1">
+                  {media.map(a => {
+                    const Icon = a.kind === "audio" ? Music2 : a.kind === "image" ? ImageIcon : VideoIcon;
+                    const used = usedMediaIds.has(a.id);
+                    return (
+                      <div key={a.id}
+                        draggable
+                        onDragStart={(e) => { e.dataTransfer.setData("application/x-vle-media", a.id); e.dataTransfer.effectAllowed = "copy"; }}
+                        onDoubleClick={() => addAssetToTimeline(a)}
+                        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setMediaCtx({ x: e.clientX, y: e.clientY, mediaId: a.id }); }}
+                        title="Arraste até a timeline, clique duas vezes ou clique direito para opções"
+                        className={`group flex w-full cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs active:cursor-grabbing ${used ? "border-primary/40 bg-primary/5" : "border-border bg-card hover:border-ring/50"}`}>
+                        <Icon className="h-3.5 w-3.5 text-primary" />
+                        <span className="min-w-0 flex-1 truncate">{a.name}</span>
+                        {used && <Check className="h-3 w-3 text-primary" />}
+                        <button onClick={(e) => { e.stopPropagation(); addAssetToTimeline(a); }} className="rounded p-0.5 opacity-0 hover:bg-background group-hover:opacity-100" title="Adicionar à timeline">
+                          <Plus className="h-3 w-3" />
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); removeMedia(a.id); }} className="rounded p-0.5 opacity-0 text-destructive hover:bg-background group-hover:opacity-100" title="Excluir mídia">
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {!media.length && <div className="rounded-md border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">Clique em "Adicionar Arquivo" para importar mídia. Depois arraste para a timeline.</div>}
+                </div>
+              </>
+            )}
+
+            {leftPanel === "titles" && (
+              <div className="space-y-2 text-xs">
+                <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Títulos e créditos</div>
+                <button onClick={addText} className="inline-flex w-full items-center gap-2 rounded-md border border-border bg-card px-3 py-2 hover:border-ring/50">
+                  <TypeIcon className="h-3.5 w-3.5 text-primary" /> Título
+                </button>
+                <button onClick={addCredits} className="inline-flex w-full items-center gap-2 rounded-md border border-border bg-card px-3 py-2 hover:border-ring/50">
+                  <FileText className="h-3.5 w-3.5 text-primary" /> Créditos
+                </button>
+              </div>
+            )}
+
+            {leftPanel === "transitions" && (
+              <div className="space-y-2 text-xs">
+                <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Transições</div>
+                <button disabled={!selected} onClick={() => selected && setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: 0.6, fadeOut: 0.6 } : i))}
+                  className="inline-flex w-full items-center gap-2 rounded-md border border-border bg-card px-3 py-2 hover:border-ring/50 disabled:opacity-40">
+                  <RefreshCw className="h-3.5 w-3.5 text-primary" /> Fade suave
+                </button>
+              </div>
+            )}
+
+            {leftPanel === "effects" && (
+              <div className="space-y-2 text-xs">
+                <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Efeitos</div>
+                {TIMELINE_EFFECTS.map(effect => (
+                  <button key={effect.id}
+                    draggable
+                    onDragStart={(e) => { e.dataTransfer.setData(EFFECT_DND_TYPE, effect.id); e.dataTransfer.effectAllowed = "copy"; }}
+                    onClick={() => selected && applyTimelineEffect(selected.id, effect.id)}
+                    title="Arraste para cima do clipe na timeline ou selecione um clipe e clique"
+                    className="flex w-full cursor-grab items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-left active:cursor-grabbing hover:border-ring/50">
+                    <Wand2 className="h-3.5 w-3.5 text-primary" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-medium">{effect.label}</span>
+                      <span className="block truncate text-[10px] text-muted-foreground">{effect.hint}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </aside>
         <div

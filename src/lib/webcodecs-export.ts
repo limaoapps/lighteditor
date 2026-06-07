@@ -444,24 +444,15 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
       }
     }
 
-    // overlay de texto simples
-    if (textItem?.text?.content) {
-      const t2 = textItem.text;
-      const y = Math.round((textItem.transform?.yPct ?? 80) / 100 * targetH);
-      ctx.save();
-      ctx.font = `${t2.size}px system-ui, -apple-system, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      const metrics = ctx.measureText(t2.content);
-      const padX = 18, padY = 10;
-      const w = metrics.width + padX * 2;
-      const h = t2.size + padY * 2;
-      ctx.fillStyle = "rgba(0,0,0,0.4)";
-      ctx.fillRect((targetW - w) / 2, y - h / 2, w, h);
-      ctx.fillStyle = t2.color || "#fff";
-      ctx.fillText(t2.content, targetW / 2, y);
-      ctx.restore();
+    // overlays de texto (múltiplos, respeitando timing/posição/estilo)
+    for (const tItem of textItems) {
+      if (!tItem.text?.content) continue;
+      const dur = tItem.outPoint - tItem.inPoint;
+      const localT = t - tItem.start;
+      if (localT < 0 || localT > dur) continue;
+      drawTextOverlay(ctx, tItem, localT, dur, targetW, targetH);
     }
+
 
     const frame = new VideoFrame(canvas, { timestamp: Math.round((f * 1_000_000) / fps), duration: Math.round(1_000_000 / fps) });
     // GOP maior (keyframe a cada ~5s) reduz bastante o tamanho do MP4

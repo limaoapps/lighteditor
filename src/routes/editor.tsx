@@ -1954,12 +1954,35 @@ function Editor() {
             )}
 
             {leftPanel === "transitions" && (
-              <div className="space-y-2 text-xs">
+              <div className="space-y-3 text-xs">
                 <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Transições</div>
-                <button disabled={!selected} onClick={() => selected && setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: 0.6, fadeOut: 0.6 } : i))}
-                  className="inline-flex w-full items-center gap-2 rounded-md border border-border bg-card px-3 py-2 hover:border-ring/50 disabled:opacity-40">
-                  <RefreshCw className="h-3.5 w-3.5 text-primary" /> Fade suave
-                </button>
+                {!selected && (
+                  <div className="rounded-md border border-dashed border-border bg-card/40 px-2 py-2 text-[10px] text-muted-foreground">
+                    Selecione um clipe na timeline para aplicar uma transição.
+                  </div>
+                )}
+                {TRANSITION_GROUPS.map(group => (
+                  <div key={group.label} className="space-y-1.5">
+                    <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">{group.label}</div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {group.items.map(t => (
+                        <button
+                          key={t.id}
+                          disabled={!selected}
+                          draggable={!!selected}
+                          onDragStart={(e) => { e.dataTransfer.setData("application/x-lle-transition", t.id); e.dataTransfer.effectAllowed = "copy"; }}
+                          onClick={() => selected && setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: t.dur, fadeOut: t.dur, transition: t.id } : i))}
+                          title={t.hint}
+                          className="flex flex-col items-start gap-0.5 rounded-md border border-border bg-card px-2 py-1.5 text-left hover:border-ring/50 disabled:cursor-not-allowed disabled:opacity-40">
+                          <span className="flex items-center gap-1 text-[11px] font-medium leading-tight">
+                            <span aria-hidden>{t.icon}</span>{t.label}
+                          </span>
+                          <span className="text-[9px] text-muted-foreground">{t.dur.toFixed(1)}s</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 

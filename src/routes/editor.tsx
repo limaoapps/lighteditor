@@ -1356,6 +1356,29 @@ function Editor() {
   };
 
   const doExport = async () => {
+    try {
+      console.log("Iniciando exportação...");
+      if (!ffReady) {
+        console.error("FFmpeg ainda não está pronto.");
+        setError("FFmpeg ainda está carregando. Aguarde alguns segundos e tente novamente.");
+        return;
+      }
+      if (!items || items.length === 0) {
+        console.error("Nenhum clipe carregado.");
+        setError("Nenhum clipe carregado.");
+        return;
+      }
+      if (!tracks || tracks.length === 0) {
+        console.error("Nenhuma trilha disponível.");
+        setError("Nenhuma trilha disponível.");
+        return;
+      }
+    } catch (err) {
+      console.error("Erro durante exportação:", err);
+      setError(err instanceof Error ? err.message : "Erro durante exportação");
+      return;
+    }
+
     const v1trackId = tracks.find(t => t.kind === "video")?.id;
     const v1clips = items
       .filter(i => i.trackId === v1trackId && (i.kind === "video" || i.kind === "image"))
@@ -1363,6 +1386,13 @@ function Editor() {
     const audioClips = items.filter(i => i.kind === "audio");
     if (!v1clips.length && !audioClips.length) {
       setError("Adicione pelo menos um vídeo, imagem ou áudio na timeline.");
+      return;
+    }
+    const missingFiles = [...v1clips, ...audioClips].filter(c => !c.file);
+    if (missingFiles.length) {
+      const names = missingFiles.map(c => c.name).join(", ");
+      console.error("Clipes sem arquivo original:", names);
+      setError(`Alguns clipes estão sem arquivo original: ${names}`);
       return;
     }
     // Save retry handle (same settings)

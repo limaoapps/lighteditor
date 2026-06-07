@@ -486,6 +486,7 @@ function* iterAudioChunks(buf: AudioBuffer, chunkFrames: number) {
 
 export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> {
   const { targetW, targetH, fps, vKbps, aKbps, totalDuration, v1clips } = opts;
+  const imageItems: WCItem[] = opts.imageItems ?? [];
   const textItems: WCItem[] = opts.textItems ?? (opts.textItem ? [opts.textItem] : []);
   const log = (m: string) => { opts.onLog?.(m); };
   const msg = (m: string) => { opts.onMessage?.(m); };
@@ -550,7 +551,7 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
   };
 
   // pré-carrega todos sequencialmente (curto)
-  for (const c of v1clips) { try { await loadFor(c); } catch (e) { log(`[wc] load falhou ${c.name}: ${String(e)}`); } }
+  for (const c of [...v1clips, ...imageItems]) { try { await loadFor(c); } catch (e) { log(`[wc] load falhou ${c.name}: ${String(e)}`); } }
 
   const findActive = (t: number) => v1clips.find(c => t >= c.start && t < c.start + (c.outPoint - c.inPoint));
 
@@ -596,6 +597,15 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
       } catch (e) {
         log(`[wc] frame ${f} erro: ${String(e)}`);
       }
+    }
+
+    // overlays de imagem em trilhas superiores (respeita tempo/posição/escala/fade)
+    for (const imgItem of imageItems) {
+      const dur = imgItem.outPoint - imgItem.inPoint;
+      const localT = t - imgItem.start;
+      if (localT < 0 || localT > dur) continue;
+      const el = await loadFor(imgItem);
+      if (el) drawImageOverlay(ctx, el as HTMLImageElement, imgItem, localT, dur, targetW, targetH);
     }
 
     // overlays de texto (múltiplos, respeitando timing/posição/estilo)

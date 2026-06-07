@@ -1127,8 +1127,17 @@ function Editor() {
       const el = audioRefs.current[a.id];
       if (!el) continue;
       const inRange = playhead >= a.start && playhead < a.start + (a.outPoint - a.inPoint);
-      el.muted = !!trackMuted[a.trackId];
-      el.volume = computeVol(a, playhead);
+      const g = attachGraph(a.id, el, a);
+      if (g) {
+        el.volume = 1;
+        g.nodes.setMuted(!!trackMuted[a.trackId]);
+        if (a.audioFx) g.nodes.setFx(a.audioFx);
+        const fade = computeVol(a, playhead);
+        g.nodes.setGain(((a.gainDb ?? 0) + (fade < 0.999 ? 20 * Math.log10(Math.max(0.0001, fade)) : 0)));
+      } else {
+        el.muted = !!trackMuted[a.trackId];
+        el.volume = Math.min(1, computeVol(a, playhead));
+      }
       if (inRange) {
         const target = a.inPoint + (playhead - a.start);
         if (Math.abs(el.currentTime - target) > 0.25) el.currentTime = target;
@@ -1136,7 +1145,8 @@ function Editor() {
         if (!playing && !el.paused) el.pause();
       } else if (!el.paused) el.pause();
     }
-  }, [items, playing, playhead, trackMuted]);
+  }, [items, playing, playhead, trackMuted, attachGraph]);
+
 
   const overlays = items.filter(i =>
     (i.kind === "image" || i.kind === "text") &&

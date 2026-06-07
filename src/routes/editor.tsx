@@ -480,6 +480,12 @@ const TRANSITION_GROUPS: Array<{ label: string; items: TransitionPreset[] }> = [
   },
 ];
 
+const ALL_TRANSITIONS: TransitionPreset[] = TRANSITION_GROUPS.flatMap(g => g.items);
+const getTransitionById = (id?: string): TransitionPreset | undefined =>
+  id ? ALL_TRANSITIONS.find(t => t.id === id) : undefined;
+
+
+
 const QUICK_EFFECTS: { id: string; label: string }[] = [
   { id: "bw", label: "Preto e Branco" },
   { id: "sepia", label: "Sépia" },
@@ -759,6 +765,17 @@ function Editor() {
   const [tracks, setTracks] = useState<Track[]>(INITIAL_TRACKS);
   const [items, setItemsRaw] = useState<TLItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const draggedTransitionRef = useRef<TransitionPreset | null>(null);
+  const [transitionDragHover, setTransitionDragHover] = useState<
+    | { trackId: string; junctionT: number; leftId: string; rightId: string; dur: number; transitionId: string }
+    | null
+  >(null);
+  const [selectedTransition, setSelectedTransition] = useState<
+    { leftId: string; rightId: string } | null
+  >(null);
+  const [transitionPopover, setTransitionPopover] = useState<
+    { leftId: string; rightId: string; x: number; y: number } | null
+  >(null);
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [zoom, setZoom] = useState(40);
@@ -1871,53 +1888,77 @@ function Editor() {
 
 
   // ---- Drag from Media to Timeline ----
-  const onTrackDragOver = (e: React.DragEvent) => {
+  const findNearestJunction = (trackId: string, t: number) => {
+    const trackItems = items.filter(i => i.trackId === trackId).sort((a, b) => a.start - b.start);
+    let left: typeof trackItems[number] | undefined;
+    let right: typeof trackItems[number] | undefined;
+    let bestDist = Infinity;
+    let junctionT = 0;
+    for (let k = 0; k < trackItems.length - 1; k++) {
+      const a = trackItems[k];
+      const b = trackItems[k + 1];
+      const aEnd = a.start + (a.outPoint - a.inPoint);
+      const gap = b.start - aEnd;
+      const j = (aEnd + b.start) / 2;
+      const d = Math.abs(t - j);
+      if (Math.abs(gap) < 0.25 && d < bestDist) { bestDist = d; left = a; right = b; junctionT = j; }
+    }
+    if (left && right) return { left, right, junctionT, dist: bestDist };
+    return null;
+  };
+  const onTrackDragOver = (e: React.DragEvent, trackId?: string) => {
     if (
       e.dataTransfer.types.includes("application/x-vle-media") ||
       e.dataTransfer.types.includes(EFFECT_DND_TYPE) ||
       e.dataTransfer.types.includes("application/x-lle-transition")
     ) {
       e.preventDefault(); e.dataTransfer.dropEffect = "copy";
+      if (trackId && e.dataTransfer.types.includes("application/x-lle-transition")) {
+        const preset = draggedTransitionRef.current;
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const xPx = e.clientX - rect.left;
+        const t = Math.max(0, xPx / zoom);
+        const j = findNearestJunction(trackId, t);
+        if (j && preset) {
+          setTransitionDragHover({
+            trackId, junctionT: j.junctionT, leftId: j.left.id, rightId: j.right.id,
+            dur: preset.dur, transitionId: preset.id,
+          });
+        } else {
+          setTransitionDragHover(null);
+        }
+      }
     }
   };
+  const onTrackDragLeave = () => setTransitionDragHover(null);
   const onTrackDrop = (e: React.DragEvent, trackId: string) => {
     const transitionId = e.dataTransfer.getData("application/x-lle-transition");
     if (transitionId) {
       e.preventDefault();
-      const preset = TRANSITION_GROUPS.flatMap(g => g.items).find(t => t.id === transitionId);
+      setTransitionDragHover(null);
+      draggedTransitionRef.current = null;
+      const preset = getTransitionById(transitionId);
       const dur = preset?.dur ?? 0.6;
       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
       const xPx = e.clientX - rect.left;
       const t = Math.max(0, xPx / zoom);
-      const trackItems = items.filter(i => i.trackId === trackId).sort((a, b) => a.start - b.start);
-      // procura par adjacente cujo ponto de junção esteja perto do drop
-      let left: typeof trackItems[number] | undefined;
-      let right: typeof trackItems[number] | undefined;
-      let bestDist = Infinity;
-      for (let k = 0; k < trackItems.length - 1; k++) {
-        const a = trackItems[k];
-        const b = trackItems[k + 1];
-        const aEnd = a.start + (a.outPoint - a.inPoint);
-        // considera junção quando clipes estão encostados (gap pequeno) e drop próximo da borda
-        const gap = b.start - aEnd;
-        const junction = (aEnd + b.start) / 2;
-        const d = Math.abs(t - junction);
-        if (Math.abs(gap) < 0.25 && d < bestDist) { bestDist = d; left = a; right = b; }
-      }
-      if (left && right) {
+      const j = findNearestJunction(trackId, t);
+      if (j) {
         setItems(p => p.map(i =>
-          i.id === left!.id ? { ...i, fadeOut: dur, transition: transitionId } :
-          i.id === right!.id ? { ...i, fadeIn: dur, transition: transitionId } : i
+          i.id === j.left.id ? { ...i, fadeOut: dur, transition: transitionId } :
+          i.id === j.right.id ? { ...i, fadeIn: dur, transition: transitionId } : i
         ));
+        setSelectedTransition({ leftId: j.left.id, rightId: j.right.id });
         return;
       }
-      // fallback: aplica no clipe sob o cursor
+      const trackItems = items.filter(i => i.trackId === trackId).sort((a, b) => a.start - b.start);
       const hit = trackItems.find(i => t >= i.start && t <= i.start + (i.outPoint - i.inPoint));
       if (hit) {
         setItems(p => p.map(i => i.id === hit.id ? { ...i, fadeIn: dur, fadeOut: dur, transition: transitionId } : i));
       }
       return;
     }
+
     const effectId = e.dataTransfer.getData(EFFECT_DND_TYPE) as TimelineEffectId;
     if (effectId) {
       e.preventDefault();
@@ -2065,11 +2106,9 @@ function Editor() {
             {leftPanel === "transitions" && (
               <div className="space-y-3 text-xs">
                 <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Transições</div>
-                {!selected && (
-                  <div className="rounded-md border border-dashed border-border bg-card/40 px-2 py-2 text-[10px] text-muted-foreground">
-                    Selecione um clipe na timeline para aplicar uma transição.
-                  </div>
-                )}
+                <div className="rounded-md border border-dashed border-border bg-card/40 px-2 py-2 text-[10px] text-muted-foreground">
+                  Arraste uma transição entre dois clipes encostados na timeline. Clique no chip de transição já aplicado para ajustar a duração.
+                </div>
                 {TRANSITION_GROUPS.map(group => (
                   <div key={group.label} className="space-y-1.5">
                     <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">{group.label}</div>
@@ -2077,12 +2116,16 @@ function Editor() {
                       {group.items.map(t => (
                         <button
                           key={t.id}
-                          disabled={!selected}
-                          draggable={!!selected}
-                          onDragStart={(e) => { e.dataTransfer.setData("application/x-lle-transition", t.id); e.dataTransfer.effectAllowed = "copy"; }}
+                          draggable
+                          onDragStart={(e) => {
+                            draggedTransitionRef.current = t;
+                            e.dataTransfer.setData("application/x-lle-transition", t.id);
+                            e.dataTransfer.effectAllowed = "copy";
+                          }}
+                          onDragEnd={() => { draggedTransitionRef.current = null; setTransitionDragHover(null); }}
                           onClick={() => selected && setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: t.dur, fadeOut: t.dur, transition: t.id } : i))}
-                          title={t.hint}
-                          className="flex flex-col items-start gap-0.5 rounded-md border border-border bg-card px-2 py-1.5 text-left hover:border-ring/50 disabled:cursor-not-allowed disabled:opacity-40">
+                          title={selected ? `${t.hint} — clique para aplicar no clipe selecionado, ou arraste entre dois clipes` : `${t.hint} — arraste entre dois clipes na timeline`}
+                          className="flex cursor-grab flex-col items-start gap-0.5 rounded-md border border-border bg-card px-2 py-1.5 text-left hover:border-primary/60 active:cursor-grabbing">
                           <span className="flex items-center gap-1 text-[11px] font-medium leading-tight">
                             <span aria-hidden>{t.icon}</span>{t.label}
                           </span>
@@ -2946,9 +2989,62 @@ function Editor() {
                         <Plus className="h-3 w-3" />
                       </button>
                       <div
-                        onDragOver={onTrackDragOver}
+                        onDragOver={(e) => onTrackDragOver(e, tr.id)}
+                        onDragLeave={onTrackDragLeave}
                         onDrop={(e) => onTrackDrop(e, tr.id)}
                         className="relative flex-1" style={{ backgroundColor: idx % 2 ? "color-mix(in oklab, var(--track) 80%, transparent)" : undefined, opacity: locked ? 0.6 : 1 }}>
+                        {/* Hover preview durante arraste de transição */}
+                        {transitionDragHover && transitionDragHover.trackId === tr.id && (() => {
+                          const preset = getTransitionById(transitionDragHover.transitionId);
+                          const w = Math.max(16, transitionDragHover.dur * zoom);
+                          return (
+                            <>
+                              <div className="pointer-events-none absolute inset-y-0 z-30 rounded-sm border-2 border-dashed border-primary bg-primary/15"
+                                style={{ left: transitionDragHover.junctionT * zoom - w / 2, width: w }} />
+                              <div className="pointer-events-none absolute z-40 -translate-x-1/2 rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground shadow"
+                                style={{ left: transitionDragHover.junctionT * zoom, top: 2 }}>
+                                {preset?.icon} {preset?.label} · {transitionDragHover.dur.toFixed(2)}s
+                              </div>
+                            </>
+                          );
+                        })()}
+                        {/* Chips persistentes de transições aplicadas entre clipes */}
+                        {(() => {
+                          const trackItems = items.filter(i => i.trackId === tr.id).sort((a, b) => a.start - b.start);
+                          const chips: React.ReactNode[] = [];
+                          for (let k = 0; k < trackItems.length - 1; k++) {
+                            const a = trackItems[k];
+                            const b = trackItems[k + 1];
+                            const aEnd = a.start + (a.outPoint - a.inPoint);
+                            const gap = b.start - aEnd;
+                            if (Math.abs(gap) > 0.25) continue;
+                            const hasTrans = ((a.fadeOut ?? 0) > 0.01) && ((b.fadeIn ?? 0) > 0.01);
+                            if (!hasTrans) continue;
+                            const dur = Math.max(a.fadeOut ?? 0, b.fadeIn ?? 0);
+                            const transId = a.transition || b.transition;
+                            const preset = getTransitionById(transId);
+                            const j = (aEnd + b.start) / 2;
+                            const isSel = selectedTransition?.leftId === a.id && selectedTransition?.rightId === b.id;
+                            chips.push(
+                              <button
+                                key={`tr-${a.id}-${b.id}`}
+                                onClick={(ev) => {
+                                  ev.stopPropagation();
+                                  setSelectedTransition({ leftId: a.id, rightId: b.id });
+                                  setTransitionPopover({ leftId: a.id, rightId: b.id, x: ev.clientX, y: ev.clientY });
+                                }}
+                                title={`${preset?.label ?? "Transição"} · ${dur.toFixed(2)}s — clique para ajustar`}
+                                className={`group/tr absolute z-30 flex -translate-x-1/2 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-medium shadow-md transition ${isSel ? "border-primary bg-primary text-primary-foreground" : "border-primary/60 bg-background/95 text-primary hover:bg-primary hover:text-primary-foreground"}`}
+                                style={{ left: j * zoom, top: "50%", transform: "translate(-50%, -50%)" }}>
+                                <span aria-hidden>{preset?.icon ?? "◐"}</span>
+                                <span className="max-w-[70px] truncate">{preset?.label ?? "Transição"}</span>
+                                <span className="font-mono tabular-nums opacity-80">{dur.toFixed(1)}s</span>
+                              </button>,
+                            );
+                          }
+                          return chips;
+                        })()}
+
                         {items.filter(i => i.trackId === tr.id).map(i => {
                           const dur = i.outPoint - i.inPoint;
                           const w = Math.max(20, dur * zoom);
@@ -3062,7 +3158,102 @@ function Editor() {
         </div>
       </div>
 
+      {/* Transition quick-edit popover */}
+      {transitionPopover && (() => {
+        const left = items.find(i => i.id === transitionPopover.leftId);
+        const right = items.find(i => i.id === transitionPopover.rightId);
+        if (!left || !right) return null;
+        const curDur = Math.max(left.fadeOut ?? 0, right.fadeIn ?? 0);
+        const transId = left.transition || right.transition;
+        const preset = getTransitionById(transId);
+        const maxDur = Math.min(
+          5,
+          left.outPoint - left.inPoint,
+          right.outPoint - right.inPoint,
+        );
+        const updateDur = (v: number) => {
+          const d = Math.max(0, Math.min(maxDur, v));
+          setItems(p => p.map(i =>
+            i.id === left.id ? { ...i, fadeOut: d } :
+            i.id === right.id ? { ...i, fadeIn: d } : i
+          ));
+        };
+        const setPreset = (id: string, dur: number) => {
+          const d = Math.max(0, Math.min(maxDur, dur));
+          setItems(p => p.map(i =>
+            i.id === left.id ? { ...i, fadeOut: d, transition: id } :
+            i.id === right.id ? { ...i, fadeIn: d, transition: id } : i
+          ));
+        };
+        const remove = () => {
+          setItems(p => p.map(i =>
+            i.id === left.id ? { ...i, fadeOut: 0, transition: undefined } :
+            i.id === right.id ? { ...i, fadeIn: 0, transition: undefined } : i
+          ));
+          setTransitionPopover(null);
+          setSelectedTransition(null);
+        };
+        return (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="fixed z-50 w-72 rounded-md border border-border bg-popover p-3 text-xs text-popover-foreground shadow-2xl"
+            style={{ left: Math.min(window.innerWidth - 300, transitionPopover.x - 140), top: Math.max(8, transitionPopover.y - 160) }}
+          >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 font-semibold">
+                <span aria-hidden>{preset?.icon ?? "◐"}</span>
+                <span>{preset?.label ?? "Transição"}</span>
+              </div>
+              <button onClick={() => setTransitionPopover(null)} className="rounded p-1 text-muted-foreground hover:bg-accent">
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+            <label className="flex items-center gap-2">
+              <span className="w-14 text-muted-foreground">Duração</span>
+              <input
+                type="range" min={0.05} max={Math.max(0.1, maxDur)} step={0.05} value={curDur}
+                onChange={(e) => updateDur(Number(e.target.value))}
+                className="flex-1 accent-[color:var(--primary)]"
+              />
+              <span className="w-12 text-right font-mono tabular-nums">{curDur.toFixed(2)}s</span>
+            </label>
+            <div className="mt-2 grid grid-cols-4 gap-1">
+              {[0.2, 0.5, 1.0, 2.0].filter(v => v <= maxDur).map(v => (
+                <button key={v} onClick={() => updateDur(v)}
+                  className="rounded border border-border px-1 py-1 text-[10px] hover:border-primary hover:text-primary">
+                  {v}s
+                </button>
+              ))}
+            </div>
+            <div className="mt-3">
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Trocar transição</div>
+              <select
+                value={transId ?? ""}
+                onChange={(e) => {
+                  const p = getTransitionById(e.target.value);
+                  if (p) setPreset(p.id, curDur > 0 ? curDur : p.dur);
+                }}
+                className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
+              >
+                {TRANSITION_GROUPS.map(g => (
+                  <optgroup key={g.label} label={g.label}>
+                    {g.items.map(t => (
+                      <option key={t.id} value={t.id}>{t.icon} {t.label}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+            <button onClick={remove}
+              className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded border border-border bg-background py-1.5 text-[11px] hover:border-destructive hover:text-destructive">
+              <Trash2 className="h-3 w-3" /> Remover transição
+            </button>
+          </div>
+        );
+      })()}
+
       {/* Context menu */}
+
       {ctxMenu && (
         <div
           onClick={(e) => e.stopPropagation()}

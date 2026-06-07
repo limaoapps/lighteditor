@@ -3051,36 +3051,22 @@ function Editor() {
               <div className="md:col-span-2">
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Motor de exportação</label>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
-                  {([
-                    { k: "auto", label: "Automático", hint: "Usa hardware quando disponível, senão WASM" },
-                    { k: "webcodecs", label: "WebCodecs (Hardware)", hint: "NVENC/QuickSync/VideoToolbox · até 20× mais rápido" },
-                    { k: "wasm", label: "FFmpeg WASM (Software)", hint: "Compatível com todos os navegadores" },
-                  ] as const).map(o => {
-                    const disabled = o.k === "webcodecs" && webcodecsAvailable === false;
-                    return (
-                      <button key={o.k} onClick={() => setExportEngine(o.k)} title={o.hint} disabled={disabled}
-                        className={`rounded-md border px-3 py-1.5 text-xs ${exportEngine === o.k ? "border-primary bg-primary/15 text-primary" : "border-border bg-background hover:border-ring/50"} ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}>
-                        {o.label}
-                      </button>
-                    );
-                  })}
+                  <span className="rounded-md border border-primary bg-primary/15 px-3 py-1.5 text-xs text-primary">
+                    WebCodecs (Hardware) — NVENC/QuickSync/VideoToolbox
+                  </span>
                   <span className="ml-auto text-[11px] text-muted-foreground">
                     {webcodecsAvailable === null ? "Detectando suporte..." :
-                      webcodecsAvailable ? `WebCodecs disponível${webcodecsProbeInfo ? ` · ${webcodecsProbeInfo}` : ""}` :
-                      `WebCodecs indisponível${webcodecsProbeInfo ? ` · ${webcodecsProbeInfo}` : ""}`}
+                      webcodecsAvailable ? `Disponível${webcodecsProbeInfo ? ` · ${webcodecsProbeInfo}` : ""}` :
+                      `Indisponível neste navegador${webcodecsProbeInfo ? ` · ${webcodecsProbeInfo}` : ""}`}
                   </span>
                 </div>
               </div>
-
-
 
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Codec de vídeo</label>
                 <select value={exportCodec} onChange={(e) => setExportCodec(e.target.value as Codec)}
                   className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm">
                   <option value="h264">H.264 (Recomendado)</option>
-                  <option value="h265">H.265 / HEVC — indisponível no WASM</option>
-                  <option value="vp9">VP9 — indisponível no WASM</option>
                 </select>
               </div>
               <div>
@@ -3125,13 +3111,9 @@ function Editor() {
               </div>
 
               <div className="md:col-span-2 rounded-md border border-border bg-background/60 p-3">
-                <label className="flex cursor-pointer items-center gap-2 text-sm">
-                  <input type="checkbox" checked={useGpu} onChange={(e) => setUseGpu(e.target.checked)} />
-                  <Cpu className="h-4 w-4" /> Usar aceleração por hardware (GPU)
-                </label>
-                <div className="mt-1 flex items-start gap-1.5 text-[11px] text-muted-foreground">
+                <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
                   <Info className="mt-0.5 h-3 w-3 shrink-0" />
-                  <span>Detectado: <span className="text-foreground">{(gpuInfoRef.current?.vendor) ?? "GPU não detectada"}</span>. O FFmpeg WASM roda no navegador e não acessa NVENC/QSV/VCE — o encode será feito em CPU automaticamente.</span>
+                  <span>Renderização 100% via WebCodecs. GPU detectada: <span className="text-foreground">{gpuInfoRef.current?.vendor ?? "—"}</span>. A aceleração por hardware (NVENC/QuickSync/VideoToolbox) é usada automaticamente quando disponível.</span>
                 </div>
               </div>
 

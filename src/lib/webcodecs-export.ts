@@ -69,6 +69,7 @@ export type WCItem = {
     strokeWidth?: number;
   };
   transform?: { xPct?: number; yPct?: number; scale?: number; rotation?: number };
+  zIndex?: number;
 };
 
 export type WCExportOptions = {
@@ -279,9 +280,11 @@ function computeZoomScale(fx: WCItem["fx"] | undefined, localT: number, dur: num
   return fx.zoom.dir === "in" ? 1 + speedMul * p : 1 + speedMul * (1 - p);
 }
 
-function drawImageOverlay(
+function drawVisualOverlay(
   ctx: OffscreenCanvasRenderingContext2D,
-  img: HTMLImageElement,
+  source: CanvasImageSource,
+  sourceW: number,
+  sourceH: number,
   item: WCItem,
   localT: number,
   dur: number,
@@ -289,8 +292,8 @@ function drawImageOverlay(
   targetH: number,
   layer: "background" | "foreground" | "both" = "both",
 ) {
-  const srcW = img.naturalWidth || item.width || targetW;
-  const srcH = img.naturalHeight || item.height || targetH;
+  const srcW = sourceW || item.width || targetW;
+  const srcH = sourceH || item.height || targetH;
   if (srcW <= 0 || srcH <= 0) return;
   const ar = srcW / srcH;
   let boxH = targetH * 0.6;
@@ -306,14 +309,14 @@ function drawImageOverlay(
     ctx.save();
     ctx.globalAlpha = op;
     if (item.fx.fillMode === "blur") {
-      drawSoftCover(ctx, img, srcW, srcH, targetW, targetH, blurCanvasPx(item.fx, targetH));
+      drawSoftCover(ctx, source, srcW, srcH, targetW, targetH, blurCanvasPx(item.fx, targetH));
     } else {
       const cover = Math.max(targetW / srcW, targetH / srcH) * 1.06;
       const bgW = srcW * cover;
       const bgH = srcH * cover;
       ctx.translate(targetW, 0);
       ctx.scale(-1, 1);
-      ctx.drawImage(img, (targetW - bgW) / 2, (targetH - bgH) / 2, bgW, bgH);
+      ctx.drawImage(source, (targetW - bgW) / 2, (targetH - bgH) / 2, bgW, bgH);
     }
     ctx.restore();
   }
@@ -327,7 +330,7 @@ function drawImageOverlay(
   ctx.scale(scale, scale);
   const blurPx = itemBlurPx(item.fx, targetH);
   try { (ctx as unknown as { filter: string }).filter = blurPx > 0 ? `blur(${blurPx}px)` : "none"; } catch { /* ignore */ }
-  ctx.drawImage(img, -boxW / 2, -boxH / 2, boxW, boxH);
+  ctx.drawImage(source, -boxW / 2, -boxH / 2, boxW, boxH);
   try { (ctx as unknown as { filter: string }).filter = "none"; } catch { /* ignore */ }
   ctx.restore();
 }

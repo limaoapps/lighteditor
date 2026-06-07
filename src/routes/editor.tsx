@@ -9,6 +9,17 @@ import {
   Settings as SettingsIcon, FileText, RefreshCw, Cpu, Info, Magnet,
 } from "lucide-react";
 import { getFFmpeg, fetchFile, resetFFmpeg } from "@/lib/ffmpeg-client";
+import {
+  DEFAULT_AUDIO_FX as DEFAULT_AUDIO_FX_REF,
+  EQ_BANDS,
+  buildAudioFxGraph,
+  buildAudioFilterChain,
+  type AudioFx,
+  type AudioFxNodes,
+  type ReverbPreset,
+  type Ambience,
+  type ChannelMode,
+} from "@/lib/audio-fx";
 
 export const Route = createFileRoute("/editor")({
   head: () => ({

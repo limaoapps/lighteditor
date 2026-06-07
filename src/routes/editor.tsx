@@ -446,21 +446,25 @@ function ffmpegColor(hex: string | undefined) {
   return /^[0-9a-fA-F]{6}$/.test(safe) ? `0x${safe}` : "black";
 }
 
-function blurSigma(fx: Fx | undefined) {
+function exportBlurScale(targetH: number) {
+  return Math.max(1, Math.min(6, targetH / 360));
+}
+
+function blurSigma(fx: Fx | undefined, targetH: number) {
   const v = fx?.blurBg ?? 30;
   // Mantém a exportação com a mesma intensidade visual do preview.
   const n = v / 100;
-  return Math.max(0.3, Math.min(64, +(n * n * 56 + n * 8).toFixed(2)));
+  return Math.max(0.3, Math.min(160, +((n * n * 56 + n * 8) * exportBlurScale(targetH)).toFixed(2)));
 }
 
-function visualBlurSigma(fx: Fx | undefined) {
+function visualBlurSigma(fx: Fx | undefined, targetH: number) {
   const v = Math.max(0, Math.min(100, fx?.blur ?? 0));
-  return v <= 0 ? 0 : Math.max(0.2, Math.min(28, +(v * 0.25).toFixed(2)));
+  return v <= 0 ? 0 : Math.max(0.2, Math.min(120, +(v * 0.45 * exportBlurScale(targetH)).toFixed(2)));
 }
 
 function exportVideoFilter(c: TLItem, targetW: number, targetH: number) {
   const fx = c.fx;
-  const visualBlur = visualBlurSigma(fx);
+  const visualBlur = visualBlurSigma(fx, targetH);
   const fgFx = visualBlur > 0 ? `,gblur=sigma=${visualBlur.toFixed(1)}:steps=1` : "";
   if (!fx || fx.fillMode === "bars") {
     return { type: "vf" as const, value: `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:color=black${fgFx},fps=30,setsar=1` };
@@ -473,7 +477,7 @@ function exportVideoFilter(c: TLItem, targetW: number, targetH: number) {
   }
   const bgCore = `scale=${targetW}:${targetH}:force_original_aspect_ratio=increase,crop=${targetW}:${targetH}`;
   const bgFx = fx.fillMode === "blur"
-    ? `${bgCore},gblur=sigma=${blurSigma(fx).toFixed(1)}:steps=2`
+    ? `${bgCore},gblur=sigma=${blurSigma(fx, targetH).toFixed(1)}:steps=3`
     : `${bgCore},hflip`;
   return {
     type: "filter_complex" as const,
@@ -1931,12 +1935,12 @@ function Editor() {
           it.fadeOut && it.fadeOut > 0.01 ? `fade=t=out:st=${Math.max(it.start, end - it.fadeOut).toFixed(3)}:d=${it.fadeOut.toFixed(3)}:alpha=1` : null,
         ].filter(Boolean).join(",");
         const inputLabel = it.fx?.fillMode === "blur" || it.fx?.fillMode === "mirror" ? `ovsrc${idx}` : `${ov.index}:v`;
-        const overlayBlur = visualBlurSigma(it.fx);
+        const overlayBlur = visualBlurSigma(it.fx, targetH);
         const overlayFx = overlayBlur > 0 ? `,gblur=sigma=${overlayBlur.toFixed(1)}:steps=1` : "";
         if (it.fx?.fillMode === "blur" || it.fx?.fillMode === "mirror") {
           filterParts.push(`[${ov.index}:v]split=2[ovbgsrc${idx}][ovsrc${idx}]`);
           const bgCore = `scale=${targetW}:${targetH}:force_original_aspect_ratio=increase,crop=${targetW}:${targetH}`;
-          const bgFx = it.fx.fillMode === "blur" ? `${bgCore},gblur=sigma=${blurSigma(it.fx).toFixed(1)}:steps=2` : `${bgCore},hflip`;
+          const bgFx = it.fx.fillMode === "blur" ? `${bgCore},gblur=sigma=${blurSigma(it.fx, targetH).toFixed(1)}:steps=3` : `${bgCore},hflip`;
           const bgLabel = `imgbg${idx}`;
           const bgOut = `vbg${idx}`;
           filterParts.push(`[ovbgsrc${idx}]${bgFx},format=rgba,colorchannelmixer=aa=${alpha.toFixed(3)}${fades ? `,${fades}` : ""}[${bgLabel}]`);

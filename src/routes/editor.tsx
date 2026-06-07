@@ -1831,13 +1831,17 @@ function Editor() {
       }
       if (vf.length) finalArgs.push("-vf", vf.join(","));
       if (music) {
-        const mg = dbToGain(music.gainDb ?? 0) * (v1clips.length ? 0.4 : 1.0);
+        const ducker = v1clips.length ? 0.4 : 1.0;
+        const musicChain = buildAudioFilterChain(music.audioFx, music.gainDb ?? 0);
+        // ducker aplicado depois (não somar dB), aloop infinito
+        const musicFilters = [...musicChain, `volume=${ducker.toFixed(3)}`, "aloop=loop=-1:size=2e9"].join(",");
         finalArgs.push(
           "-filter_complex",
-          `[0:a]volume=1[a0];[1:a]volume=${mg.toFixed(3)},aloop=loop=-1:size=2e9[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=0[aout]`,
+          `[0:a]volume=1[a0];[1:a]${musicFilters}[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`,
           "-map", "0:v", "-map", "[aout]",
         );
       }
+
       if (needsReencode) {
         finalArgs.push(...vEncArgs, ...aEncArgs);
       } else {

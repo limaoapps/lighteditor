@@ -691,10 +691,10 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
             }
             const sw = v.videoWidth || targetW;
             const sh = v.videoHeight || targetH;
-            drawClipFrame(ctx, v, sw, sh, targetW, targetH, fill, bg, blurPx, op, itemBlurPx(active.fx, targetH));
+            drawClipFrame(ctx, v, sw, sh, targetW, targetH, fill, bg, blurPx, op, itemBlurPx(active.fx, targetH), active, localT, active.outPoint - active.inPoint);
           } else {
             const img = el as HTMLImageElement;
-            drawClipFrame(ctx, img, img.naturalWidth, img.naturalHeight, targetW, targetH, fill, bg, blurPx, op, itemBlurPx(active.fx, targetH));
+            drawClipFrame(ctx, img, img.naturalWidth, img.naturalHeight, targetW, targetH, fill, bg, blurPx, op, itemBlurPx(active.fx, targetH), active, localT, active.outPoint - active.inPoint);
           }
         }
       } catch (e) {

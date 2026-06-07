@@ -2235,7 +2235,7 @@ function Editor() {
                     src={activeV1Video.url}
                     muted playsInline
                     className="pointer-events-none absolute inset-0 h-full w-full"
-                    style={backgroundFillStyle(fx)}
+                    style={{ ...backgroundFillStyle(fx), zIndex: trackZ(activeV1Video.trackId) - 1 }}
                   />
                 );
               })()}
@@ -2251,13 +2251,15 @@ function Editor() {
                   opacity: op,
                   filter: cssFilter(fx),
                 } : {};
-                return <video ref={videoElRef} className="absolute inset-0 h-full w-full pointer-events-none" muted={false} playsInline style={{ ...style, objectFit: mainObjectFit(fx), zIndex: 2 }} />;
+                const zV = activeV1Video ? trackZ(activeV1Video.trackId) : 2;
+                return <video ref={videoElRef} className="absolute inset-0 h-full w-full pointer-events-none" muted={false} playsInline style={{ ...style, objectFit: mainObjectFit(fx), zIndex: zV }} />;
               })()}
 
               {/* Vignette overlay for V1 video */}
               {(() => {
                 const vs = vignetteStyle(activeV1Video?.fx);
-                return vs ? <div className="pointer-events-none absolute inset-0" style={{ ...vs, zIndex: 2 }} /> : null;
+                const zV = activeV1Video ? trackZ(activeV1Video.trackId) : 2;
+                return vs ? <div className="pointer-events-none absolute inset-0" style={{ ...vs, zIndex: zV }} /> : null;
               })()}
 
               {/* Click-to-select V1 video (transparent layer above video, below overlays) */}
@@ -2265,7 +2267,7 @@ function Editor() {
                 <div
                   onMouseDown={(e) => startMove(activeV1Video.id, e, activeV1Video.transform!)}
                   className="absolute inset-0 cursor-move"
-                  style={{ background: "transparent", zIndex: 3 }}
+                  style={{ background: "transparent", zIndex: trackZ(activeV1Video.trackId) + 0.5 as unknown as number }}
                 />
               )}
 
@@ -2281,12 +2283,16 @@ function Editor() {
                     className="pointer-events-none absolute inset-0 h-full w-full"
                     style={{
                       ...backgroundFillStyle(fx),
-                      zIndex: 3,
+                      zIndex: trackZ(ov.trackId) - 1,
                       opacity: computeVisualOpacity(ov, playhead),
                     }} />
                 );
               })}
-              {overlays.map(ov => {
+              {[...overlays].sort((a, b) => {
+                const ai = videoTrackOrder.map[a.trackId] ?? 99;
+                const bi = videoTrackOrder.map[b.trackId] ?? 99;
+                return bi - ai; // trilhas inferiores primeiro no DOM, V1 por último
+              }).map(ov => {
                 const tr = ov.transform!;
                 const isSel = ov.id === selectedId;
                 if (ov.kind === "image") {
@@ -2303,9 +2309,10 @@ function Editor() {
                     transform: `translate(-50%,-50%) scale(${tr.scale * zScale}) rotate(${tr.rotation}deg)`,
                     cursor: "move",
                     opacity: op,
-                    zIndex: 4,
+                    zIndex: trackZ(ov.trackId),
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
                   };
+
                   return (
                     <div key={ov.id} style={wrap} onMouseDown={(e) => startMove(ov.id, e, tr)}>
                       <img src={ov.url} alt="" draggable={false} className="pointer-events-none h-full w-full object-contain"

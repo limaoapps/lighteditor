@@ -207,6 +207,7 @@ type TLItem = {
   text?: TextProps;
   fadeIn?: number;
   fadeOut?: number;
+  transition?: string;
   gainDb?: number;
   audioFx?: AudioFx;
   fx?: Fx;

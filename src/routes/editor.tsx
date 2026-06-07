@@ -2140,7 +2140,7 @@ function Editor() {
                 if (!fx || !hasBackgroundFill(fx)) return null;
                 return (
                   <video
-                    key={`bg-${activeV1Video.id}-${fx.fillMode}`}
+                    key={`bg-${activeV1Video.id}-${fx.fillMode}-${fx.blurBg}`}
                     ref={videoBgElRef}
                     src={activeV1Video.url}
                     muted playsInline

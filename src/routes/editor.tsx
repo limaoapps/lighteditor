@@ -2032,11 +2032,21 @@ function Editor() {
 
   // ---- Drag from Media to Timeline ----
   const onTrackDragOver = (e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes("application/x-vle-media")) {
+    if (e.dataTransfer.types.includes("application/x-vle-media") || e.dataTransfer.types.includes(EFFECT_DND_TYPE)) {
       e.preventDefault(); e.dataTransfer.dropEffect = "copy";
     }
   };
   const onTrackDrop = (e: React.DragEvent, trackId: string) => {
+    const effectId = e.dataTransfer.getData(EFFECT_DND_TYPE) as TimelineEffectId;
+    if (effectId) {
+      e.preventDefault();
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const xPx = e.clientX - rect.left;
+      const t = Math.max(0, xPx / zoom);
+      const target = items.find(i => i.trackId === trackId && t >= i.start && t <= i.start + (i.outPoint - i.inPoint));
+      if (target) applyTimelineEffect(target.id, effectId);
+      return;
+    }
     const id = e.dataTransfer.getData("application/x-vle-media");
     if (!id) return;
     e.preventDefault();

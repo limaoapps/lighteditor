@@ -1122,7 +1122,8 @@ function Editor() {
       } else if (d.type === "resizeL") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
-          const raw = Math.max(0, tSec);
+          let raw = Math.max(0, tSec);
+          if (snapResizeRef.current) raw = Math.max(0, snapToGridRef.current(raw));
           if (d.isImage) {
             const newStart = Math.max(0, Math.min(d.origEnd - 0.1, raw));
             return { ...i, start: newStart, inPoint: 0, outPoint: d.origEnd - newStart };
@@ -1135,9 +1136,12 @@ function Editor() {
       } else if (d.type === "resizeR") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
-          const raw = Math.max(i.start + 0.1, tSec);
-          const cap = i.kind === "image" ? 24 * 3600 : i.sourceDuration;
-          const newOut = Math.max(i.inPoint + 0.1, Math.min(cap, raw - i.start + i.inPoint));
+          let raw = Math.max(i.start + 0.1, tSec);
+          if (snapResizeRef.current) raw = Math.max(i.start + 0.1, snapToGridRef.current(raw));
+          raw = Math.min(MAX_PROJECT_SEC, raw);
+          const sourceCap = i.kind === "image" ? MAX_PROJECT_SEC : i.sourceDuration;
+          const maxOut = Math.min(sourceCap, i.inPoint + Math.max(0.1, MAX_PROJECT_SEC - i.start));
+          const newOut = Math.max(i.inPoint + 0.1, Math.min(maxOut, raw - i.start + i.inPoint));
           return { ...i, outPoint: newOut };
         }), false);
       } else if (d.type === "fadeIn") {

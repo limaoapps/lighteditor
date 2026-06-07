@@ -72,26 +72,35 @@ const AVC_CODECS = [
   "avc1.42e01f",
 ];
 
-export async function isWebCodecsExportSupported(targetW: number, targetH: number, fps: number, vKbps: number): Promise<{ ok: boolean; codec?: string; hw?: HardwareAcceleration; reason?: string }> {
+export async function isWebCodecsExportSupported(targetW: number, targetH: number, fps: number, vKbps: number): Promise<{ ok: boolean; codec?: string; hw?: HardwareAcceleration; bitrateMode?: "constant" | "variable"; latencyMode?: "quality" | "realtime"; reason?: string }> {
   if (typeof window === "undefined") return { ok: false, reason: "SSR" };
   if (typeof VideoEncoder === "undefined" || typeof AudioEncoder === "undefined") {
     return { ok: false, reason: "WebCodecs indisponível neste navegador" };
   }
   for (const codec of AVC_CODECS) {
     for (const hw of ["prefer-hardware", "no-preference"] as const) {
-      try {
-        const r = await VideoEncoder.isConfigSupported({
-          codec,
-          width: targetW,
-          height: targetH,
-          bitrate: vKbps * 1000,
-          framerate: fps,
-          hardwareAcceleration: hw,
-          avc: { format: "avc" },
-        });
-        if (r?.supported) return { ok: true, codec, hw };
-      } catch {
-        /* try next */
+      // Tenta primeiro com VBR + quality, depois cai para defaults (mais compatível).
+      const variants: Array<{ bitrateMode?: "constant" | "variable"; latencyMode?: "quality" | "realtime" }> = [
+        { bitrateMode: "variable", latencyMode: "quality" },
+        { bitrateMode: "variable" },
+        {},
+      ];
+      for (const v of variants) {
+        try {
+          const r = await VideoEncoder.isConfigSupported({
+            codec,
+            width: targetW,
+            height: targetH,
+            bitrate: vKbps * 1000,
+            framerate: fps,
+            hardwareAcceleration: hw,
+            avc: { format: "avc" },
+            ...v,
+          });
+          if (r?.supported) return { ok: true, codec, hw, ...v };
+        } catch {
+          /* try next */
+        }
       }
     }
   }

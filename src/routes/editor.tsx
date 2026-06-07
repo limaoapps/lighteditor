@@ -1830,15 +1830,19 @@ function Editor() {
               <div className={`pointer-events-none absolute inset-x-0 top-1/2 h-px transition-opacity ${snapH ? "bg-primary opacity-100" : "bg-white/10 opacity-0 group-hover/preview:opacity-30"}`} />
 
               {/* Per-image background fill */}
-              {overlays.filter(ov => ov.kind === "image" && hasBackgroundFill(ov.fx)).map(ov => (
-                <img key={`imgbg-${ov.id}`} src={ov.url} alt="" draggable={false}
-                  className="pointer-events-none absolute inset-0 h-full w-full"
-                  style={{
-                    ...backgroundFillStyle(ov.fx!),
-                    zIndex: 3,
-                    opacity: computeVisualOpacity(ov, playhead),
-                  }} />
-              ))}
+              {overlays.filter(ov => ov.kind === "image" && hasBackgroundFill(ov.fx)).map(ov => {
+                const fx = ov.fx;
+                if (!fx) return null;
+                return (
+                  <img key={`imgbg-${ov.id}`} src={ov.url} alt="" draggable={false}
+                    className="pointer-events-none absolute inset-0 h-full w-full"
+                    style={{
+                      ...backgroundFillStyle(fx),
+                      zIndex: 3,
+                      opacity: computeVisualOpacity(ov, playhead),
+                    }} />
+                );
+              })}
               {overlays.map(ov => {
                 const tr = ov.transform!;
                 const isSel = ov.id === selectedId;

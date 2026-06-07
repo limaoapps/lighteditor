@@ -235,6 +235,13 @@ const IMAGE_MAX_DUR = 3600;
 type Quality = "720" | "1080" | "2160";
 const QUALITY_HEIGHT: Record<Quality, number> = { "720": 720, "1080": 1080, "2160": 2160 };
 
+function computeExportSize(q: Quality, ar: { w: number; h: number }) {
+  const base = QUALITY_HEIGHT[q];
+  const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
+  if (ar.w >= ar.h) return { targetW: even((base * ar.w) / ar.h), targetH: even(base) };
+  return { targetW: even(base), targetH: even((base * ar.h) / ar.w) };
+}
+
 type Codec = "h264" | "h265" | "vp9";
 type BitrateMode = "low" | "medium" | "high" | "custom";
 type AudioBitrate = 128 | 192 | 256 | 320;
@@ -778,6 +785,7 @@ function Editor() {
   >(null);
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [previewFullscreen, setPreviewFullscreen] = useState(false);
   const [zoom, setZoom] = useState(40);
   const [dragExtraSec, setDragExtraSec] = useState(0);
   const [snapResize, setSnapResize] = useState(true);
@@ -842,8 +850,7 @@ function Editor() {
     let cancelled = false;
     (async () => {
       try {
-        const targetH = QUALITY_HEIGHT[quality];
-        const targetW = Math.round((targetH * aspect.w) / aspect.h / 2) * 2;
+        const { targetW, targetH } = computeExportSize(quality, aspect);
         const bitrateGuess = bitrateMode === "custom" ? customBitrate : (targetH >= 2160 ? 35000 : targetH >= 1080 ? 8000 : 5000);
         const { isWebCodecsExportSupported } = await import("@/lib/webcodecs-export");
         const sup = await isWebCodecsExportSupported(targetW, targetH, exportFps, bitrateGuess);
@@ -985,6 +992,7 @@ function Editor() {
   }, []);
 
   const previewBoxRef = useRef<HTMLDivElement>(null);
+  const previewShellRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const tracksAreaRef = useRef<HTMLDivElement>(null);
   const itemsRef = useRef<TLItem[]>(items);
@@ -1016,6 +1024,16 @@ function Editor() {
   }, []);
   const redo = useCallback(() => {
     setItemsRaw(prev => { const nxt = redoStack.current.pop(); if (!nxt) return prev; undoStack.current.push(prev); return nxt; });
+  }, []);
+
+  const togglePreviewFullscreen = useCallback(() => {
+    const el = previewShellRef.current ?? previewBoxRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {});
+    } else {
+      void el.requestFullscreen?.().catch(() => {});
+    }
   }, []);
 
   const selected = items.find(i => i.id === selectedId) ?? null;
@@ -1377,6 +1395,7 @@ function Editor() {
       else if (ctrl && k === "b") { e.preventDefault(); splitAt(playhead); }
       else if (ctrl && k === "c" && selectedId) { e.preventDefault(); copyClip(selectedId); }
       else if (ctrl && k === "v") { e.preventDefault(); pasteClip(); }
+      else if (k === "f" && !ctrl) { e.preventDefault(); togglePreviewFullscreen(); }
       else if (k === "s" && !ctrl) { e.preventDefault(); splitAt(playhead); }
       else if (k === "d" && !ctrl) { e.preventDefault(); splitAt(playhead); }
       else if ((k === "delete" || k === "backspace") && selectedId) { e.preventDefault(); deleteItem(selectedId); }
@@ -1393,13 +1412,19 @@ function Editor() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [splitAt, playhead, undo, redo, selectedId, totalDuration]);
+  }, [splitAt, playhead, undo, redo, selectedId, totalDuration, togglePreviewFullscreen]);
 
   // close context menu on click outside
   useEffect(() => {
     const onClick = () => { setCtxMenu(null); setMediaCtx(null); };
     window.addEventListener("click", onClick);
     return () => window.removeEventListener("click", onClick);
+  }, []);
+
+  useEffect(() => {
+    const sync = () => setPreviewFullscreen(document.fullscreenElement === previewShellRef.current);
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
   }, []);
 
   // ---- Playback clock ----
@@ -1814,8 +1839,7 @@ function Editor() {
 
   // ---- Export ----
   const computedVBitrate = bitrateFromMode(quality, bitrateMode, customBitrate);
-  const exportTargetH = QUALITY_HEIGHT[quality];
-  const exportTargetW = Math.round((exportTargetH * aspect.w) / aspect.h / 2) * 2;
+  const { targetW: exportTargetW, targetH: exportTargetH } = computeExportSize(quality, aspect);
   const estimatedMB = useMemo(
     () => estimateSizeMB(Math.max(1, totalDuration), computedVBitrate, audioBitrate),
     [totalDuration, computedVBitrate, audioBitrate],
@@ -1891,8 +1915,7 @@ function Editor() {
       setExportElapsed((performance.now() - exportStartRef.current) / 1000);
     }, 250) as unknown as number;
 
-    const targetH = QUALITY_HEIGHT[quality];
-    const targetW = Math.round((targetH * aspect.w) / aspect.h / 2) * 2;
+    const { targetW, targetH } = computeExportSize(quality, aspect);
 
     try {
       const { isWebCodecsExportSupported, exportWithWebCodecs } = await import("@/lib/webcodecs-export");
@@ -2115,6 +2138,7 @@ function Editor() {
         <div className="flex items-center gap-2">
           <button onClick={undo} title="Desfazer (Ctrl+Z)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Undo2 className="h-4 w-4" /></button>
           <button onClick={redo} title="Refazer (Ctrl+Y)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Redo2 className="h-4 w-4" /></button>
+          <button onClick={togglePreviewFullscreen} title="Tela cheia do preview (F)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Maximize2 className="h-4 w-4" /></button>
           <div className="mx-2 h-6 w-px bg-border" />
           <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Proporção</label>
           <select value={aspectKey} onChange={(e) => setProjectAspect(e.target.value as AspectKey)}
@@ -2348,12 +2372,15 @@ function Editor() {
 
 
         <main className="flex min-w-0 flex-1 flex-col select-none">
-          <div className="relative flex min-h-0 flex-1 items-center justify-center bg-black/40 p-6 select-none" onWheel={onPreviewWheel}>
+          <div ref={previewShellRef} className="relative flex min-h-0 flex-1 items-center justify-center bg-black/40 p-6 select-none">
             <div ref={previewBoxRef} className="group/preview relative overflow-hidden rounded-lg shadow-2xl select-none"
+              onWheel={onPreviewWheel}
               style={{
                 aspectRatio: `${aspect.w} / ${aspect.h}`,
                 maxHeight: "100%", maxWidth: "100%",
-                width: `min(100%, calc((100vh - 360px) * ${aspect.w} / ${aspect.h}))`,
+                width: previewFullscreen
+                  ? `min(100vw, calc(100vh * ${aspect.w} / ${aspect.h}))`
+                  : `min(100%, calc((100vh - 360px) * ${aspect.w} / ${aspect.h}))`,
                 background: activeV1Video?.fx?.fillMode === "color" ? activeV1Video.fx.bgColor : "#000",
               }}>
               {/* Hidden SVG defs: real sharpen (unsharp-mask convolution) */}

@@ -264,15 +264,17 @@ const EXPORT_PRESETS: Record<ExportPresetKey, ExportPreset> = {
 };
 
 function defaultVBitrate(q: Quality): number {
-  if (q === "720") return 5000;
-  if (q === "1080") return 8000;
-  return 35000;
+  // Bitrates calibrados para H.264 VBR em hardware (similar ao CapCut):
+  // arquivos consideravelmente menores mantendo qualidade visual percebida.
+  if (q === "720") return 2500;
+  if (q === "1080") return 4500;
+  return 16000; // 2160p / 4K
 }
 function bitrateFromMode(q: Quality, mode: BitrateMode, custom: number): number {
   if (mode === "custom") return Math.max(200, custom);
   const base = defaultVBitrate(q);
-  if (mode === "low")    return Math.round(base * 0.55);
-  if (mode === "high")   return Math.round(base * 1.5);
+  if (mode === "low")    return Math.round(base * 0.6);
+  if (mode === "high")   return Math.round(base * 1.6);
   return base; // medium
 }
 function estimateSizeMB(durationSec: number, vKbps: number, aKbps: number): number {

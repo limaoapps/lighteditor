@@ -991,6 +991,7 @@ function Editor() {
   }, []);
 
   const previewBoxRef = useRef<HTMLDivElement>(null);
+  const previewShellRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const tracksAreaRef = useRef<HTMLDivElement>(null);
   const itemsRef = useRef<TLItem[]>(items);
@@ -1022,6 +1023,16 @@ function Editor() {
   }, []);
   const redo = useCallback(() => {
     setItemsRaw(prev => { const nxt = redoStack.current.pop(); if (!nxt) return prev; undoStack.current.push(prev); return nxt; });
+  }, []);
+
+  const togglePreviewFullscreen = useCallback(() => {
+    const el = previewShellRef.current ?? previewBoxRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {});
+    } else {
+      void el.requestFullscreen?.().catch(() => {});
+    }
   }, []);
 
   const selected = items.find(i => i.id === selectedId) ?? null;

@@ -179,6 +179,7 @@ type VignetteMode = "dark" | "light";
 type Fx = {
   brightness: number; contrast: number; saturation: number; temperature: number;
   sharpness: number; exposure: number; shadows: number; highlights: number;
+  blur: number;
   opacity: number;
   preset: string | null;
   blurBg: number;
@@ -318,7 +319,7 @@ function dbToGain(db: number) { return Math.pow(10, db / 20); }
 
 const DEFAULT_FX: Fx = {
   brightness: 0, contrast: 0, saturation: 0, temperature: 0,
-  sharpness: 0, exposure: 0, shadows: 0, highlights: 0,
+  sharpness: 0, exposure: 0, shadows: 0, highlights: 0, blur: 0,
   opacity: 100, preset: null, blurBg: 30, fillMode: "bars",
   bgColor: "#000000", zoom: null,
   vignette: 0, vignetteSize: 50, vignetteMode: "dark",
@@ -326,8 +327,16 @@ const DEFAULT_FX: Fx = {
 
 const FX_DEFAULT_VAL: Record<string, number> = {
   brightness: 0, contrast: 0, saturation: 0, temperature: 0,
-  sharpness: 0, exposure: 0, shadows: 0, highlights: 0, opacity: 100,
+  sharpness: 0, exposure: 0, shadows: 0, highlights: 0, blur: 0, opacity: 100,
 };
+
+type LeftPanel = "media" | "titles" | "transitions" | "effects";
+type TimelineEffectId = "blur" | "background-blur";
+const EFFECT_DND_TYPE = "application/x-vle-effect";
+const TIMELINE_EFFECTS: Array<{ id: TimelineEffectId; label: string; hint: string }> = [
+  { id: "blur", label: "Blur", hint: "Desfoque visual do clipe" },
+  { id: "background-blur", label: "Fundo desfocado", hint: "Preenche laterais com fundo borrado" },
+];
 
 const QUICK_EFFECTS: { id: string; label: string }[] = [
   { id: "bw", label: "Preto e Branco" },

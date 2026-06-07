@@ -171,6 +171,45 @@ function seekVideo(v: HTMLVideoElement, t: number): Promise<void> {
   });
 }
 
+function blurCanvasPx(fx?: WCItem["fx"]): number {
+  if (fx?.fillMode !== "blur") return 0;
+  const n = Math.max(0, Math.min(100, fx.blurBg ?? 30)) / 100;
+  return n <= 0 ? 0 : n * n * 56 + n * 8;
+}
+
+function drawSoftCover(
+  ctx: OffscreenCanvasRenderingContext2D,
+  source: CanvasImageSource,
+  srcW: number,
+  srcH: number,
+  targetW: number,
+  targetH: number,
+  blurPx: number,
+) {
+  const intensity = Math.max(0, Math.min(1, blurPx / 64));
+  const downsample = 1 + intensity * 24;
+  const tmpW = Math.max(24, Math.round(targetW / downsample));
+  const tmpH = Math.max(24, Math.round(targetH / downsample));
+  const tmp = new OffscreenCanvas(tmpW, tmpH);
+  const tctx = tmp.getContext("2d")!;
+  const cover = Math.max(tmpW / srcW, tmpH / srcH) * (1.04 + intensity * 0.18);
+  const w = srcW * cover;
+  const h = srcH * cover;
+  const x = (tmpW - w) / 2;
+  const y = (tmpH - h) / 2;
+  tctx.imageSmoothingEnabled = true;
+  tctx.imageSmoothingQuality = "high";
+  tctx.drawImage(source, x, y, w, h);
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  try { (ctx as unknown as { filter: string }).filter = blurPx > 0 ? `blur(${Math.min(18, blurPx / 3)}px)` : "none"; } catch { /* ignore */ }
+  const bleed = Math.ceil(Math.min(targetW, targetH) * 0.04 + blurPx * 0.5);
+  ctx.drawImage(tmp, -bleed, -bleed, targetW + bleed * 2, targetH + bleed * 2);
+  try { (ctx as unknown as { filter: string }).filter = "none"; } catch { /* ignore */ }
+  ctx.restore();
+}
+
 function drawClipFrame(
   ctx: OffscreenCanvasRenderingContext2D,
   source: CanvasImageSource,
@@ -195,25 +234,7 @@ function drawClipFrame(
     const w = srcW * cover, h = srcH * cover;
     const x = (targetW - w) / 2, y = (targetH - h) / 2;
     if (fillMode === "blur") {
-      // Blur robusto sem depender de ctx.filter: downscale agressivo + upscale suavizado.
-      // Quanto maior o blurPx, menor o canvas intermediário (mais borrão).
-      const baseW = 64;
-      const small = Math.max(16, Math.round(baseW - Math.min(48, blurPx)));
-      const ratio = srcH / Math.max(1, srcW);
-      const tmpW = small;
-      const tmpH = Math.max(8, Math.round(small * ratio));
-      const tmp = new OffscreenCanvas(tmpW, tmpH);
-      const tctx = tmp.getContext("2d")!;
-      tctx.imageSmoothingEnabled = true;
-      tctx.imageSmoothingQuality = "high";
-      // Tenta usar ctx.filter no auxiliar quando suportado para suavizar ainda mais
-      try { (tctx as unknown as { filter: string }).filter = `blur(${Math.max(1, Math.min(8, Math.round(blurPx / 4)))}px)`; } catch { /* ignore */ }
-      tctx.drawImage(source, 0, 0, tmpW, tmpH);
-      ctx.save();
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(tmp, x, y, w, h);
-      ctx.restore();
+      drawSoftCover(ctx, source, srcW, srcH, targetW, targetH, blurPx);
     } else {
       // mirror
       ctx.save();
@@ -253,6 +274,7 @@ function drawImageOverlay(
   dur: number,
   targetW: number,
   targetH: number,
+  layer: "background" | "foreground" | "both" = "both",
 ) {
   const srcW = img.naturalWidth || item.width || targetW;
   const srcH = img.naturalHeight || item.height || targetH;
@@ -266,6 +288,24 @@ function drawImageOverlay(
   const scale = (item.transform?.scale ?? 1) * computeZoomScale(item.fx, localT, dur);
   const rot = ((item.transform?.rotation ?? 0) * Math.PI) / 180;
   const op = computeOpacity(item, localT);
+
+  if ((layer === "background" || layer === "both") && (item.fx?.fillMode === "blur" || item.fx?.fillMode === "mirror")) {
+    ctx.save();
+    ctx.globalAlpha = op;
+    if (item.fx.fillMode === "blur") {
+      drawSoftCover(ctx, img, srcW, srcH, targetW, targetH, blurCanvasPx(item.fx));
+    } else {
+      const cover = Math.max(targetW / srcW, targetH / srcH) * 1.06;
+      const bgW = srcW * cover;
+      const bgH = srcH * cover;
+      ctx.translate(targetW, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, (targetW - bgW) / 2, (targetH - bgH) / 2, bgW, bgH);
+    }
+    ctx.restore();
+  }
+
+  if (layer === "background") return;
 
   ctx.save();
   ctx.globalAlpha = op;
@@ -586,7 +626,7 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
       const srcT = active.inPoint + localT;
       const fill = active.fx?.fillMode ?? "bars";
       const bg = active.fx?.bgColor ?? "#000000";
-      const blurPx = active.fx?.fillMode === "blur" ? Math.max(0, Math.min(40, (active.fx.blurBg ?? 30) / 3)) : 0;
+      const blurPx = blurCanvasPx(active.fx);
       const op = computeOpacity(active, localT);
 
       try {
@@ -614,13 +654,23 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
       }
     }
 
+    // fundos desfocados/espelhados das imagens sobrepostas ficam atrás dos objetos principais
+    for (const imgItem of imageItems) {
+      const dur = imgItem.outPoint - imgItem.inPoint;
+      const localT = t - imgItem.start;
+      if (localT < 0 || localT > dur) continue;
+      if (imgItem.fx?.fillMode !== "blur" && imgItem.fx?.fillMode !== "mirror") continue;
+      const el = await loadFor(imgItem);
+      if (el) drawImageOverlay(ctx, el as HTMLImageElement, imgItem, localT, dur, targetW, targetH, "background");
+    }
+
     // overlays de imagem em trilhas superiores (respeita tempo/posição/escala/fade)
     for (const imgItem of imageItems) {
       const dur = imgItem.outPoint - imgItem.inPoint;
       const localT = t - imgItem.start;
       if (localT < 0 || localT > dur) continue;
       const el = await loadFor(imgItem);
-      if (el) drawImageOverlay(ctx, el as HTMLImageElement, imgItem, localT, dur, targetW, targetH);
+      if (el) drawImageOverlay(ctx, el as HTMLImageElement, imgItem, localT, dur, targetW, targetH, "foreground");
     }
 
     // overlays de texto (múltiplos, respeitando timing/posição/estilo)

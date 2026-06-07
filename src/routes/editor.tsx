@@ -404,9 +404,9 @@ function hasBackgroundFill(fx?: Fx): boolean {
 
 function blurCssPx(fx: Fx): number {
   if (fx.fillMode !== "blur" || fx.blurBg <= 0) return 0;
-  // Suave: 1 -> ~0.3px, 50 -> ~15px, 100 -> ~40px (curva quadrática leve)
+  // Forte e perceptível: 1 -> ~0.6px, 50 -> ~18px, 100 -> ~64px.
   const n = fx.blurBg / 100;
-  return Math.max(0.3, +(n * n * 36 + n * 4).toFixed(2));
+  return Math.max(0.6, +(n * n * 56 + n * 8).toFixed(2));
 }
 
 function mainObjectFit(fx?: Fx): React.CSSProperties["objectFit"] {
@@ -416,6 +416,7 @@ function mainObjectFit(fx?: Fx): React.CSSProperties["objectFit"] {
 function backgroundFillStyle(fx: Fx): React.CSSProperties {
   const isBlur = fx.fillMode === "blur";
   const blurPx = blurCssPx(fx);
+  const coverScale = isBlur ? 1.08 + Math.min(0.24, blurPx / 260) : 1.04;
   return {
     position: "absolute",
     inset: 0,
@@ -423,7 +424,7 @@ function backgroundFillStyle(fx: Fx): React.CSSProperties {
     height: "100%",
     objectFit: "cover",
     transformOrigin: "center",
-    transform: `${fx.fillMode === "mirror" ? "scaleX(-1) " : ""}scale(${isBlur ? 1.22 : 1.04})`,
+    transform: `${fx.fillMode === "mirror" ? "scaleX(-1) " : ""}scale(${coverScale})`,
     filter: isBlur ? `blur(${blurPx}px)` : undefined,
     willChange: isBlur ? "filter, transform" : "transform",
     zIndex: 0,
@@ -437,9 +438,9 @@ function ffmpegColor(hex: string | undefined) {
 
 function blurSigma(fx: Fx | undefined) {
   const v = fx?.blurBg ?? 30;
-  // Suave: 1 -> ~0.4, 50 -> ~13, 100 -> ~40
+  // Mantém a exportação com a mesma intensidade visual do preview.
   const n = v / 100;
-  return Math.max(0.3, Math.min(50, +(n * n * 36 + n * 4).toFixed(2)));
+  return Math.max(0.3, Math.min(64, +(n * n * 56 + n * 8).toFixed(2)));
 }
 
 function exportVideoFilter(c: TLItem, targetW: number, targetH: number) {
@@ -1884,8 +1885,19 @@ function Editor() {
           it.fadeIn && it.fadeIn > 0.01 ? `fade=t=in:st=${it.start.toFixed(3)}:d=${it.fadeIn.toFixed(3)}:alpha=1` : null,
           it.fadeOut && it.fadeOut > 0.01 ? `fade=t=out:st=${Math.max(it.start, end - it.fadeOut).toFixed(3)}:d=${it.fadeOut.toFixed(3)}:alpha=1` : null,
         ].filter(Boolean).join(",");
+        const inputLabel = it.fx?.fillMode === "blur" || it.fx?.fillMode === "mirror" ? `ovsrc${idx}` : `${ov.index}:v`;
+        if (it.fx?.fillMode === "blur" || it.fx?.fillMode === "mirror") {
+          filterParts.push(`[${ov.index}:v]split=2[ovbgsrc${idx}][ovsrc${idx}]`);
+          const bgCore = `scale=${targetW}:${targetH}:force_original_aspect_ratio=increase,crop=${targetW}:${targetH}`;
+          const bgFx = it.fx.fillMode === "blur" ? `${bgCore},gblur=sigma=${blurSigma(it.fx).toFixed(1)}:steps=2` : `${bgCore},hflip`;
+          const bgLabel = `imgbg${idx}`;
+          const bgOut = `vbg${idx}`;
+          filterParts.push(`[ovbgsrc${idx}]${bgFx},format=rgba,colorchannelmixer=aa=${alpha.toFixed(3)}${fades ? `,${fades}` : ""}[${bgLabel}]`);
+          filterParts.push(`[${videoLabel}][${bgLabel}]overlay=0:0:enable='between(t,${it.start.toFixed(3)},${end.toFixed(3)})'[${bgOut}]`);
+          videoLabel = bgOut;
+        }
         const imgLabel = `img${idx}`;
-        filterParts.push(`[${ov.index}:v]scale=${box.w}:${box.h},format=rgba,colorchannelmixer=aa=${alpha.toFixed(3)}${fades ? `,${fades}` : ""}[${imgLabel}]`);
+        filterParts.push(`[${inputLabel}]scale=${box.w}:${box.h},format=rgba,colorchannelmixer=aa=${alpha.toFixed(3)}${fades ? `,${fades}` : ""}[${imgLabel}]`);
         const out = `vov${idx}`;
         filterParts.push(`[${videoLabel}][${imgLabel}]overlay=${box.x}:${box.y}:enable='between(t,${it.start.toFixed(3)},${end.toFixed(3)})'[${out}]`);
         videoLabel = out;
@@ -2139,7 +2151,7 @@ function Editor() {
                 if (!fx || !hasBackgroundFill(fx)) return null;
                 return (
                   <video
-                    key={`bg-${activeV1Video.id}-${fx.fillMode}`}
+                    key={`bg-${activeV1Video.id}-${fx.fillMode}-${fx.blurBg}`}
                     ref={videoBgElRef}
                     src={activeV1Video.url}
                     muted playsInline

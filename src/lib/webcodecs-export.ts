@@ -515,6 +515,16 @@ async function buildMixedAudio(opts: WCExportOptions, sampleRate: number): Promi
       wireSource(src, c);
       try { src.start(c.start, c.inPoint, c.outPoint - c.inPoint); } catch { /* ignore */ }
     }
+    for (const c of opts.imageItems ?? []) {
+      if (c.kind !== "video" || !c.file || opts.v1clips.some(v => v.id === c.id)) continue;
+      let abuf: AudioBuffer | null = null;
+      try { abuf = await decodeAudio(probe, c.file); } catch { continue; }
+      if (!abuf) continue;
+      const src = ac.createBufferSource();
+      src.buffer = abuf;
+      wireSource(src, c);
+      try { src.start(c.start, c.inPoint, c.outPoint - c.inPoint); } catch { /* ignore */ }
+    }
     if (opts.music?.file) {
       let abuf: AudioBuffer | null = null;
       try { abuf = await decodeAudio(probe, opts.music.file); } catch { abuf = null; }

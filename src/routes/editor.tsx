@@ -773,7 +773,7 @@ function Editor() {
   useEffect(() => { snapResizeRef.current = snapResize; }, [snapResize]);
   const zoomRef = useRef(zoom);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
-  // Snap raw time to grid step (matches ruler tick step). Used during resize when enabled.
+  // Snap raw time to nearby grid/item edges without forcing fixed increments.
   const snapToGrid = useCallback((t: number) => {
     const z = zoomRef.current;
     const step = z < 20 ? 10 : z < 40 ? 5 : z < 80 ? 2 : 1;
@@ -1123,7 +1123,7 @@ function Editor() {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
           let raw = Math.max(0, tSec);
-          if (snapResizeRef.current) raw = Math.max(0, snapToGridRef.current(raw));
+          if (snapResizeRef.current) raw = Math.max(0, snapTimeRef.current(raw, d.id));
           if (d.isImage) {
             const newStart = Math.max(0, Math.min(d.origEnd - 0.1, raw));
             return { ...i, start: newStart, inPoint: 0, outPoint: d.origEnd - newStart };
@@ -1137,7 +1137,7 @@ function Editor() {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
           let raw = Math.max(i.start + 0.1, tSec);
-          if (snapResizeRef.current) raw = Math.max(i.start + 0.1, snapToGridRef.current(raw));
+          if (snapResizeRef.current) raw = Math.max(i.start + 0.1, snapTimeRef.current(raw, d.id));
           raw = Math.min(MAX_PROJECT_SEC, raw);
           const sourceCap = i.kind === "image" ? MAX_PROJECT_SEC : i.sourceDuration;
           const maxOut = Math.min(sourceCap, i.inPoint + Math.max(0.1, MAX_PROJECT_SEC - i.start));

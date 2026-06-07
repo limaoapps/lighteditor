@@ -412,6 +412,73 @@ const TIMELINE_EFFECTS: Array<{ id: TimelineEffectId; label: string; hint: strin
   { id: "background-blur", label: "Fundo desfocado", hint: "Preenche laterais com fundo borrado" },
 ];
 
+type TransitionPreset = { id: string; label: string; hint: string; dur: number; icon: string };
+const TRANSITION_GROUPS: Array<{ label: string; items: TransitionPreset[] }> = [
+  {
+    label: "Fade / Dissolve",
+    items: [
+      { id: "fade", label: "Fade", hint: "Fade in/out suave", dur: 0.6, icon: "◐" },
+      { id: "cross-dissolve", label: "Cross Dissolve", hint: "Dissolve cruzada entre clipes", dur: 0.8, icon: "✕" },
+      { id: "fade-black", label: "Fade to Black", hint: "Escurece até preto", dur: 0.8, icon: "■" },
+      { id: "fade-white", label: "Fade to White", hint: "Clareia até branco", dur: 0.8, icon: "□" },
+      { id: "dip-color", label: "Dip to Color", hint: "Mergulha em cor sólida", dur: 0.8, icon: "◆" },
+      { id: "film-dissolve", label: "Film Dissolve", hint: "Dissolve fílmica suave", dur: 1.0, icon: "❍" },
+    ],
+  },
+  {
+    label: "Movimento",
+    items: [
+      { id: "slide-left", label: "Slide Esquerda", hint: "Desliza para a esquerda", dur: 0.5, icon: "⇠" },
+      { id: "slide-right", label: "Slide Direita", hint: "Desliza para a direita", dur: 0.5, icon: "⇢" },
+      { id: "slide-up", label: "Slide Cima", hint: "Desliza para cima", dur: 0.5, icon: "⇡" },
+      { id: "slide-down", label: "Slide Baixo", hint: "Desliza para baixo", dur: 0.5, icon: "⇣" },
+      { id: "push-left", label: "Push Esquerda", hint: "Empurra o clipe anterior", dur: 0.5, icon: "⇇" },
+      { id: "push-right", label: "Push Direita", hint: "Empurra o clipe anterior", dur: 0.5, icon: "⇉" },
+      { id: "whip-pan", label: "Whip Pan", hint: "Movimento rápido com borrão", dur: 0.4, icon: "⌇" },
+    ],
+  },
+  {
+    label: "Wipe",
+    items: [
+      { id: "wipe-left", label: "Wipe Esquerda", hint: "Revela da direita p/ esquerda", dur: 0.5, icon: "◧" },
+      { id: "wipe-right", label: "Wipe Direita", hint: "Revela da esquerda p/ direita", dur: 0.5, icon: "◨" },
+      { id: "wipe-up", label: "Wipe Cima", hint: "Revela de baixo p/ cima", dur: 0.5, icon: "⬒" },
+      { id: "wipe-down", label: "Wipe Baixo", hint: "Revela de cima p/ baixo", dur: 0.5, icon: "⬓" },
+      { id: "wipe-clock", label: "Wipe Radial", hint: "Revela em sentido horário", dur: 0.7, icon: "◴" },
+      { id: "wipe-diagonal", label: "Wipe Diagonal", hint: "Revela na diagonal", dur: 0.6, icon: "◰" },
+    ],
+  },
+  {
+    label: "Iris / Forma",
+    items: [
+      { id: "iris-in", label: "Iris In", hint: "Círculo abrindo", dur: 0.6, icon: "○" },
+      { id: "iris-out", label: "Iris Out", hint: "Círculo fechando", dur: 0.6, icon: "●" },
+      { id: "circle-open", label: "Circle Open", hint: "Abertura circular", dur: 0.6, icon: "◯" },
+      { id: "circle-close", label: "Circle Close", hint: "Fechamento circular", dur: 0.6, icon: "⬤" },
+    ],
+  },
+  {
+    label: "Zoom / Escala",
+    items: [
+      { id: "zoom-in", label: "Zoom In", hint: "Aproxima o clipe", dur: 0.5, icon: "⊕" },
+      { id: "zoom-out", label: "Zoom Out", hint: "Afasta o clipe", dur: 0.5, icon: "⊖" },
+      { id: "zoom-blur", label: "Zoom Blur", hint: "Zoom com desfoque", dur: 0.6, icon: "❂" },
+      { id: "spin", label: "Spin", hint: "Rotação rápida", dur: 0.5, icon: "↻" },
+    ],
+  },
+  {
+    label: "Estilo",
+    items: [
+      { id: "blur-trans", label: "Blur", hint: "Transição com desfoque", dur: 0.6, icon: "❄" },
+      { id: "glitch", label: "Glitch", hint: "Distorção digital", dur: 0.4, icon: "⚡" },
+      { id: "light-leak", label: "Light Leak", hint: "Vazamento de luz", dur: 0.7, icon: "✺" },
+      { id: "film-burn", label: "Film Burn", hint: "Queima de película", dur: 0.7, icon: "✷" },
+      { id: "luma-fade", label: "Luma Fade", hint: "Fade por luminância", dur: 0.6, icon: "☼" },
+      { id: "pixelate", label: "Pixelate", hint: "Pixeliza a transição", dur: 0.5, icon: "▦" },
+    ],
+  },
+];
+
 const QUICK_EFFECTS: { id: string; label: string }[] = [
   { id: "bw", label: "Preto e Branco" },
   { id: "sepia", label: "Sépia" },

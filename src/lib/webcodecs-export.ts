@@ -262,6 +262,8 @@ function drawClipFrame(
 
   // foreground — applies the same transform (xPct/yPct/scale/rotation/zoom) used in preview,
   // so the exported frame matches exactly what the user enquadrou.
+  // WYSIWYG: o `previewBox` (vindo do editor) é o ÚNICO source-of-truth do tamanho visível.
+  // O AR da fonte é respeitado dentro dele (object-fit: contain virtual) p/ nunca esticar.
   ctx.save();
   ctx.globalAlpha = Math.max(0, Math.min(1, opacity));
   const xPct = item?.transform?.xPct ?? 50;
@@ -280,9 +282,16 @@ function drawClipFrame(
   if (fillMode === "stretch") {
     ctx.drawImage(source, -targetW / 2, -targetH / 2, targetW, targetH);
   } else if (previewBox) {
-    const w = (previewBox.wPct / 100) * targetW;
-    const h = (previewBox.hPct / 100) * targetH;
-    ctx.drawImage(source, -w / 2, -h / 2, w, h);
+    // Caixa de destino em pixels do canvas final.
+    const boxW = (previewBox.wPct / 100) * targetW;
+    const boxH = (previewBox.hPct / 100) * targetH;
+    // Inscreve a fonte no box mantendo seu AR (idêntico a object-fit: contain do preview).
+    const srcAR = srcW / Math.max(1, srcH);
+    const boxAR = boxW / Math.max(1, boxH);
+    let drawW: number, drawH: number;
+    if (srcAR >= boxAR) { drawW = boxW; drawH = boxW / srcAR; }
+    else { drawH = boxH; drawW = boxH * srcAR; }
+    ctx.drawImage(source, -drawW / 2, -drawH / 2, drawW, drawH);
   } else {
     const contain = Math.min(targetW / srcW, targetH / srcH);
     const w = srcW * contain, h = srcH * contain;
@@ -356,7 +365,13 @@ function drawVisualOverlay(
   ctx.scale(scale, scale);
   const blurPx = itemBlurPx(item.fx, targetH);
   try { (ctx as unknown as { filter: string }).filter = blurPx > 0 ? `blur(${blurPx}px)` : "none"; } catch { /* ignore */ }
-  ctx.drawImage(source, -boxW / 2, -boxH / 2, boxW, boxH);
+  // WYSIWYG: inscreve a fonte no box preservando seu AR (object-fit: contain virtual).
+  const srcARo = srcW / Math.max(1, srcH);
+  const boxARo = boxW / Math.max(1, boxH);
+  let drawWo: number, drawHo: number;
+  if (srcARo >= boxARo) { drawWo = boxW; drawHo = boxW / srcARo; }
+  else { drawHo = boxH; drawWo = boxH * srcARo; }
+  ctx.drawImage(source, -drawWo / 2, -drawHo / 2, drawWo, drawHo);
   try { (ctx as unknown as { filter: string }).filter = "none"; } catch { /* ignore */ }
   ctx.restore();
 }

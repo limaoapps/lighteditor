@@ -19,6 +19,9 @@ import {
   type ChannelMode,
 } from "@/lib/audio-fx";
 import { computeItemBounds } from "@/lib/scene-geometry";
+import { PreviewCanvas } from "@/components/editor/PreviewCanvas";
+import type { SceneItem } from "@/lib/scene-renderer";
+import type { CachedMediaItem } from "@/lib/media-cache";
 
 export const Route = createFileRoute("/editor")({
   head: () => ({
@@ -787,6 +790,16 @@ function Editor() {
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [previewFullscreen, setPreviewFullscreen] = useState(false);
+  // WYSIWYG: quando true, mostra a renderização do MESMO motor do export por cima do DOM.
+  // O DOM segue por baixo para manter interações (drag/handles) e o áudio do <video>.
+  const [useCanvasPreview, setUseCanvasPreview] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    const v = window.localStorage.getItem("lle:canvasPreview");
+    return v == null ? true : v === "1";
+  });
+  useEffect(() => {
+    if (typeof window !== "undefined") window.localStorage.setItem("lle:canvasPreview", useCanvasPreview ? "1" : "0");
+  }, [useCanvasPreview]);
   const [zoom, setZoom] = useState(40);
   const [dragExtraSec, setDragExtraSec] = useState(0);
   const [snapResize, setSnapResize] = useState(true);

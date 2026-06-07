@@ -329,8 +329,9 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
 
   // ====== VIDEO ENCODER ======
   let vEncError: unknown = null;
+  let videoChunksOut = 0;
   const vEnc: VideoEncoder = new VideoEncoder({
-    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+    output: (chunk, meta) => { videoChunksOut++; muxer.addVideoChunk(chunk, meta); },
     error: (e: unknown) => { vEncError = e; log(`[wc] vEnc erro: ${String(e)}`); },
   });
   const configBase: VideoEncoderConfig = {

@@ -172,15 +172,19 @@ function seekVideo(v: HTMLVideoElement, t: number): Promise<void> {
   });
 }
 
-function blurCanvasPx(fx?: WCItem["fx"]): number {
-  if (fx?.fillMode !== "blur") return 0;
-  const n = Math.max(0, Math.min(100, fx.blurBg ?? 30)) / 100;
-  return n <= 0 ? 0 : n * n * 56 + n * 8;
+function exportBlurScale(targetH: number): number {
+  return Math.max(1, Math.min(6, targetH / 360));
 }
 
-function itemBlurPx(fx?: WCItem["fx"]): number {
+function blurCanvasPx(fx?: WCItem["fx"], targetH: number = 720): number {
+  if (fx?.fillMode !== "blur") return 0;
+  const n = Math.max(0, Math.min(100, fx.blurBg ?? 30)) / 100;
+  return n <= 0 ? 0 : (n * n * 56 + n * 8) * exportBlurScale(targetH);
+}
+
+function itemBlurPx(fx?: WCItem["fx"], targetH: number = 720): number {
   const n = Math.max(0, Math.min(100, fx?.blur ?? 0));
-  return n <= 0 ? 0 : Math.max(0.2, n * 0.45);
+  return n <= 0 ? 0 : Math.max(0.2, n * 0.45 * exportBlurScale(targetH));
 }
 
 function drawSoftCover(
@@ -302,7 +306,7 @@ function drawImageOverlay(
     ctx.save();
     ctx.globalAlpha = op;
     if (item.fx.fillMode === "blur") {
-      drawSoftCover(ctx, img, srcW, srcH, targetW, targetH, blurCanvasPx(item.fx));
+      drawSoftCover(ctx, img, srcW, srcH, targetW, targetH, blurCanvasPx(item.fx, targetH));
     } else {
       const cover = Math.max(targetW / srcW, targetH / srcH) * 1.06;
       const bgW = srcW * cover;
@@ -321,7 +325,8 @@ function drawImageOverlay(
   ctx.translate(x, y);
   if (rot) ctx.rotate(rot);
   ctx.scale(scale, scale);
-  try { (ctx as unknown as { filter: string }).filter = itemBlurPx(item.fx) > 0 ? `blur(${itemBlurPx(item.fx)}px)` : "none"; } catch { /* ignore */ }
+  const blurPx = itemBlurPx(item.fx, targetH);
+  try { (ctx as unknown as { filter: string }).filter = blurPx > 0 ? `blur(${blurPx}px)` : "none"; } catch { /* ignore */ }
   ctx.drawImage(img, -boxW / 2, -boxH / 2, boxW, boxH);
   try { (ctx as unknown as { filter: string }).filter = "none"; } catch { /* ignore */ }
   ctx.restore();

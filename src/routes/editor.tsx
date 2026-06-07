@@ -2822,33 +2822,8 @@ function Editor() {
                   </div>
                 </details>
 
-                <details className="rounded border border-border/60 bg-background/40">
-                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Zoom Cinematográfico</summary>
-                  <div className="space-y-1.5 px-2 pb-2 pt-1">
-                    <div className="grid grid-cols-3 gap-1">
-                      <button onClick={() => patchFx({ zoom: null })}
-                        className={`rounded border px-1.5 py-1 text-[10px] ${!fx.zoom ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>Off</button>
-                      <button onClick={() => patchFx({ zoom: { dir: "in", speed: fx.zoom?.speed ?? "med" } })}
-                        className={`rounded border px-1.5 py-1 text-[10px] ${fx.zoom?.dir === "in" ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>Aproximar</button>
-                      <button onClick={() => patchFx({ zoom: { dir: "out", speed: fx.zoom?.speed ?? "med" } })}
-                        className={`rounded border px-1.5 py-1 text-[10px] ${fx.zoom?.dir === "out" ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>Afastar</button>
-                    </div>
-                    {(() => {
-                      const zoomFx = fx.zoom;
-                      if (!zoomFx) return null;
-                      return (
-                        <div className="grid grid-cols-3 gap-1">
-                          {(["slow","med","fast"] as const).map(s => (
-                            <button key={s} onClick={() => patchFx({ zoom: { dir: zoomFx.dir, speed: s } })}
-                              className={`rounded border px-1.5 py-1 text-[10px] ${zoomFx.speed === s ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
-                              {s === "slow" ? "Lenta" : s === "med" ? "Média" : "Rápida"}
-                            </button>
-                          ))}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </details>
+
+
 
                 <details className="rounded border border-border/60 bg-background/40">
                   <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Presets</summary>

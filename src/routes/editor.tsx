@@ -789,6 +789,14 @@ function Editor() {
 
   const [snapH, setSnapH] = useState(false);
   const [snapV, setSnapV] = useState(false);
+  const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(new Set());
+  const [mediaBoxSel, setMediaBoxSel] = useState<
+    | { x1: number; y1: number; x2: number; y2: number; additive: boolean; baseline: Set<string> }
+    | null
+  >(null);
+  const mediaItemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const mediaListRef = useRef<HTMLDivElement | null>(null);
+
 
   const [exporting, setExporting] = useState(false);
   const ffReady = true;

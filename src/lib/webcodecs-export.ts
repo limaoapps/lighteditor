@@ -432,7 +432,8 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
     }
 
     const frame = new VideoFrame(canvas, { timestamp: Math.round((f * 1_000_000) / fps), duration: Math.round(1_000_000 / fps) });
-    const keyFrame = f % Math.max(1, Math.round(fps * 2)) === 0;
+    // GOP maior (keyframe a cada ~5s) reduz bastante o tamanho do MP4
+    const keyFrame = f % Math.max(1, Math.round(fps * 5)) === 0;
     try { vEnc.encode(frame, { keyFrame }); }
     finally { frame.close(); }
 

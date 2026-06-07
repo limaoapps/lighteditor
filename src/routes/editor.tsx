@@ -686,6 +686,39 @@ function Editor() {
   const videoElRef = useRef<HTMLVideoElement>(null);
   const videoBgElRef = useRef<HTMLVideoElement>(null);
   const audioRefs = useRef<Record<string, HTMLAudioElement>>({});
+  // WebAudio: contexto + grafo por elemento (permite ganho > 0dB e FX)
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const mediaGraphRef = useRef<Record<string, { src: MediaElementAudioSourceNode; nodes: AudioFxNodes }>>({});
+  const ensureAudioCtx = useCallback(() => {
+    if (typeof window === "undefined") return null;
+    if (!audioCtxRef.current) {
+      try {
+        const Ctx = (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
+        audioCtxRef.current = new Ctx();
+      } catch { return null; }
+    }
+    if (audioCtxRef.current?.state === "suspended") {
+      audioCtxRef.current.resume().catch(() => {});
+    }
+    return audioCtxRef.current;
+  }, []);
+  const attachGraph = useCallback((id: string, el: HTMLMediaElement, item: TLItem) => {
+    const ctx = ensureAudioCtx();
+    if (!ctx) return null;
+    let entry = mediaGraphRef.current[id];
+    if (!entry) {
+      try {
+        const src = ctx.createMediaElementSource(el);
+        const nodes = buildAudioFxGraph(ctx, { initialFx: item.audioFx, initialGainDb: item.gainDb ?? 0 });
+        src.connect(nodes.input);
+        nodes.output.connect(ctx.destination);
+        entry = { src, nodes };
+        mediaGraphRef.current[id] = entry;
+      } catch { return null; }
+    }
+    return entry;
+  }, [ensureAudioCtx]);
+
   const previewBoxRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const tracksAreaRef = useRef<HTMLDivElement>(null);

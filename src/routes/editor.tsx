@@ -2989,9 +2989,62 @@ function Editor() {
                         <Plus className="h-3 w-3" />
                       </button>
                       <div
-                        onDragOver={onTrackDragOver}
+                        onDragOver={(e) => onTrackDragOver(e, tr.id)}
+                        onDragLeave={onTrackDragLeave}
                         onDrop={(e) => onTrackDrop(e, tr.id)}
                         className="relative flex-1" style={{ backgroundColor: idx % 2 ? "color-mix(in oklab, var(--track) 80%, transparent)" : undefined, opacity: locked ? 0.6 : 1 }}>
+                        {/* Hover preview durante arraste de transição */}
+                        {transitionDragHover && transitionDragHover.trackId === tr.id && (() => {
+                          const preset = getTransitionById(transitionDragHover.transitionId);
+                          const w = Math.max(16, transitionDragHover.dur * zoom);
+                          return (
+                            <>
+                              <div className="pointer-events-none absolute inset-y-0 z-30 rounded-sm border-2 border-dashed border-primary bg-primary/15"
+                                style={{ left: transitionDragHover.junctionT * zoom - w / 2, width: w }} />
+                              <div className="pointer-events-none absolute z-40 -translate-x-1/2 rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground shadow"
+                                style={{ left: transitionDragHover.junctionT * zoom, top: 2 }}>
+                                {preset?.icon} {preset?.label} · {transitionDragHover.dur.toFixed(2)}s
+                              </div>
+                            </>
+                          );
+                        })()}
+                        {/* Chips persistentes de transições aplicadas entre clipes */}
+                        {(() => {
+                          const trackItems = items.filter(i => i.trackId === tr.id).sort((a, b) => a.start - b.start);
+                          const chips: React.ReactNode[] = [];
+                          for (let k = 0; k < trackItems.length - 1; k++) {
+                            const a = trackItems[k];
+                            const b = trackItems[k + 1];
+                            const aEnd = a.start + (a.outPoint - a.inPoint);
+                            const gap = b.start - aEnd;
+                            if (Math.abs(gap) > 0.25) continue;
+                            const hasTrans = ((a.fadeOut ?? 0) > 0.01) && ((b.fadeIn ?? 0) > 0.01);
+                            if (!hasTrans) continue;
+                            const dur = Math.max(a.fadeOut ?? 0, b.fadeIn ?? 0);
+                            const transId = a.transition || b.transition;
+                            const preset = getTransitionById(transId);
+                            const j = (aEnd + b.start) / 2;
+                            const isSel = selectedTransition?.leftId === a.id && selectedTransition?.rightId === b.id;
+                            chips.push(
+                              <button
+                                key={`tr-${a.id}-${b.id}`}
+                                onClick={(ev) => {
+                                  ev.stopPropagation();
+                                  setSelectedTransition({ leftId: a.id, rightId: b.id });
+                                  setTransitionPopover({ leftId: a.id, rightId: b.id, x: ev.clientX, y: ev.clientY });
+                                }}
+                                title={`${preset?.label ?? "Transição"} · ${dur.toFixed(2)}s — clique para ajustar`}
+                                className={`group/tr absolute z-30 flex -translate-x-1/2 items-center gap-1 rounded-full border px-1.5 py-0.5 text-[9px] font-medium shadow-md transition ${isSel ? "border-primary bg-primary text-primary-foreground" : "border-primary/60 bg-background/95 text-primary hover:bg-primary hover:text-primary-foreground"}`}
+                                style={{ left: j * zoom, top: "50%", transform: "translate(-50%, -50%)" }}>
+                                <span aria-hidden>{preset?.icon ?? "◐"}</span>
+                                <span className="max-w-[70px] truncate">{preset?.label ?? "Transição"}</span>
+                                <span className="font-mono tabular-nums opacity-80">{dur.toFixed(1)}s</span>
+                              </button>,
+                            );
+                          }
+                          return chips;
+                        })()}
+
                         {items.filter(i => i.trackId === tr.id).map(i => {
                           const dur = i.outPoint - i.inPoint;
                           const w = Math.max(20, dur * zoom);

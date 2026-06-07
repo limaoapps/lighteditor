@@ -1380,6 +1380,7 @@ function Editor() {
       else if (ctrl && k === "c" && selectedId) { e.preventDefault(); copyClip(selectedId); }
       else if (ctrl && k === "v") { e.preventDefault(); pasteClip(); }
       else if (k === "s" && !ctrl) { e.preventDefault(); splitAt(playhead); }
+      else if (k === "d" && !ctrl) { e.preventDefault(); splitAt(playhead); }
       else if ((k === "delete" || k === "backspace") && selectedId) { e.preventDefault(); deleteItem(selectedId); }
       else if (k === "escape") { setSelectedId(null); setCtxMenu(null); }
       else if (e.code === "Space") {

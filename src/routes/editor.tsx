@@ -1090,13 +1090,14 @@ function Editor() {
       } else if (d.type === "resizeL") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
-          const snapped = snapTime(tSec, d.id);
+          // raw cursor follow (no snap) so it always tracks where the user is
+          const raw = Math.max(0, tSec);
           if (d.isImage) {
-            const newStart = Math.max(0, Math.min(d.origEnd - 0.1, snapped));
+            const newStart = Math.max(0, Math.min(d.origEnd - 0.1, raw));
             const newOut = d.origEnd - newStart; // inPoint stays 0
             return { ...i, start: newStart, inPoint: 0, outPoint: newOut };
           }
-          const delta = snapped - d.origStart;
+          const delta = raw - d.origStart;
           const newIn = Math.max(0, Math.min(i.outPoint - 0.1, d.origIn + delta));
           const newStart = Math.max(0, d.origStart + (newIn - d.origIn));
           return { ...i, start: newStart, inPoint: newIn };
@@ -1104,8 +1105,9 @@ function Editor() {
       } else if (d.type === "resizeR") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
-          const snapped = snapTime(tSec, d.id);
-          const newOut = Math.max(i.inPoint + 0.1, Math.min(i.sourceDuration, snapped - i.start + i.inPoint));
+          const raw = Math.max(i.start + 0.1, tSec);
+          const cap = i.kind === "image" ? 24 * 3600 : i.sourceDuration;
+          const newOut = Math.max(i.inPoint + 0.1, Math.min(cap, raw - i.start + i.inPoint));
           return { ...i, outPoint: newOut };
         }), false);
       } else if (d.type === "fadeIn") {

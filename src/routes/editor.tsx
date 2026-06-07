@@ -2090,7 +2090,7 @@ function Editor() {
             <div className="mx-2 h-5 w-px bg-border" />
             <button
               onClick={() => setSnapResize(s => !s)}
-              title={snapResize ? "Snap à grade: ativo (clique para precisão livre)" : "Precisão livre (clique para alinhar à grade)"}
+              title={snapResize ? "Snap nas bordas: ativo (clique para precisão livre)" : "Precisão livre (clique para alinhar com outros clipes)"}
               className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${snapResize ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-card"}`}
             >
               <Magnet className="h-3.5 w-3.5" />
@@ -2228,9 +2228,9 @@ function Editor() {
                 {snapMark !== null && (
                   <div className="pointer-events-none absolute top-0 z-40"
                     style={{ left: labelColW + snapMark * zoom, height: tracks.length * trackHeight }}>
-                    <div className="absolute inset-y-0 -left-px w-0.5 bg-yellow-300 shadow-[0_0_8px_2px_rgba(253,224,71,0.85)]" />
-                    <div className="absolute -left-1.5 -top-0.5 h-2 w-3 rounded-sm bg-yellow-300 shadow" />
-                    <div className="absolute -left-1.5 -bottom-0.5 h-2 w-3 rounded-sm bg-yellow-300 shadow" />
+                    <div className="absolute inset-y-0 -left-px w-0.5" style={{ background: "color-mix(in oklab, var(--foreground) 86%, transparent)", boxShadow: "0 0 8px color-mix(in oklab, var(--foreground) 70%, transparent)" }} />
+                    <div className="absolute -left-1 top-0 h-2 w-2 rounded-full" style={{ background: "color-mix(in oklab, var(--foreground) 86%, transparent)" }} />
+                    <div className="absolute -left-1 bottom-0 h-2 w-2 rounded-full" style={{ background: "color-mix(in oklab, var(--foreground) 86%, transparent)" }} />
                   </div>
                 )}
 

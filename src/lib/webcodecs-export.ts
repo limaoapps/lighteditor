@@ -219,6 +219,118 @@ function drawClipFrame(
   ctx.restore();
 }
 
+function hexToRgba(hex: string, alpha: number): string {
+  const h = (hex || "#000000").replace("#", "");
+  const v = h.length === 3 ? h.split("").map(c => c + c).join("") : h;
+  const r = parseInt(v.substring(0, 2), 16) || 0;
+  const g = parseInt(v.substring(2, 4), 16) || 0;
+  const b = parseInt(v.substring(4, 6), 16) || 0;
+  return `rgba(${r},${g},${b},${Math.max(0, Math.min(1, alpha))})`;
+}
+
+function roundRectPath(ctx: OffscreenCanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const rr = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.lineTo(x + w - rr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+  ctx.lineTo(x + w, y + h - rr);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+  ctx.lineTo(x + rr, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+  ctx.lineTo(x, y + rr);
+  ctx.quadraticCurveTo(x, y, x + rr, y);
+  ctx.closePath();
+}
+
+function drawTextOverlay(
+  ctx: OffscreenCanvasRenderingContext2D,
+  item: WCItem,
+  localT: number,
+  dur: number,
+  targetW: number,
+  targetH: number,
+) {
+  const t = item.text!;
+  // fade
+  let alpha = (t.opacity ?? 1);
+  if (item.fadeIn && localT < item.fadeIn) alpha *= Math.max(0, localT / item.fadeIn);
+  if (item.fadeOut && localT > dur - item.fadeOut) alpha *= Math.max(0, (dur - localT) / item.fadeOut);
+  if (alpha <= 0.001) return;
+
+  const xPct = item.transform?.xPct ?? 50;
+  const yPct = item.transform?.yPct ?? 80;
+  const scale = item.transform?.scale ?? 1;
+  const rot = ((item.transform?.rotation ?? 0) * Math.PI) / 180;
+
+  const cx = (xPct / 100) * targetW;
+  const cy = (yPct / 100) * targetH;
+
+  const size = (t.size ?? 48) * scale;
+  const fontFamily = t.fontFamily || "system-ui, -apple-system, sans-serif";
+  const weight = t.bold ? "800" : "400";
+  const style = t.italic ? "italic" : "normal";
+  const align = t.align ?? "center";
+  const lineH = (t.lineHeight ?? 1.2) * size;
+  const letterSp = t.letterSpacing ?? 0;
+  const padX = t.paddingX ?? 12;
+  const padY = t.paddingY ?? 6;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(cx, cy);
+  if (rot) ctx.rotate(rot);
+  ctx.font = `${style} ${weight} ${size}px ${fontFamily}`;
+  ctx.textBaseline = "middle";
+  // letterSpacing (suportado em navegadores modernos)
+  try { (ctx as unknown as { letterSpacing: string }).letterSpacing = `${letterSp}px`; } catch { /* ignore */ }
+
+  const lines = String(t.content).split("\n");
+  const measureLine = (line: string) => {
+    const m = ctx.measureText(line);
+    return m.width + letterSp * Math.max(0, line.length - 1);
+  };
+  const widths = lines.map(measureLine);
+  const maxW = Math.max(1, ...widths);
+  const totalH = lines.length * lineH;
+
+  // Background pill
+  if ((t.bgOpacity ?? 0) > 0.001) {
+    ctx.fillStyle = hexToRgba(t.bgColor || "#000000", t.bgOpacity ?? 0);
+    roundRectPath(ctx, -maxW / 2 - padX, -totalH / 2 - padY, maxW + padX * 2, totalH + padY * 2, t.radius ?? 0);
+    ctx.fill();
+  }
+
+  // Shadow
+  if ((t.shadowBlur ?? 0) > 0 || (t.shadowOffsetX ?? 0) !== 0 || (t.shadowOffsetY ?? 0) !== 0) {
+    ctx.shadowColor = t.shadowColor || "rgba(0,0,0,0.6)";
+    ctx.shadowBlur = t.shadowBlur ?? 0;
+    ctx.shadowOffsetX = t.shadowOffsetX ?? 0;
+    ctx.shadowOffsetY = t.shadowOffsetY ?? 0;
+  }
+
+  ctx.textAlign = align;
+  const anchorX = align === "left" ? -maxW / 2 : align === "right" ? maxW / 2 : 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const ly = -totalH / 2 + lineH * (i + 0.5);
+    if ((t.strokeWidth ?? 0) > 0) {
+      ctx.lineWidth = t.strokeWidth!;
+      ctx.strokeStyle = t.strokeColor || "#000";
+      ctx.lineJoin = "round";
+      ctx.strokeText(lines[i], anchorX, ly);
+    }
+    ctx.fillStyle = t.color || "#ffffff";
+    ctx.fillText(lines[i], anchorX, ly);
+    if (t.underline) {
+      const w = widths[i];
+      const ux = align === "left" ? -maxW / 2 : align === "right" ? maxW / 2 - w : -w / 2;
+      ctx.fillRect(ux, ly + size * 0.45, w, Math.max(1, size * 0.06));
+    }
+  }
+  ctx.restore();
+}
+
 function computeOpacity(it: WCItem, localT: number): number {
   const dur = it.outPoint - it.inPoint;
   let v = (it.fx?.opacity ?? 100) / 100;

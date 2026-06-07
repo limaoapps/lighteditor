@@ -646,6 +646,9 @@ function Editor() {
   const previewBoxRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const tracksAreaRef = useRef<HTMLDivElement>(null);
+  const itemsRef = useRef<TLItem[]>(items);
+  const tracksRef = useRef<Track[]>(tracks);
+  const lastTimelinePointer = useRef<{ x: number; y: number } | null>(null);
   const rafRef = useRef<number | null>(null);
   const lastTick = useRef<number>(0);
 
@@ -679,6 +682,9 @@ function Editor() {
     () => items.reduce((m, i) => Math.max(m, i.start + (i.outPoint - i.inPoint)), 0),
     [items]
   );
+
+  useEffect(() => { itemsRef.current = items; }, [items]);
+  useEffect(() => { tracksRef.current = tracks; }, [tracks]);
 
   const usedMediaIds = useMemo(() => new Set(items.map(i => i.mediaId).filter(Boolean) as string[]), [items]);
 

@@ -769,6 +769,8 @@ function Editor() {
   }, [items, zoom, flashSnap]);
   const snapTimeRef = useRef(snapTime);
   useEffect(() => { snapTimeRef.current = snapTime; }, [snapTime]);
+  const zoomRef = useRef(zoom);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   const snapResizeTime = useCallback((t: number, excludeId?: string) => {
     const thr = TIME_SNAP_PX / zoomRef.current;
     let best = t, bestD = thr;
@@ -786,8 +788,6 @@ function Editor() {
   useEffect(() => { snapResizeTimeRef.current = snapResizeTime; }, [snapResizeTime]);
   const snapResizeRef = useRef(snapResize);
   useEffect(() => { snapResizeRef.current = snapResize; }, [snapResize]);
-  const zoomRef = useRef(zoom);
-  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   // Limite máximo do projeto para evitar durações inconsistentes
   const MAX_PROJECT_SEC = 3600; // 1 hora
 

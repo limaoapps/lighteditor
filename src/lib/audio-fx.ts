@@ -54,12 +54,13 @@ const REVERB_SPECS: Record<Exclude<ReverbPreset, "none">, IRSpec> = {
   plate:      { duration: 1.5, decay: 2.6, predelay: 0.005, brightness: 0.9 },
   cathedral:  { duration: 4.5, decay: 1.6, predelay: 0.040, brightness: 0.35 },
 };
+// Ambientes mais pronunciados — caverna bem "cavernosa", subterrâneo bem "abafado".
 const AMBIENCE_SPECS: Record<Exclude<Ambience, "none">, IRSpec & { wet: number }> = {
-  room:        { duration: 0.4, decay: 4.0, predelay: 0.005, brightness: 0.7, wet: 0.18 },
-  hall:        { duration: 1.8, decay: 2.4, predelay: 0.020, brightness: 0.5, wet: 0.25 },
-  cave:        { duration: 3.2, decay: 1.8, predelay: 0.030, brightness: 0.3, wet: 0.32 },
-  outdoor:     { duration: 0.3, decay: 5.0, predelay: 0.000, brightness: 0.9, wet: 0.10 },
-  underwater:  { duration: 1.0, decay: 2.5, predelay: 0.000, brightness: 0.18, wet: 0.45 },
+  room:        { duration: 0.5, decay: 3.5, predelay: 0.008, brightness: 0.65, wet: 0.28 },
+  hall:        { duration: 2.4, decay: 1.8, predelay: 0.025, brightness: 0.45, wet: 0.45 },
+  cave:        { duration: 5.5, decay: 0.9, predelay: 0.060, brightness: 0.18, wet: 0.75 },
+  outdoor:     { duration: 0.35, decay: 4.5, predelay: 0.000, brightness: 0.95, wet: 0.18 },
+  underwater:  { duration: 2.2, decay: 1.4, predelay: 0.000, brightness: 0.08, wet: 0.85 },
 };
 
 /** Gera IR sintético (ruído com decaimento exponencial). */

@@ -632,6 +632,8 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
   for (const c of [...v1clips, ...imageItems]) { try { await loadFor(c); } catch (e) { log(`[wc] load falhou ${c.name}: ${String(e)}`); } }
 
   const findActive = (t: number) => v1clips.find(c => t >= c.start && t < c.start + (c.outPoint - c.inPoint));
+  const visualItems = [...imageItems].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+  const sortedTextItems = [...textItems].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
 
   let lastSeekClipId: string | null = null;
   let lastSeekClipTime = -1;
@@ -677,27 +679,51 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
       }
     }
 
-    // fundos desfocados/espelhados das imagens sobrepostas ficam atrás dos objetos principais
-    for (const imgItem of imageItems) {
-      const dur = imgItem.outPoint - imgItem.inPoint;
-      const localT = t - imgItem.start;
+    // fundos desfocados/espelhados das camadas ficam atrás dos objetos principais
+    for (const visualItem of visualItems) {
+      const dur = visualItem.outPoint - visualItem.inPoint;
+      const localT = t - visualItem.start;
       if (localT < 0 || localT > dur) continue;
-      if (imgItem.fx?.fillMode !== "blur" && imgItem.fx?.fillMode !== "mirror") continue;
-      const el = await loadFor(imgItem);
-      if (el) drawImageOverlay(ctx, el as HTMLImageElement, imgItem, localT, dur, targetW, targetH, "background");
+      if (visualItem.fx?.fillMode !== "blur" && visualItem.fx?.fillMode !== "mirror") continue;
+      const el = await loadFor(visualItem);
+      if (!el) continue;
+      if (visualItem.kind === "video") {
+        const v = el as HTMLVideoElement;
+        const srcT = visualItem.inPoint + localT;
+        if (visualItem.id !== lastSeekClipId || Math.abs(v.currentTime - srcT) > (0.5 / fps)) {
+          await seekVideo(v, srcT);
+          lastSeekClipId = visualItem.id;
+        }
+        drawVisualOverlay(ctx, v, v.videoWidth || targetW, v.videoHeight || targetH, visualItem, localT, dur, targetW, targetH, "background");
+      } else {
+        const img = el as HTMLImageElement;
+        drawVisualOverlay(ctx, img, img.naturalWidth, img.naturalHeight, visualItem, localT, dur, targetW, targetH, "background");
+      }
     }
 
-    // overlays de imagem em trilhas superiores (respeita tempo/posição/escala/fade)
-    for (const imgItem of imageItems) {
-      const dur = imgItem.outPoint - imgItem.inPoint;
-      const localT = t - imgItem.start;
+    // overlays de imagem/vídeo em todas as trilhas, respeitando ordem visual da timeline
+    for (const visualItem of visualItems) {
+      const dur = visualItem.outPoint - visualItem.inPoint;
+      const localT = t - visualItem.start;
       if (localT < 0 || localT > dur) continue;
-      const el = await loadFor(imgItem);
-      if (el) drawImageOverlay(ctx, el as HTMLImageElement, imgItem, localT, dur, targetW, targetH, "foreground");
+      const el = await loadFor(visualItem);
+      if (!el) continue;
+      if (visualItem.kind === "video") {
+        const v = el as HTMLVideoElement;
+        const srcT = visualItem.inPoint + localT;
+        if (visualItem.id !== lastSeekClipId || Math.abs(v.currentTime - srcT) > (0.5 / fps)) {
+          await seekVideo(v, srcT);
+          lastSeekClipId = visualItem.id;
+        }
+        drawVisualOverlay(ctx, v, v.videoWidth || targetW, v.videoHeight || targetH, visualItem, localT, dur, targetW, targetH, "foreground");
+      } else {
+        const img = el as HTMLImageElement;
+        drawVisualOverlay(ctx, img, img.naturalWidth, img.naturalHeight, visualItem, localT, dur, targetW, targetH, "foreground");
+      }
     }
 
     // overlays de texto (múltiplos, respeitando timing/posição/estilo)
-    for (const tItem of textItems) {
+    for (const tItem of sortedTextItems) {
       if (!tItem.text?.content) continue;
       const dur = tItem.outPoint - tItem.inPoint;
       const localT = t - tItem.start;

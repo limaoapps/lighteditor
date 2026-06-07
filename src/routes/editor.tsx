@@ -1703,37 +1703,11 @@ function Editor() {
     // Save retry handle (same settings)
     lastExportSettingsRef.current = () => { void doExport(); };
 
-    // Codec mapping — only libx264 ships in @ffmpeg/core WASM; fallback w/ note.
-    const codecRequested = exportCodec;
-    if (exportCodec === "h265" || exportCodec === "vp9") {
-      // we silently fallback but record in log
-    }
     const fps = Math.max(1, Math.min(60, exportFps || 30));
     const vKbps = computedVBitrate;
     const aKbps = audioBitrate;
-    // Modo de velocidade — usa CRF + parâmetros x264 para acelerar drasticamente o WASM (single-thread).
-    let vEncArgs: string[];
-    if (speedMode === "qualidade") {
-      vEncArgs = [
-        "-c:v", "libx264", "-preset", "superfast", "-tune", "fastdecode",
-        "-pix_fmt", "yuv420p", "-r", String(fps), "-threads", "0",
-        "-b:v", `${vKbps}k`, "-maxrate", `${Math.round(vKbps * 1.5)}k`, "-bufsize", `${vKbps * 2}k`,
-      ];
-    } else {
-      const crf = speedMode === "turbo" ? "30" : "26";
-      const x264Params = speedMode === "turbo"
-        ? "rc-lookahead=0:ref=1:bframes=0:weightp=0:cabac=0:8x8dct=0:trellis=0:me=dia:subme=0:aq-mode=0:mixed-refs=0:fast-pskip=1:no-mbtree=1:no-scenecut=1"
-        : "rc-lookahead=0:ref=1:bframes=0:weightp=1:trellis=0:me=hex:subme=1:aq-mode=0:fast-pskip=1:no-mbtree=1";
-      vEncArgs = [
-        "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
-        "-pix_fmt", "yuv420p", "-r", String(fps), "-threads", "0",
-        "-crf", crf, "-x264-params", x264Params,
-        "-maxrate", `${vKbps * 2}k`, "-bufsize", `${vKbps * 3}k`,
-      ];
-    }
-    const aEncArgs = ["-c:a", "aac", "-b:a", `${aKbps}k`, "-ar", "44100", "-ac", "2"];
 
-    setExporting(true); setExportPct(0); setExportMsg(ffReady ? "Carregando engine..." : "Inicializando FFmpeg...");
+    setExporting(true); setExportPct(0); setExportMsg("Inicializando WebCodecs...");
     setExportUrl(null); setError(null);
     setExportLog([]); setExportFfCmd("");
     setExportElapsed(0); setExportFpsLive(null); setExportSpeed(null);
@@ -1743,285 +1717,36 @@ function Editor() {
       setExportElapsed((performance.now() - exportStartRef.current) / 1000);
     }, 250) as unknown as number;
 
-    const logs: string[] = [];
-
-    // ===== Caminho rápido: WebCodecs (aceleração por hardware quando disponível) =====
-    if (useHardwareAccel && exportCodec === "h264") {
-      const targetHwc = QUALITY_HEIGHT[quality];
-      const targetWwc = Math.round((targetHwc * aspect.w) / aspect.h / 2) * 2;
-      try {
-        const { isWebCodecsExportSupported, exportWithWebCodecs } = await import("@/lib/webcodecs-export");
-        const sup = await isWebCodecsExportSupported(targetWwc, targetHwc, fps, vKbps);
-        if (sup.ok) {
-          setExportMsg(`Aceleração por hardware: ${sup.hw === "prefer-hardware" ? "GPU" : "software-otimizado"} (${sup.codec})`);
-          setExportLog([
-            `=== EXPORT WEBCODECS ===`,
-            `Codec: ${sup.codec} · Aceleração: ${sup.hw}`,
-            `Resolução: ${targetWwc}x${targetHwc} · ${fps} fps · ${vKbps} kbps`,
-          ]);
-          const textItems = items.filter(i => i.kind === "text" && i.text?.content);
-          const music = audioClips[0];
-          const blob = await exportWithWebCodecs({
-            v1clips: v1clips as unknown as import("@/lib/webcodecs-export").WCItem[],
-            audioClips: audioClips as unknown as import("@/lib/webcodecs-export").WCItem[],
-            music: music as unknown as import("@/lib/webcodecs-export").WCItem | undefined,
-            imageItems: imageOverlayItems as unknown as import("@/lib/webcodecs-export").WCItem[],
-            textItems: textItems as unknown as import("@/lib/webcodecs-export").WCItem[],
-            targetW: targetWwc, targetH: targetHwc,
-            fps, vKbps, aKbps, totalDuration: Math.max(0.1, totalDuration),
-            onProgress: (p) => setExportPct(p),
-            onMessage: (m) => setExportMsg(m),
-            onLog: (l) => setExportLog(prev => [...prev, l].slice(-500)),
-          });
-          const url = URL.createObjectURL(blob);
-          const sizeMB = blob.size / (1024 * 1024);
-          const fileName = `${exportFileName || "video"}.mp4`;
-          setExportUrl(url);
-          setExportMsg("Pronto!"); setExportPct(1);
-          setExportHistory(h => [{ url, name: fileName, at: Date.now(), sizeMB }, ...h].slice(0, 8));
-          if (exportElapsedTimerRef.current) { window.clearInterval(exportElapsedTimerRef.current); exportElapsedTimerRef.current = null; }
-          setExporting(false);
-          return;
-        } else {
-          setExportLog(prev => [...prev, `[wc] não suportado: ${sup.reason} — usando FFmpeg WASM`]);
-        }
-      } catch (e) {
-        const m = e instanceof Error ? e.message : String(e);
-        setExportLog(prev => [...prev, `[wc] falhou: ${m} — caindo para FFmpeg WASM`]);
-        console.warn("WebCodecs falhou, fallback FFmpeg:", e);
-      }
-    }
+    const targetH = QUALITY_HEIGHT[quality];
+    const targetW = Math.round((targetH * aspect.w) / aspect.h / 2) * 2;
 
     try {
-
-      // ===== DIAGNÓSTICO PRÉ-EXPORTAÇÃO =====
-      const _th = QUALITY_HEIGHT[quality];
-      const _tw = Math.round((_th * aspect.w) / aspect.h / 2) * 2;
-      const diag = [
-        `=== DIAGNÓSTICO DE EXPORTAÇÃO ===`,
-        `Arquivo: ${exportFileName || "video"}.mp4`,
-        `Pasta de saída: (download do navegador)`,
-        `Resolução: ${_tw}x${_th}`,
-        `FPS: ${fps}`,
-        `Codec solicitado: ${codecRequested} (engine: libx264 WASM)`,
-        `Bitrate vídeo: ${vKbps} kbps · áudio: ${aKbps} kbps`,
-        `Clipes vídeo/imagem na V1: ${items.filter(i => (i.kind === "video" || i.kind === "image")).length}`,
-        `Clipes áudio: ${items.filter(i => i.kind === "audio").length}`,
-        `Duração total: ${totalDuration.toFixed(2)}s`,
-        `FFmpeg core URL: /ffmpeg/ffmpeg-core.js`,
-        `User-Agent: ${navigator.userAgent}`,
-        `=================================`,
-        `Iniciando processo FFmpeg...`,
-      ];
-      console.group("%c[EXPORT DIAG]", "color:#22d3ee;font-weight:bold");
-      diag.forEach(l => console.log(l));
-      console.groupEnd();
-      setExportLog(diag);
-
-      const onLog = ({ message }: { message: string }) => {
-        logs.push(message); if (logs.length > 500) logs.shift();
-        const m1 = /fps=\s*([\d.]+)/.exec(message);
-        if (m1) setExportFpsLive(parseFloat(m1[1]));
-        const m2 = /speed=\s*([\d.]+)x/.exec(message);
-        if (m2) setExportSpeed(parseFloat(m2[1]));
-        setExportLog(prev => {
-          const next = [...prev, message];
-          return next.length > 500 ? next.slice(-500) : next;
-        });
-      };
-      const onProg = ({ progress: p }: { progress: number }) =>
-        setExportPct(Math.max(0, Math.min(1, p)));
-
-
-      setFfLoading(true);
-      const ff = await getFFmpeg();
-      setFfReady(true);
-      setFfLoadError(null);
-      setFfLoading(false);
-      if (!ff) {
-        console.error("FFmpeg não carregou.");
-        setError("FFmpeg não carregou.");
-        setExportMsg("Erro");
-        return;
+      const { isWebCodecsExportSupported, exportWithWebCodecs } = await import("@/lib/webcodecs-export");
+      const sup = await isWebCodecsExportSupported(targetW, targetH, fps, vKbps);
+      if (!sup.ok) {
+        throw new Error(`WebCodecs indisponível neste navegador: ${sup.reason ?? "sem suporte"}. Use Chrome/Edge/Opera recentes.`);
       }
-      console.log("FFmpeg carregado:", ff);
-      ff.on("log", onLog);
-      ff.on("progress", onProg);
-      const targetH = QUALITY_HEIGHT[quality];
-      const targetW = Math.round((targetH * aspect.w) / aspect.h / 2) * 2;
-      const inputs: string[] = [];
-
-      if (codecRequested !== "h264") {
-        logs.push(`[warn] Codec ${codecRequested.toUpperCase()} indisponível no engine WASM — usando H.264.`);
-      }
-      if (useGpu) {
-        logs.push(`[warn] Aceleração por GPU não é suportada no FFmpeg WASM — usando CPU.`);
-      }
-
-      if (!v1clips.length) {
-        const dur = Math.max(1, totalDuration).toFixed(3);
-        setExportMsg("Gerando vídeo base (áudio)...");
-        await ff.exec([
-          "-f", "lavfi", "-t", dur, "-i", `color=c=black:s=${targetW}x${targetH}:r=${fps}`,
-          "-f", "lavfi", "-t", dur, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
-          ...vEncArgs, ...aEncArgs, "-shortest", "joined.mp4",
-        ]);
-      } else {
-        for (let i = 0; i < v1clips.length; i++) {
-          const c = v1clips[i];
-          const isImg = c.kind === "image";
-          const ext = isImg ? (c.file?.name.split(".").pop() || "png").toLowerCase() : "bin";
-          const inName = `in_${i}.${ext}`;
-          const outName = `cut_${i}.mp4`;
-          const sourceFile = c.file;
-          if (!sourceFile) throw new Error(`Clipe sem arquivo original: ${c.name}`);
-          setExportMsg(`Processando clipe ${i + 1}/${v1clips.length}...`);
-          await ff.writeFile(inName, await fetchFile(sourceFile));
-          const dur = (c.outPoint - c.inPoint);
-          const to = dur.toFixed(3);
-          const afilters: string[] = [];
-          afilters.push(...buildAudioFilterChain(c.audioFx, c.gainDb ?? 0, dur));
-          if (c.fadeIn && c.fadeIn > 0.01) afilters.push(`afade=t=in:st=0:d=${c.fadeIn.toFixed(3)}`);
-          if (c.fadeOut && c.fadeOut > 0.01) afilters.push(`afade=t=out:st=${(dur - c.fadeOut).toFixed(3)}:d=${c.fadeOut.toFixed(3)}`);
-          const filter = exportVideoFilter(c, targetW, targetH);
-
-          const args: string[] = [];
-          if (isImg) {
-            args.push("-loop", "1", "-framerate", String(fps), "-t", to, "-i", inName);
-            args.push("-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
-            if (filter.type === "vf") args.push("-vf", filter.value, "-map", "0:v", "-map", "1:a");
-            else args.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "1:a");
-            args.push(...vEncArgs, ...aEncArgs, "-shortest", outName);
-          } else {
-            // Seek preciso: -ss DEPOIS do -i evita perda de frames (tela preta) no FFmpeg WASM.
-            args.push("-i", inName, "-ss", c.inPoint.toFixed(3), "-t", to);
-            args.push("-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
-            const vPart = filter.type === "vf" ? `[0:v]${filter.value}[vout]` : filter.value;
-            const aPart = afilters.length
-              ? `[0:a]${afilters.join(",")}[a0src];[a0src][1:a]amix=inputs=2:duration=first:dropout_transition=0:normalize=0:weights=1 0[aout]`
-              : `[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=0:normalize=0:weights=1 0[aout]`;
-            args.push("-filter_complex", `${vPart};${aPart}`, "-map", "[vout]", "-map", "[aout]");
-            args.push(...vEncArgs, ...aEncArgs, "-shortest", outName);
-          }
-          try {
-            await ff.exec(args);
-          } catch {
-            // Fallback 1: vídeo sem trilha de áudio → ignora [0:a] e usa apenas anullsrc do lavfi
-            const fbArgs: string[] = ["-i", inName, "-ss", c.inPoint.toFixed(3), "-t", to,
-              "-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"];
-            if (filter.type === "vf") fbArgs.push("-vf", filter.value, "-map", "0:v", "-map", "1:a");
-            else fbArgs.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "1:a");
-            fbArgs.push(...vEncArgs, ...aEncArgs, "-shortest", outName);
-            try {
-              await ff.exec(fbArgs);
-            } catch {
-              // Fallback 2: seek rápido (tolerante a arquivos com índice/keyframes incompletos)
-              const fb2: string[] = ["-ss", c.inPoint.toFixed(3), "-i", inName, "-t", to,
-                "-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"];
-              if (filter.type === "vf") fb2.push("-vf", filter.value, "-map", "0:v", "-map", "1:a");
-              else fb2.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "1:a");
-              fb2.push(...vEncArgs, ...aEncArgs, "-shortest", outName);
-              await ff.exec(fb2);
-            }
-          }
-          await ff.deleteFile(inName);
-          inputs.push(outName);
-        }
-        setExportMsg("Juntando clipes...");
-        if (inputs.length === 1) {
-          await ff.exec(["-i", inputs[0], "-c", "copy", "joined.mp4"]);
-        } else {
-          const list = inputs.map(n => `file '${n}'`).join("\n");
-          await ff.writeFile("list.txt", new TextEncoder().encode(list));
-          // -c copy: streams já em H.264/AAC com mesmos params → concat sem re-encode
-          await ff.exec(["-f", "concat", "-safe", "0", "-i", "list.txt",
-            "-c", "copy", "joined.mp4"]);
-        }
-      }
-
+      setExportMsg(`Aceleração: ${sup.hw === "prefer-hardware" ? "GPU" : "software-otimizado"} (${sup.codec})`);
+      setExportLog([
+        `=== EXPORT WEBCODECS ===`,
+        `Codec: ${sup.codec} · Aceleração: ${sup.hw}`,
+        `Resolução: ${targetW}x${targetH} · ${fps} fps · ${vKbps} kbps`,
+        `Áudio: AAC ${aKbps} kbps`,
+      ]);
+      const textItems = items.filter(i => i.kind === "text" && i.text?.content);
       const music = audioClips[0];
-      setExportMsg("Renderizando saída...");
-      const finalArgs: string[] = ["-i", "joined.mp4"];
-      const overlayInputs: Array<{ item: TLItem; name: string; index: number }> = [];
-      for (const img of imageOverlayItems) {
-        if (!img.file) continue;
-        const ext = (img.file.name.split(".").pop() || "png").toLowerCase();
-        const name = `ov_${overlayInputs.length}.${ext}`;
-        await ff.writeFile(name, await fetchFile(img.file));
-        overlayInputs.push({ item: img, name, index: overlayInputs.length + 1 });
-        finalArgs.push("-loop", "1", "-framerate", String(fps), "-t", Math.max(0.1, totalDuration).toFixed(3), "-i", name);
-      }
-      const musicInputIndex = overlayInputs.length + 1;
-      if (music) {
-        if (!music.file) throw new Error(`Áudio sem arquivo original: ${music.name}`);
-        await ff.writeFile("bgm.bin", await fetchFile(music.file)); finalArgs.push("-i", "bgm.bin");
-      }
-      const filterParts: string[] = [];
-      let videoLabel = "0:v";
-      overlayInputs.forEach((ov, idx) => {
-        const it = ov.item;
-        const dur = it.outPoint - it.inPoint;
-        const end = it.start + dur;
-        const box = exportImageOverlayBox(it, targetW, targetH);
-        const alpha = Math.max(0, Math.min(1, (it.fx?.opacity ?? 100) / 100));
-        const fades = [
-          it.fadeIn && it.fadeIn > 0.01 ? `fade=t=in:st=${it.start.toFixed(3)}:d=${it.fadeIn.toFixed(3)}:alpha=1` : null,
-          it.fadeOut && it.fadeOut > 0.01 ? `fade=t=out:st=${Math.max(it.start, end - it.fadeOut).toFixed(3)}:d=${it.fadeOut.toFixed(3)}:alpha=1` : null,
-        ].filter(Boolean).join(",");
-        const inputLabel = it.fx?.fillMode === "blur" || it.fx?.fillMode === "mirror" ? `ovsrc${idx}` : `${ov.index}:v`;
-        const overlayBlur = visualBlurSigma(it.fx, targetH);
-        const overlayFx = overlayBlur > 0 ? `,gblur=sigma=${overlayBlur.toFixed(1)}:steps=1` : "";
-        if (it.fx?.fillMode === "blur" || it.fx?.fillMode === "mirror") {
-          filterParts.push(`[${ov.index}:v]split=2[ovbgsrc${idx}][ovsrc${idx}]`);
-          const bgCore = `scale=${targetW}:${targetH}:force_original_aspect_ratio=increase,crop=${targetW}:${targetH}`;
-          const bgFx = it.fx.fillMode === "blur" ? `${bgCore},gblur=sigma=${blurSigma(it.fx, targetH).toFixed(1)}:steps=3` : `${bgCore},hflip`;
-          const bgLabel = `imgbg${idx}`;
-          const bgOut = `vbg${idx}`;
-          filterParts.push(`[ovbgsrc${idx}]${bgFx},format=rgba,colorchannelmixer=aa=${alpha.toFixed(3)}${fades ? `,${fades}` : ""}[${bgLabel}]`);
-          filterParts.push(`[${videoLabel}][${bgLabel}]overlay=0:0:enable='between(t,${it.start.toFixed(3)},${end.toFixed(3)})'[${bgOut}]`);
-          videoLabel = bgOut;
-        }
-        const imgLabel = `img${idx}`;
-        filterParts.push(`[${inputLabel}]scale=${box.w}:${box.h}${overlayFx},format=rgba,colorchannelmixer=aa=${alpha.toFixed(3)}${fades ? `,${fades}` : ""}[${imgLabel}]`);
-        const out = `vov${idx}`;
-        filterParts.push(`[${videoLabel}][${imgLabel}]overlay=${box.x}:${box.y}:enable='between(t,${it.start.toFixed(3)},${end.toFixed(3)})'[${out}]`);
-        videoLabel = out;
+      const blob = await exportWithWebCodecs({
+        v1clips: v1clips as unknown as import("@/lib/webcodecs-export").WCItem[],
+        audioClips: audioClips as unknown as import("@/lib/webcodecs-export").WCItem[],
+        music: music as unknown as import("@/lib/webcodecs-export").WCItem | undefined,
+        imageItems: imageOverlayItems as unknown as import("@/lib/webcodecs-export").WCItem[],
+        textItems: textItems as unknown as import("@/lib/webcodecs-export").WCItem[],
+        targetW, targetH,
+        fps, vKbps, aKbps, totalDuration: Math.max(0.1, totalDuration),
+        onProgress: (p) => setExportPct(p),
+        onMessage: (m) => setExportMsg(m),
+        onLog: (l) => setExportLog(prev => [...prev, l].slice(-500)),
       });
-      const firstText = items.find(i => i.kind === "text" && i.text?.content);
-      if (firstText && firstText.text) {
-        const t = firstText.text;
-        const y = `${Math.round((firstText.transform?.yPct ?? 80) / 100 * targetH - t.size / 2)}`;
-        const esc = t.content.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\\'");
-        filterParts.push(`[${videoLabel}]drawtext=text='${esc}':fontcolor=${t.color}:fontsize=${t.size}:x=(w-text_w)/2:y=${y}:box=1:boxcolor=black@0.4:boxborderw=12[vtext]`);
-        videoLabel = "vtext";
-      }
-      if (music) {
-        const ducker = v1clips.length ? 0.4 : 1.0;
-        const musicChain = buildAudioFilterChain(music.audioFx, music.gainDb ?? 0);
-        // ducker aplicado depois (não somar dB), aloop infinito
-        const musicFilters = [...musicChain, `volume=${ducker.toFixed(3)}`, "aloop=loop=-1:size=2e9"].join(",");
-        filterParts.push(`[0:a]volume=1[a0];[${musicInputIndex}:a]${musicFilters}[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`);
-      }
-
-      const needsReencode = filterParts.length > 0 || !!music;
-      if (filterParts.length) {
-        finalArgs.push("-filter_complex", filterParts.join(";"));
-        finalArgs.push("-map", videoLabel === "0:v" ? "0:v" : `[${videoLabel}]`, "-map", music ? "[aout]" : "0:a");
-      }
-
-      if (needsReencode) {
-        finalArgs.push(...vEncArgs, ...aEncArgs);
-      } else {
-        // sem texto/música → remux puro (quase instantâneo)
-        finalArgs.push("-c", "copy");
-      }
-      finalArgs.push("-movflags", "+faststart", "-shortest", "output.mp4");
-      setExportFfCmd("ffmpeg " + finalArgs.map(a => a.includes(" ") ? `"${a}"` : a).join(" "));
-      await ff.exec(finalArgs);
-
-      const data = (await ff.readFile("output.mp4")) as Uint8Array;
-      const buf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
-      const blob = new Blob([buf], { type: "video/mp4" });
       const url = URL.createObjectURL(blob);
       const sizeMB = blob.size / (1024 * 1024);
       const fileName = `${exportFileName || "video"}.mp4`;
@@ -2029,14 +1754,6 @@ function Editor() {
       setExportMsg("Pronto!"); setExportPct(1);
       setExportHistory(h => [{ url, name: fileName, at: Date.now(), sizeMB }, ...h].slice(0, 8));
 
-      for (const n of inputs) await ff.deleteFile(n).catch(() => {});
-      await ff.deleteFile("list.txt").catch(() => {});
-      await ff.deleteFile("joined.mp4").catch(() => {});
-      await ff.deleteFile("output.mp4").catch(() => {});
-      for (const ov of overlayInputs) await ff.deleteFile(ov.name).catch(() => {});
-      if (music) await ff.deleteFile("bgm.bin").catch(() => {});
-
-      // Post-export actions
       if (postBeep) {
         try {
           const Ctx = (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
@@ -2059,15 +1776,9 @@ function Editor() {
         }, 200);
       }
     } catch (e) {
-      const tail = logs.slice(-6).join("\n");
-      console.error("[export] FFmpeg falhou:", e, "\nÚltimos logs:\n", tail);
+      console.error("[export] WebCodecs falhou:", e);
       const baseMsg = e instanceof Error ? e.message : "Falha na exportação";
-      setFfLoading(false);
-      if (/ffmpeg/i.test(baseMsg)) {
-        setFfReady(false);
-        setFfLoadError(baseMsg);
-      }
-      setError(`${baseMsg}${tail ? `\n\nDetalhes:\n${tail}` : ""}`);
+      setError(baseMsg);
       setExportMsg("Erro");
     } finally {
       setExporting(false);

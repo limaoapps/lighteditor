@@ -1657,13 +1657,13 @@ function Editor() {
             `Codec: ${sup.codec} · Aceleração: ${sup.hw}`,
             `Resolução: ${targetWwc}x${targetHwc} · ${fps} fps · ${vKbps} kbps`,
           ]);
-          const textItem = items.find(i => i.kind === "text" && i.text?.content);
+          const textItems = items.filter(i => i.kind === "text" && i.text?.content);
           const music = audioClips[0];
           const blob = await exportWithWebCodecs({
             v1clips: v1clips as unknown as import("@/lib/webcodecs-export").WCItem[],
             audioClips: audioClips as unknown as import("@/lib/webcodecs-export").WCItem[],
             music: music as unknown as import("@/lib/webcodecs-export").WCItem | undefined,
-            textItem: textItem as unknown as import("@/lib/webcodecs-export").WCItem | undefined,
+            textItems: textItems as unknown as import("@/lib/webcodecs-export").WCItem[],
             targetW: targetWwc, targetH: targetHwc,
             fps, vKbps, aKbps, totalDuration: Math.max(0.1, totalDuration),
             onProgress: (p) => setExportPct(p),

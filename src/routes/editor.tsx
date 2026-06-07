@@ -575,6 +575,7 @@ function Editor() {
   const [exportFileName, setExportFileName] = useState("meu-video");
   const [exportFps, setExportFps] = useState<number>(30);
   const [exportCodec, setExportCodec] = useState<Codec>("h264");
+  const [speedMode, setSpeedMode] = useState<"turbo" | "rapido" | "qualidade">("rapido");
   const [bitrateMode, setBitrateMode] = useState<BitrateMode>("medium");
   const [customBitrate, setCustomBitrate] = useState<number>(8000);
   const [audioBitrate, setAudioBitrate] = useState<AudioBitrate>(192);

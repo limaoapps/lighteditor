@@ -208,58 +208,72 @@ async function buildMixedAudio(opts: WCExportOptions, sampleRate: number): Promi
   const totalDur = Math.max(0.1, opts.totalDuration);
   const ac = new OfflineAudioContext(2, Math.ceil(totalDur * sampleRate), sampleRate);
   const probe = new AudioContext({ sampleRate });
+
+  const wireSource = (src: AudioBufferSourceNode, item: WCItem, opts2: { ducker?: number } = {}) => {
+    // Cada fonte → grafo de FX (EQ + reverb + echo + ambiente + canais + ganho)
+    const graph = item.audioFx
+      ? buildAudioFxGraph(ac, { initialFx: item.audioFx, initialGainDb: item.gainDb ?? 0 })
+      : null;
+    const dur = item.outPoint - item.inPoint;
+    // Envelope de fade aplicado em um gain pré-grafo
+    const fadeGain = ac.createGain();
+    const startT = item.start;
+    fadeGain.gain.value = 1;
+    if (item.fadeIn && item.fadeIn > 0.01) {
+      fadeGain.gain.setValueAtTime(0, startT);
+      fadeGain.gain.linearRampToValueAtTime(1, startT + item.fadeIn);
+    }
+    if (item.fadeOut && item.fadeOut > 0.01) {
+      fadeGain.gain.setValueAtTime(1, startT + dur - item.fadeOut);
+      fadeGain.gain.linearRampToValueAtTime(0, startT + dur);
+    }
+    if (graph) {
+      src.connect(fadeGain).connect(graph.input);
+      // ducker (música) opcional: multiplica saída do grafo
+      if (opts2.ducker != null && opts2.ducker !== 1) {
+        const duck = ac.createGain();
+        duck.gain.value = opts2.ducker;
+        graph.output.connect(duck).connect(ac.destination);
+      } else {
+        graph.output.connect(ac.destination);
+      }
+    } else {
+      const g = ac.createGain();
+      g.gain.value = Math.pow(10, (item.gainDb ?? 0) / 20) * (opts2.ducker ?? 1);
+      src.connect(fadeGain).connect(g).connect(ac.destination);
+    }
+  };
+
   try {
-    // áudio dos clipes de vídeo (com gainDb + fades)
     for (const c of opts.v1clips) {
       if (c.kind !== "video" || !c.file) continue;
-      let abuf: AudioBuffer;
-      try { abuf = await decodeAudio(probe, c.file); }
-      catch { continue; }
+      let abuf: AudioBuffer | null = null;
+      try { abuf = await decodeAudio(probe, c.file); } catch { continue; }
+      if (!abuf) continue;
       const src = ac.createBufferSource();
       src.buffer = abuf;
-      const g = ac.createGain();
-      const dur = c.outPoint - c.inPoint;
-      const baseGain = dbToGain(c.gainDb ?? 0);
-      g.gain.value = baseGain;
-      if (c.fadeIn && c.fadeIn > 0.01) {
-        g.gain.setValueAtTime(0, c.start);
-        g.gain.linearRampToValueAtTime(baseGain, c.start + c.fadeIn);
-      }
-      if (c.fadeOut && c.fadeOut > 0.01) {
-        g.gain.setValueAtTime(baseGain, c.start + dur - c.fadeOut);
-        g.gain.linearRampToValueAtTime(0, c.start + dur);
-      }
-      src.connect(g).connect(ac.destination);
-      try { src.start(c.start, c.inPoint, dur); } catch { /* ignore */ }
+      wireSource(src, c);
+      try { src.start(c.start, c.inPoint, c.outPoint - c.inPoint); } catch { /* ignore */ }
     }
-    // música de fundo (loop, atenuada se há clipes)
     if (opts.music?.file) {
-      let abuf: AudioBuffer;
-      try { abuf = await decodeAudio(probe, opts.music.file); }
-      catch { abuf = null as unknown as AudioBuffer; }
+      let abuf: AudioBuffer | null = null;
+      try { abuf = await decodeAudio(probe, opts.music.file); } catch { abuf = null; }
       if (abuf) {
         const src = ac.createBufferSource();
-        src.buffer = abuf;
-        src.loop = true;
-        const g = ac.createGain();
-        const mg = dbToGain(opts.music.gainDb ?? 0) * (opts.v1clips.length ? 0.4 : 1.0);
-        g.gain.value = mg;
-        src.connect(g).connect(ac.destination);
+        src.buffer = abuf; src.loop = true;
+        wireSource(src, opts.music, { ducker: opts.v1clips.length ? 0.4 : 1.0 });
         try { src.start(0, 0, totalDur); } catch { /* ignore */ }
       }
     }
-    // demais clipes da trilha de áudio
     for (const a of opts.audioClips) {
       if (opts.music && a.id === opts.music.id) continue;
       if (!a.file) continue;
-      let abuf: AudioBuffer;
-      try { abuf = await decodeAudio(probe, a.file); }
-      catch { continue; }
+      let abuf: AudioBuffer | null = null;
+      try { abuf = await decodeAudio(probe, a.file); } catch { continue; }
+      if (!abuf) continue;
       const src = ac.createBufferSource();
       src.buffer = abuf;
-      const g = ac.createGain();
-      g.gain.value = dbToGain(a.gainDb ?? 0);
-      src.connect(g).connect(ac.destination);
+      wireSource(src, a);
       try { src.start(a.start, a.inPoint, a.outPoint - a.inPoint); } catch { /* ignore */ }
     }
   } finally {
@@ -267,6 +281,7 @@ async function buildMixedAudio(opts: WCExportOptions, sampleRate: number): Promi
   }
   return await ac.startRendering();
 }
+
 
 /** Converte AudioBuffer em chunks PCM Float32 interleaved (s16/f32) p/ AudioEncoder. */
 function* iterAudioChunks(buf: AudioBuffer, chunkFrames: number) {

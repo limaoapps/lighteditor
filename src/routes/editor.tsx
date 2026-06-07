@@ -728,6 +728,12 @@ function Editor() {
   const [leftW, setLeftW] = useState(256);
   const [leftPanel, setLeftPanel] = useState<LeftPanel>("media");
   const [rightW, setRightW] = useState(304);
+  const [masterDbL, setMasterDbL] = useState(0);
+  const [masterDbR, setMasterDbR] = useState(0);
+  const [masterPeakL, setMasterPeakL] = useState(0);
+  const [masterPeakR, setMasterPeakR] = useState(0);
+  const [masterClipL, setMasterClipL] = useState(false);
+  const [masterClipR, setMasterClipR] = useState(false);
   const sideDragRef = useRef<{ side: "L" | "R"; startX: number; startW: number } | null>(null);
   useEffect(() => {
     const onMove = (e: MouseEvent) => {

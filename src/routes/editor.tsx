@@ -1360,9 +1360,7 @@ function Editor() {
       if (lastAudioIdx < 0) out.push(newTrack); else out.splice(lastAudioIdx + 1, 0, newTrack);
       return out;
     });
-    const dur = src.outPoint - src.inPoint;
     const it: TLItem = { ...src, id: crypto.randomUUID(), start: playhead, fadeIn: 0, fadeOut: 0, trackId: newId };
-    void dur;
     setItems(prev => [...prev, it]);
     setSelectedId(it.id);
   };

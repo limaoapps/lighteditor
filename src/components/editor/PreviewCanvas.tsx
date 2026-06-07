@@ -80,7 +80,7 @@ export function PreviewCanvas({ aspect, v1Items, visualItems, textItems, time, p
       if (canvas.height !== h) canvas.height = h;
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "medium";
-      drawScene(ctx, scene, time, canvas.width, canvas.height, cacheRef.current!);
+      drawScene(ctx, scene, time, canvas.width, canvas.height, getCache());
       lastDrawnRef.current = { t: time, key: itemsKey };
     };
 

@@ -1699,10 +1699,10 @@ function Editor() {
               if (!gpuInfoRef.current) gpuInfoRef.current = detectGpu();
               setShowExportSettings(true);
             }}
-            disabled={exporting || !items.length}
+            disabled={exporting || !items.length || !ffReady}
             className="glow-primary inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50">
-            {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-            Exportar
+            {exporting || !ffReady ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            {ffReady ? "Exportar" : "Carregando"}
           </button>
         </div>
       </header>
@@ -2742,9 +2742,9 @@ function Editor() {
                 className="rounded-md border border-border bg-background px-4 py-2 text-sm hover:bg-muted">Cancelar</button>
               <button
                 onClick={() => { setShowExportSettings(false); void doExport(); }}
-                disabled={!items.length}
+                disabled={!items.length || !ffReady || exporting}
                 className="glow-primary inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
-                <Download className="h-4 w-4" /> Iniciar exportação
+                {!ffReady ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} {ffReady ? "Iniciar exportação" : "Carregando FFmpeg"}
               </button>
             </div>
           </div>

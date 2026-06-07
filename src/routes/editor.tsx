@@ -2988,15 +2988,8 @@ function Editor() {
               <input type="range" min={minZoom} max={Math.max(minZoom + 10, 200)} step={1} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="w-28 accent-[color:var(--primary)]" />
               <button onClick={() => setZoom(z => Math.min(200, z + 10))} className="rounded p-1 hover:bg-card"><ZoomIn className="h-3.5 w-3.5" /></button>
             </div>
-            <div className="mx-2 h-5 w-px bg-border" />
-            <button
-              onClick={() => setSnapResize(s => !s)}
-              title={snapResize ? "Snap nas bordas: ativo (clique para precisão livre)" : "Precisão livre (clique para alinhar com outros clipes)"}
-              className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${snapResize ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-card"}`}
-            >
-              <Magnet className="h-3.5 w-3.5" />
-              <span>{snapResize ? "Snap" : "Livre"}</span>
-            </button>
+
+
           </div>
 
           <div className="flex border-t border-border">

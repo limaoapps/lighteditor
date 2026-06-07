@@ -1528,7 +1528,8 @@ function Editor() {
             else args.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "1:a");
             args.push(...vEncArgs, ...aEncArgs, "-shortest", outName);
           } else {
-            args.push("-ss", c.inPoint.toFixed(3), "-i", inName, "-t", to);
+            // Seek preciso: -ss DEPOIS do -i evita perda de frames (tela preta) no FFmpeg WASM.
+            args.push("-i", inName, "-ss", c.inPoint.toFixed(3), "-t", to);
             args.push("-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
             const vPart = filter.type === "vf" ? `[0:v]${filter.value}[vout]` : filter.value;
             const aPart = afilters.length
@@ -1539,13 +1540,24 @@ function Editor() {
           }
           try {
             await ff.exec(args);
-          } catch (err) {
-            const fbArgs: string[] = ["-ss", c.inPoint.toFixed(3), "-i", inName, "-t", to,
+          } catch {
+            // Fallback 1: vídeo sem trilha de áudio → ignora [0:a] e usa apenas anullsrc do lavfi
+            const fbArgs: string[] = ["-i", inName, "-ss", c.inPoint.toFixed(3), "-t", to,
               "-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"];
             if (filter.type === "vf") fbArgs.push("-vf", filter.value, "-map", "0:v", "-map", "1:a");
             else fbArgs.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "1:a");
             fbArgs.push(...vEncArgs, ...aEncArgs, "-shortest", outName);
-            await ff.exec(fbArgs);
+            try {
+              await ff.exec(fbArgs);
+            } catch {
+              // Fallback 2: seek rápido (tolerante a arquivos com índice/keyframes incompletos)
+              const fb2: string[] = ["-ss", c.inPoint.toFixed(3), "-i", inName, "-t", to,
+                "-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"];
+              if (filter.type === "vf") fb2.push("-vf", filter.value, "-map", "0:v", "-map", "1:a");
+              else fb2.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "1:a");
+              fb2.push(...vEncArgs, ...aEncArgs, "-shortest", outName);
+              await ff.exec(fb2);
+            }
           }
           await ff.deleteFile(inName);
           inputs.push(outName);

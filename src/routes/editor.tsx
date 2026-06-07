@@ -3176,7 +3176,8 @@ function Editor() {
 
           <div className="flex border-t border-border">
           <div ref={timelineRef} onMouseDown={onTimelineMouseDown}
-            className="relative h-[280px] min-w-0 flex-1 overflow-x-auto bg-track">
+            className="no-scrollbar relative h-[280px] min-w-0 flex-1 overflow-x-auto overflow-y-hidden bg-track">
+
             <div className="relative" style={{ width: labelColW + rulerSpan * zoom, minWidth: "100%" }}>
               <div data-role="ruler" className="sticky top-0 z-20 flex cursor-ew-resize select-none border-b border-border bg-panel" style={{ height: rulerH }}>
                 <div className="shrink-0 border-r border-border bg-panel" style={{ width: labelColW }} />

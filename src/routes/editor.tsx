@@ -1420,47 +1420,48 @@ function Editor() {
       setExportElapsed((performance.now() - exportStartRef.current) / 1000);
     }, 250) as unknown as number;
 
-    // ===== DIAGNÓSTICO PRÉ-EXPORTAÇÃO =====
-    const _th = QUALITY_HEIGHT[quality];
-    const _tw = Math.round((_th * aspect.w) / aspect.h / 2) * 2;
-    const diag = [
-      `=== DIAGNÓSTICO DE EXPORTAÇÃO ===`,
-      `Arquivo: ${exportFileName || "video"}.mp4`,
-      `Pasta de saída: (download do navegador)`,
-      `Resolução: ${_tw}x${_th}`,
-      `FPS: ${fps}`,
-      `Codec solicitado: ${codecRequested} (engine: libx264 WASM)`,
-      `Bitrate vídeo: ${vKbps} kbps · áudio: ${aKbps} kbps`,
-      `Clipes vídeo/imagem na V1: ${items.filter(i => (i.kind === "video" || i.kind === "image")).length}`,
-      `Clipes áudio: ${items.filter(i => i.kind === "audio").length}`,
-      `Duração total: ${totalDuration.toFixed(2)}s`,
-      `FFmpeg core URL: https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.js`,
-      `User-Agent: ${navigator.userAgent}`,
-      `=================================`,
-      `Iniciando processo FFmpeg...`,
-    ];
-    console.group("%c[EXPORT DIAG]", "color:#22d3ee;font-weight:bold");
-    diag.forEach(l => console.log(l));
-    console.groupEnd();
-    setExportLog(diag);
-
     const logs: string[] = [];
-    const onLog = ({ message }: { message: string }) => {
-      logs.push(message); if (logs.length > 500) logs.shift();
-      // Parse "fps= 48" and "speed=2.10x"
-      const m1 = /fps=\s*([\d.]+)/.exec(message);
-      if (m1) setExportFpsLive(parseFloat(m1[1]));
-      const m2 = /speed=\s*([\d.]+)x/.exec(message);
-      if (m2) setExportSpeed(parseFloat(m2[1]));
-      setExportLog(prev => {
-        const next = [...prev, message];
-        return next.length > 500 ? next.slice(-500) : next;
-      });
-    };
-    const onProg = ({ progress: p }: { progress: number }) =>
-      setExportPct(Math.max(0, Math.min(1, p)));
 
     try {
+      // ===== DIAGNÓSTICO PRÉ-EXPORTAÇÃO =====
+      const _th = QUALITY_HEIGHT[quality];
+      const _tw = Math.round((_th * aspect.w) / aspect.h / 2) * 2;
+      const diag = [
+        `=== DIAGNÓSTICO DE EXPORTAÇÃO ===`,
+        `Arquivo: ${exportFileName || "video"}.mp4`,
+        `Pasta de saída: (download do navegador)`,
+        `Resolução: ${_tw}x${_th}`,
+        `FPS: ${fps}`,
+        `Codec solicitado: ${codecRequested} (engine: libx264 WASM)`,
+        `Bitrate vídeo: ${vKbps} kbps · áudio: ${aKbps} kbps`,
+        `Clipes vídeo/imagem na V1: ${items.filter(i => (i.kind === "video" || i.kind === "image")).length}`,
+        `Clipes áudio: ${items.filter(i => i.kind === "audio").length}`,
+        `Duração total: ${totalDuration.toFixed(2)}s`,
+        `FFmpeg core URL: https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.js`,
+        `User-Agent: ${navigator.userAgent}`,
+        `=================================`,
+        `Iniciando processo FFmpeg...`,
+      ];
+      console.group("%c[EXPORT DIAG]", "color:#22d3ee;font-weight:bold");
+      diag.forEach(l => console.log(l));
+      console.groupEnd();
+      setExportLog(diag);
+
+      const onLog = ({ message }: { message: string }) => {
+        logs.push(message); if (logs.length > 500) logs.shift();
+        const m1 = /fps=\s*([\d.]+)/.exec(message);
+        if (m1) setExportFpsLive(parseFloat(m1[1]));
+        const m2 = /speed=\s*([\d.]+)x/.exec(message);
+        if (m2) setExportSpeed(parseFloat(m2[1]));
+        setExportLog(prev => {
+          const next = [...prev, message];
+          return next.length > 500 ? next.slice(-500) : next;
+        });
+      };
+      const onProg = ({ progress: p }: { progress: number }) =>
+        setExportPct(Math.max(0, Math.min(1, p)));
+
+
       const ff = await getFFmpeg();
       if (!ff) {
         console.error("FFmpeg não carregou.");

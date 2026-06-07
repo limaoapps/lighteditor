@@ -416,6 +416,7 @@ function mainObjectFit(fx?: Fx): React.CSSProperties["objectFit"] {
 function backgroundFillStyle(fx: Fx): React.CSSProperties {
   const isBlur = fx.fillMode === "blur";
   const blurPx = blurCssPx(fx);
+  const coverScale = isBlur ? 1.08 + Math.min(0.24, blurPx / 260) : 1.04;
   return {
     position: "absolute",
     inset: 0,
@@ -423,7 +424,7 @@ function backgroundFillStyle(fx: Fx): React.CSSProperties {
     height: "100%",
     objectFit: "cover",
     transformOrigin: "center",
-    transform: `${fx.fillMode === "mirror" ? "scaleX(-1) " : ""}scale(${isBlur ? 1.22 : 1.04})`,
+    transform: `${fx.fillMode === "mirror" ? "scaleX(-1) " : ""}scale(${coverScale})`,
     filter: isBlur ? `blur(${blurPx}px)` : undefined,
     willChange: isBlur ? "filter, transform" : "transform",
     zIndex: 0,

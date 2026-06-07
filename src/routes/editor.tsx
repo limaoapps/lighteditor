@@ -6,7 +6,7 @@ import {
   Image as ImageIcon, Video as VideoIcon, RotateCw, Maximize2, AlignCenter,
   Lock, Unlock, Undo2, Redo2, Check, Copy as CopyIcon, ClipboardPaste,
   Sparkles, Sliders, Wand2, RotateCcw, Palette,
-  Settings as SettingsIcon, FileText, RefreshCw, Cpu, Info,
+  Settings as SettingsIcon, FileText, RefreshCw, Cpu, Info, Magnet,
 } from "lucide-react";
 import { getFFmpeg, fetchFile, resetFFmpeg } from "@/lib/ffmpeg-client";
 
@@ -550,6 +550,7 @@ function Editor() {
   const [playing, setPlaying] = useState(false);
   const [zoom, setZoom] = useState(40);
   const [dragExtraSec, setDragExtraSec] = useState(0);
+  const [snapResize, setSnapResize] = useState(true);
   const [tlViewportW, setTlViewportW] = useState(800);
   const [quality, setQuality] = useState<Quality>("1080");
 
@@ -768,6 +769,20 @@ function Editor() {
   }, [items, zoom, flashSnap]);
   const snapTimeRef = useRef(snapTime);
   useEffect(() => { snapTimeRef.current = snapTime; }, [snapTime]);
+  const snapResizeRef = useRef(snapResize);
+  useEffect(() => { snapResizeRef.current = snapResize; }, [snapResize]);
+  const zoomRef = useRef(zoom);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  // Snap raw time to grid step (matches ruler tick step). Used during resize when enabled.
+  const snapToGrid = useCallback((t: number) => {
+    const z = zoomRef.current;
+    const step = z < 20 ? 10 : z < 40 ? 5 : z < 80 ? 2 : 1;
+    return Math.round(t / step) * step;
+  }, []);
+  const snapToGridRef = useRef(snapToGrid);
+  useEffect(() => { snapToGridRef.current = snapToGrid; }, [snapToGrid]);
+  // Limite máximo do projeto para evitar durações inconsistentes
+  const MAX_PROJECT_SEC = 3600; // 1 hora
 
   // ---- Add files → media library only ----
   const addFiles = useCallback(async (files: FileList | null) => {
@@ -1107,7 +1122,8 @@ function Editor() {
       } else if (d.type === "resizeL") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
-          const raw = Math.max(0, tSec);
+          let raw = Math.max(0, tSec);
+          if (snapResizeRef.current) raw = Math.max(0, snapToGridRef.current(raw));
           if (d.isImage) {
             const newStart = Math.max(0, Math.min(d.origEnd - 0.1, raw));
             return { ...i, start: newStart, inPoint: 0, outPoint: d.origEnd - newStart };
@@ -1120,9 +1136,12 @@ function Editor() {
       } else if (d.type === "resizeR") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
-          const raw = Math.max(i.start + 0.1, tSec);
-          const cap = i.kind === "image" ? 24 * 3600 : i.sourceDuration;
-          const newOut = Math.max(i.inPoint + 0.1, Math.min(cap, raw - i.start + i.inPoint));
+          let raw = Math.max(i.start + 0.1, tSec);
+          if (snapResizeRef.current) raw = Math.max(i.start + 0.1, snapToGridRef.current(raw));
+          raw = Math.min(MAX_PROJECT_SEC, raw);
+          const sourceCap = i.kind === "image" ? MAX_PROJECT_SEC : i.sourceDuration;
+          const maxOut = Math.min(sourceCap, i.inPoint + Math.max(0.1, MAX_PROJECT_SEC - i.start));
+          const newOut = Math.max(i.inPoint + 0.1, Math.min(maxOut, raw - i.start + i.inPoint));
           return { ...i, outPoint: newOut };
         }), false);
       } else if (d.type === "fadeIn") {
@@ -2061,6 +2080,15 @@ function Editor() {
               <input type="range" min={minZoom} max={Math.max(minZoom + 10, 200)} step={1} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="w-28 accent-[color:var(--primary)]" />
               <button onClick={() => setZoom(z => Math.min(200, z + 10))} className="rounded p-1 hover:bg-card"><ZoomIn className="h-3.5 w-3.5" /></button>
             </div>
+            <div className="mx-2 h-5 w-px bg-border" />
+            <button
+              onClick={() => setSnapResize(s => !s)}
+              title={snapResize ? "Snap à grade: ativo (clique para precisão livre)" : "Precisão livre (clique para alinhar à grade)"}
+              className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${snapResize ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-card"}`}
+            >
+              <Magnet className="h-3.5 w-3.5" />
+              <span>{snapResize ? "Snap" : "Livre"}</span>
+            </button>
           </div>
 
           <div ref={timelineRef} onMouseDown={onTimelineMouseDown}

@@ -463,6 +463,21 @@ function exportVideoFilter(c: TLItem, targetW: number, targetH: number) {
   };
 }
 
+function exportImageOverlayBox(c: TLItem, targetW: number, targetH: number) {
+  const srcW = c.width || 16;
+  const srcH = c.height || 9;
+  const ar = srcW / Math.max(1, srcH);
+  let h = targetH * 0.6;
+  let w = h * ar;
+  if (w > targetW * 0.9) { w = targetW * 0.9; h = w / ar; }
+  const scale = c.transform?.scale ?? 1;
+  w = Math.max(2, Math.round(w * scale));
+  h = Math.max(2, Math.round(h * scale));
+  const x = Math.round(((c.transform?.xPct ?? 50) / 100) * targetW - w / 2);
+  const y = Math.round(((c.transform?.yPct ?? 50) / 100) * targetH - h / 2);
+  return { w, h, x, y };
+}
+
 // Vignette overlay style — radial gradient (smooth, no hard edges)
 function vignetteStyle(fx?: Fx): React.CSSProperties | null {
   if (!fx) return null;

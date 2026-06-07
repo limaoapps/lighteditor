@@ -2082,11 +2082,9 @@ function Editor() {
             {leftPanel === "transitions" && (
               <div className="space-y-3 text-xs">
                 <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Transições</div>
-                {!selected && (
-                  <div className="rounded-md border border-dashed border-border bg-card/40 px-2 py-2 text-[10px] text-muted-foreground">
-                    Selecione um clipe na timeline para aplicar uma transição.
-                  </div>
-                )}
+                <div className="rounded-md border border-dashed border-border bg-card/40 px-2 py-2 text-[10px] text-muted-foreground">
+                  Arraste uma transição entre dois clipes encostados na timeline. Clique no chip de transição já aplicado para ajustar a duração.
+                </div>
                 {TRANSITION_GROUPS.map(group => (
                   <div key={group.label} className="space-y-1.5">
                     <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">{group.label}</div>
@@ -2094,12 +2092,16 @@ function Editor() {
                       {group.items.map(t => (
                         <button
                           key={t.id}
-                          disabled={!selected}
-                          draggable={!!selected}
-                          onDragStart={(e) => { e.dataTransfer.setData("application/x-lle-transition", t.id); e.dataTransfer.effectAllowed = "copy"; }}
+                          draggable
+                          onDragStart={(e) => {
+                            draggedTransitionRef.current = t;
+                            e.dataTransfer.setData("application/x-lle-transition", t.id);
+                            e.dataTransfer.effectAllowed = "copy";
+                          }}
+                          onDragEnd={() => { draggedTransitionRef.current = null; setTransitionDragHover(null); }}
                           onClick={() => selected && setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: t.dur, fadeOut: t.dur, transition: t.id } : i))}
-                          title={t.hint}
-                          className="flex flex-col items-start gap-0.5 rounded-md border border-border bg-card px-2 py-1.5 text-left hover:border-ring/50 disabled:cursor-not-allowed disabled:opacity-40">
+                          title={selected ? `${t.hint} — clique para aplicar no clipe selecionado, ou arraste entre dois clipes` : `${t.hint} — arraste entre dois clipes na timeline`}
+                          className="flex cursor-grab flex-col items-start gap-0.5 rounded-md border border-border bg-card px-2 py-1.5 text-left hover:border-primary/60 active:cursor-grabbing">
                           <span className="flex items-center gap-1 text-[11px] font-medium leading-tight">
                             <span aria-hidden>{t.icon}</span>{t.label}
                           </span>

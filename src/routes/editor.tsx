@@ -1268,15 +1268,16 @@ function Editor() {
   }, []);
 
   // Create a TL item from a media asset
-  const createTLFromMedia = useCallback((asset: MediaAsset, trackId: string, start: number): TLItem => {
+  const createTLFromMedia = useCallback((asset: MediaAsset, trackId: string, start: number, durationOverride?: number): TLItem => {
     const isImg = asset.kind === "image";
+    const imageDur = Math.max(0.1, Math.min(IMAGE_MAX_DUR, durationOverride ?? 5));
     return {
       id: crypto.randomUUID(),
       mediaId: asset.id,
       kind: asset.kind, trackId, name: asset.name, file: asset.file, url: asset.url,
       start,
       inPoint: 0,
-      outPoint: isImg ? 5 : asset.duration,
+      outPoint: isImg ? imageDur : asset.duration,
       sourceDuration: isImg ? IMAGE_MAX_DUR : asset.duration,
       width: asset.width, height: asset.height,
       transform: asset.kind === "image" || asset.kind === "video" ? { xPct: 50, yPct: 50, scale: 1, rotation: 0 } : undefined,
@@ -1287,7 +1288,7 @@ function Editor() {
     };
   }, []);
 
-  const addAssetToTimeline = useCallback((asset: MediaAsset, opts?: { trackId?: string; start?: number }) => {
+  const addAssetToTimeline = useCallback((asset: MediaAsset, opts?: { trackId?: string; start?: number; duration?: number }) => {
     const wantKind: TrackKind = asset.kind === "audio" ? "audio" : "video";
     const targetTrack = opts?.trackId && tracks.find(t => t.id === opts.trackId)?.kind === wantKind
       ? opts.trackId
@@ -1295,7 +1296,7 @@ function Editor() {
     const defaultStart = items.filter(i => i.trackId === targetTrack)
       .reduce((m, i) => Math.max(m, i.start + (i.outPoint - i.inPoint)), 0);
     const start = opts?.start != null ? Math.max(0, opts.start) : defaultStart;
-    const it = createTLFromMedia(asset, targetTrack, start);
+    const it = createTLFromMedia(asset, targetTrack, start, opts?.duration);
     setItems(prev => [...prev, it]);
     setSelectedId(it.id);
   }, [items, tracks, ensureTrack, createTLFromMedia, setItems]);
@@ -2169,13 +2170,18 @@ function Editor() {
     // "Cola" no início: se o usuário soltar próximo de 0 (até 1.5s) e a faixa estiver livre nesse intervalo, encaixa em 0.
     const trackIsEmptyNear0 = !items.some(i => i.trackId === trackId && i.start < Math.max(start, 1.5));
     if (start < 1.5 && trackIsEmptyNear0) start = 0;
+    const droppedAssets = ids.map(mid => media.find(m => m.id === mid)).filter(Boolean) as MediaAsset[];
+    const longestAudioDur = droppedAssets
+      .filter(asset => asset.kind === "audio")
+      .reduce((m, asset) => Math.max(m, asset.duration || 0), 0);
     const cursors: Record<TrackKind, number> = { video: start, audio: start };
     for (const mid of ids) {
       const asset = media.find(m => m.id === mid);
       if (!asset) continue;
       const laneKind: TrackKind = asset.kind === "audio" ? "audio" : "video";
-      addAssetToTimeline(asset, { trackId, start: cursors[laneKind] });
-      const dur = asset.kind === "image" ? Math.min(asset.duration || 5, 5) : (asset.duration || 5);
+      const duration = asset.kind === "image" && longestAudioDur > 0 ? longestAudioDur : undefined;
+      addAssetToTimeline(asset, { trackId, start: cursors[laneKind], duration });
+      const dur = asset.kind === "image" ? (duration ?? Math.min(asset.duration || 5, 5)) : (asset.duration || 5);
       cursors[laneKind] += dur;
     }
   };

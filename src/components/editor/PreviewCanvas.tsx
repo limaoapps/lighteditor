@@ -103,7 +103,7 @@ export function PreviewCanvas({ aspect, v1Items, visualItems, textItems, time, p
     <canvas
       ref={canvasRef}
       className="pointer-events-none absolute inset-0 h-full w-full"
-      style={{ zIndex: 20, background: "transparent" }}
+      style={{ zIndex: 5, background: "transparent" }}
     />
   );
 }

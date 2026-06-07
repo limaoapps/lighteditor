@@ -20,7 +20,7 @@
 
 import { Muxer, ArrayBufferTarget } from "mp4-muxer";
 import { buildAudioFxGraph, type AudioFx } from "./audio-fx";
-import { drawScene, type MediaResolver, type Scene } from "./scene-renderer";
+import { drawScene, type MediaResolver, type MediaSource, type Scene } from "./scene-renderer";
 
 export type WCItem = {
   id: string;
@@ -693,8 +693,8 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
   };
   const mediaResolver: MediaResolver = {
     resolve: (item) => {
-      if (item.kind === "video") return (videoEls.get(item.id) as unknown as CanvasImageSource) ?? null;
-      if (item.kind === "image") return (imageEls.get(item.id) as unknown as CanvasImageSource) ?? null;
+      if (item.kind === "video") return (videoEls.get(item.id) as unknown as MediaSource) ?? null;
+      if (item.kind === "image") return (imageEls.get(item.id) as unknown as MediaSource) ?? null;
       return null;
     },
   };

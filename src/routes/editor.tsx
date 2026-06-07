@@ -1029,6 +1029,21 @@ function Editor() {
 
   const usedMediaIds = useMemo(() => new Set(items.map(i => i.mediaId).filter(Boolean) as string[]), [items]);
 
+  // Z-index por trilha: trilha mais acima no painel = camada visualmente em cima (Photoshop-style).
+  const videoTrackOrder = useMemo(() => {
+    const m: Record<string, number> = {};
+    const vids = tracks.filter(t => t.kind === "video");
+    vids.forEach((t, i) => { m[t.id] = i; });
+    return { map: m, count: vids.length };
+  }, [tracks]);
+  const trackZ = useCallback((trackId: string): number => {
+    const idx = videoTrackOrder.map[trackId];
+    if (idx == null) return 2;
+    // V1 (idx 0) => maior zIndex; cada trilha abaixo recebe 2 níveis (bg + content)
+    return 10 + (videoTrackOrder.count - idx) * 2;
+  }, [videoTrackOrder]);
+
+
   // ---- Track helpers ----
   const ensureTrack = useCallback((kind: TrackKind, after?: string): string => {
     // Find next available id like V<n>/A<n>

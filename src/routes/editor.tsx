@@ -789,6 +789,14 @@ function Editor() {
 
   const [snapH, setSnapH] = useState(false);
   const [snapV, setSnapV] = useState(false);
+  const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(new Set());
+  const [mediaBoxSel, setMediaBoxSel] = useState<
+    | { x1: number; y1: number; x2: number; y2: number; additive: boolean; baseline: Set<string> }
+    | null
+  >(null);
+  const mediaItemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const mediaListRef = useRef<HTMLDivElement | null>(null);
+
 
   const [exporting, setExporting] = useState(false);
   const ffReady = true;
@@ -1020,6 +1028,59 @@ function Editor() {
   useEffect(() => { tracksRef.current = tracks; }, [tracks]);
 
   const usedMediaIds = useMemo(() => new Set(items.map(i => i.mediaId).filter(Boolean) as string[]), [items]);
+
+  // Z-index por trilha: trilha mais acima no painel = camada visualmente em cima (Photoshop-style).
+  const videoTrackOrder = useMemo(() => {
+    const m: Record<string, number> = {};
+    const vids = tracks.filter(t => t.kind === "video");
+    vids.forEach((t, i) => { m[t.id] = i; });
+    return { map: m, count: vids.length };
+  }, [tracks]);
+  const trackZ = useCallback((trackId: string): number => {
+    const idx = videoTrackOrder.map[trackId];
+    if (idx == null) return 2;
+    // V1 (idx 0) => maior zIndex; cada trilha abaixo recebe 2 níveis (bg + content)
+    return 10 + (videoTrackOrder.count - idx) * 2;
+  }, [videoTrackOrder]);
+
+  // Box-select global listeners para a mídia
+  useEffect(() => {
+    if (!mediaBoxSel) return;
+    const onMove = (e: MouseEvent) => {
+      const container = mediaListRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top + container.scrollTop;
+      setMediaBoxSel(prev => prev ? { ...prev, x2: x, y2: y } : prev);
+      // recalcula seleção
+      const x1 = Math.min(mediaBoxSel.x1, x);
+      const y1 = Math.min(mediaBoxSel.y1, y);
+      const x2 = Math.max(mediaBoxSel.x1, x);
+      const y2 = Math.max(mediaBoxSel.y1, y);
+      const next = new Set(mediaBoxSel.baseline);
+      for (const [id, el] of Object.entries(mediaItemRefs.current)) {
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        const ix1 = r.left - rect.left;
+        const iy1 = r.top - rect.top + container.scrollTop;
+        const ix2 = ix1 + r.width;
+        const iy2 = iy1 + r.height;
+        const intersects = !(ix2 < x1 || ix1 > x2 || iy2 < y1 || iy1 > y2);
+        if (intersects) next.add(id);
+      }
+      setSelectedMediaIds(next);
+    };
+    const onUp = () => setMediaBoxSel(null);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [mediaBoxSel]);
+
+
 
   // ---- Track helpers ----
   const ensureTrack = useCallback((kind: TrackKind, after?: string): string => {
@@ -1983,14 +2044,31 @@ function Editor() {
       return;
     }
     const id = e.dataTransfer.getData("application/x-vle-media");
-    if (!id) return;
+    const idsMulti = e.dataTransfer.getData("application/x-vle-media-multi");
+    const ids = idsMulti ? idsMulti.split(",").filter(Boolean) : (id ? [id] : []);
+    if (!ids.length) return;
     e.preventDefault();
-    const asset = media.find(m => m.id === id); if (!asset) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const xPx = e.clientX - rect.left;
-    const start = snapTime(Math.max(0, xPx / zoom));
-    addAssetToTimeline(asset, { trackId, start });
+    let start = snapTime(Math.max(0, xPx / zoom));
+    // "Cola" no início: se o usuário soltar próximo de 0 (até 1.5s) e a faixa estiver livre nesse intervalo, encaixa em 0.
+    const trackIsEmptyNear0 = !items.some(i => i.trackId === trackId && i.start < Math.max(start, 1.5));
+    if (start < 1.5 && trackIsEmptyNear0) start = 0;
+    let cursor = start;
+    for (const mid of ids) {
+      const asset = media.find(m => m.id === mid);
+      if (!asset) continue;
+      addAssetToTimeline(asset, { trackId, start: cursor });
+      // se múltiplos: encadeia
+      const dur = asset.kind === "image" ? Math.min(asset.duration || 5, 5) : (asset.duration || 5);
+      cursor += dur;
+
+
+    }
   };
+
+
+
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground select-none" style={{ WebkitUserSelect: "none", userSelect: "none" }}>
@@ -2075,18 +2153,58 @@ function Editor() {
                   <span>Mídia</span>
                   <span className="text-[10px] normal-case text-muted-foreground/70">{media.length} item(ns)</span>
                 </div>
-                <div className="flex-1 space-y-1 overflow-y-auto pr-1">
+                <div
+                  ref={mediaListRef}
+                  className="relative flex-1 space-y-1 overflow-y-auto pr-1"
+                  onMouseDown={(e) => {
+                    // só inicia box-select quando clica em área vazia (não em item / botão)
+                    if ((e.target as HTMLElement).closest("[data-media-item]")) return;
+                    if (e.button !== 0) return;
+                    const container = mediaListRef.current;
+                    if (!container) return;
+                    const rect = container.getBoundingClientRect();
+                    const x = e.clientX - rect.left + container.scrollTop * 0; // x não afeta scroll
+                    const y = e.clientY - rect.top + container.scrollTop;
+                    const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+                    setMediaBoxSel({ x1: x, y1: y, x2: x, y2: y, additive, baseline: new Set(additive ? selectedMediaIds : []) });
+                    if (!additive) setSelectedMediaIds(new Set());
+                    e.preventDefault();
+                  }}
+                >
                   {media.map(a => {
                     const Icon = a.kind === "audio" ? Music2 : a.kind === "image" ? ImageIcon : VideoIcon;
                     const used = usedMediaIds.has(a.id);
+                    const isSel = selectedMediaIds.has(a.id);
                     return (
                       <div key={a.id}
+                        data-media-item
+                        ref={(el) => { mediaItemRefs.current[a.id] = el; }}
                         draggable
-                        onDragStart={(e) => { e.dataTransfer.setData("application/x-vle-media", a.id); e.dataTransfer.effectAllowed = "copy"; }}
+                        onMouseDown={(e) => {
+                          if ((e.target as HTMLElement).closest("button")) return;
+                          if (e.shiftKey || e.metaKey || e.ctrlKey) {
+                            e.preventDefault();
+                            setSelectedMediaIds(prev => {
+                              const n = new Set(prev);
+                              if (n.has(a.id)) n.delete(a.id); else n.add(a.id);
+                              return n;
+                            });
+                          } else if (!selectedMediaIds.has(a.id)) {
+                            setSelectedMediaIds(new Set([a.id]));
+                          }
+                        }}
+                        onDragStart={(e) => {
+                          const ids = selectedMediaIds.has(a.id) && selectedMediaIds.size > 1
+                            ? Array.from(selectedMediaIds)
+                            : [a.id];
+                          e.dataTransfer.setData("application/x-vle-media", a.id);
+                          if (ids.length > 1) e.dataTransfer.setData("application/x-vle-media-multi", ids.join(","));
+                          e.dataTransfer.effectAllowed = "copy";
+                        }}
                         onDoubleClick={() => addAssetToTimeline(a)}
                         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setMediaCtx({ x: e.clientX, y: e.clientY, mediaId: a.id }); }}
-                        title="Arraste até a timeline, clique duas vezes ou clique direito para opções"
-                        className={`group flex w-full cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs active:cursor-grabbing ${used ? "border-primary/40 bg-primary/5" : "border-border bg-card hover:border-ring/50"}`}>
+                        title="Arraste para a timeline. Shift/Ctrl+clique ou arraste no fundo para selecionar várias."
+                        className={`group flex w-full cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs active:cursor-grabbing ${isSel ? "border-primary bg-primary/15 ring-1 ring-primary/40" : used ? "border-primary/40 bg-primary/5" : "border-border bg-card hover:border-ring/50"}`}>
                         <Icon className="h-3.5 w-3.5 text-primary" />
                         <span className="min-w-0 flex-1 truncate">{a.name}</span>
                         {used && <Check className="h-3 w-3 text-primary" />}
@@ -2100,7 +2218,19 @@ function Editor() {
                     );
                   })}
                   {!media.length && <div className="rounded-md border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">Clique em "Adicionar Arquivo" para importar mídia. Depois arraste para a timeline.</div>}
+                  {mediaBoxSel && (
+                    <div
+                      className="pointer-events-none absolute z-10 rounded-sm border border-primary bg-primary/10"
+                      style={{
+                        left: Math.min(mediaBoxSel.x1, mediaBoxSel.x2),
+                        top: Math.min(mediaBoxSel.y1, mediaBoxSel.y2),
+                        width: Math.abs(mediaBoxSel.x2 - mediaBoxSel.x1),
+                        height: Math.abs(mediaBoxSel.y2 - mediaBoxSel.y1),
+                      }}
+                    />
+                  )}
                 </div>
+
               </>
             )}
 
@@ -2212,7 +2342,7 @@ function Editor() {
                     src={activeV1Video.url}
                     muted playsInline
                     className="pointer-events-none absolute inset-0 h-full w-full"
-                    style={backgroundFillStyle(fx)}
+                    style={{ ...backgroundFillStyle(fx), zIndex: trackZ(activeV1Video.trackId) - 1 }}
                   />
                 );
               })()}
@@ -2228,13 +2358,15 @@ function Editor() {
                   opacity: op,
                   filter: cssFilter(fx),
                 } : {};
-                return <video ref={videoElRef} className="absolute inset-0 h-full w-full pointer-events-none" muted={false} playsInline style={{ ...style, objectFit: mainObjectFit(fx), zIndex: 2 }} />;
+                const zV = activeV1Video ? trackZ(activeV1Video.trackId) : 2;
+                return <video ref={videoElRef} className="absolute inset-0 h-full w-full pointer-events-none" muted={false} playsInline style={{ ...style, objectFit: mainObjectFit(fx), zIndex: zV }} />;
               })()}
 
               {/* Vignette overlay for V1 video */}
               {(() => {
                 const vs = vignetteStyle(activeV1Video?.fx);
-                return vs ? <div className="pointer-events-none absolute inset-0" style={{ ...vs, zIndex: 2 }} /> : null;
+                const zV = activeV1Video ? trackZ(activeV1Video.trackId) : 2;
+                return vs ? <div className="pointer-events-none absolute inset-0" style={{ ...vs, zIndex: zV }} /> : null;
               })()}
 
               {/* Click-to-select V1 video (transparent layer above video, below overlays) */}
@@ -2242,7 +2374,7 @@ function Editor() {
                 <div
                   onMouseDown={(e) => startMove(activeV1Video.id, e, activeV1Video.transform!)}
                   className="absolute inset-0 cursor-move"
-                  style={{ background: "transparent", zIndex: 3 }}
+                  style={{ background: "transparent", zIndex: trackZ(activeV1Video.trackId) + 1 }}
                 />
               )}
 
@@ -2258,12 +2390,16 @@ function Editor() {
                     className="pointer-events-none absolute inset-0 h-full w-full"
                     style={{
                       ...backgroundFillStyle(fx),
-                      zIndex: 3,
+                      zIndex: trackZ(ov.trackId) - 1,
                       opacity: computeVisualOpacity(ov, playhead),
                     }} />
                 );
               })}
-              {overlays.map(ov => {
+              {[...overlays].sort((a, b) => {
+                const ai = videoTrackOrder.map[a.trackId] ?? 99;
+                const bi = videoTrackOrder.map[b.trackId] ?? 99;
+                return bi - ai; // trilhas inferiores primeiro no DOM, V1 por último
+              }).map(ov => {
                 const tr = ov.transform!;
                 const isSel = ov.id === selectedId;
                 if (ov.kind === "image") {
@@ -2280,9 +2416,10 @@ function Editor() {
                     transform: `translate(-50%,-50%) scale(${tr.scale * zScale}) rotate(${tr.rotation}deg)`,
                     cursor: "move",
                     opacity: op,
-                    zIndex: 4,
+                    zIndex: trackZ(ov.trackId),
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
                   };
+
                   return (
                     <div key={ov.id} style={wrap} onMouseDown={(e) => startMove(ov.id, e, tr)}>
                       <img src={ov.url} alt="" draggable={false} className="pointer-events-none h-full w-full object-contain"
@@ -2916,6 +3053,14 @@ function Editor() {
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs hover:border-primary hover:text-primary">
               <Scissors className="h-3.5 w-3.5" /> Dividir
             </button>
+            <button
+              onClick={() => setSnapResize(s => !s)}
+              title={snapResize ? "Snap ativo — clipes encaixam nas bordas. Clique para desativar." : "Snap desativado — movimentação livre. Clique para ativar."}
+              className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors ${snapResize ? "border-primary/60 bg-primary/15 text-primary" : "border-border bg-card text-muted-foreground hover:border-primary hover:text-primary"}`}
+            >
+              <Magnet className="h-3.5 w-3.5" /> {snapResize ? "Snap" : "Snap off"}
+            </button>
+
             <button onClick={() => selected && deleteItem(selected.id)} disabled={!selected} title="Excluir (Del)"
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs hover:border-destructive hover:text-destructive disabled:opacity-40">
               <Trash2 className="h-3.5 w-3.5" /> Excluir
@@ -2933,15 +3078,8 @@ function Editor() {
               <input type="range" min={minZoom} max={Math.max(minZoom + 10, 200)} step={1} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="w-28 accent-[color:var(--primary)]" />
               <button onClick={() => setZoom(z => Math.min(200, z + 10))} className="rounded p-1 hover:bg-card"><ZoomIn className="h-3.5 w-3.5" /></button>
             </div>
-            <div className="mx-2 h-5 w-px bg-border" />
-            <button
-              onClick={() => setSnapResize(s => !s)}
-              title={snapResize ? "Snap nas bordas: ativo (clique para precisão livre)" : "Precisão livre (clique para alinhar com outros clipes)"}
-              className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${snapResize ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-card"}`}
-            >
-              <Magnet className="h-3.5 w-3.5" />
-              <span>{snapResize ? "Snap" : "Livre"}</span>
-            </button>
+
+
           </div>
 
           <div className="flex border-t border-border">

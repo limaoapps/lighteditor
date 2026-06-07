@@ -8,7 +8,7 @@ import {
   Sparkles, Sliders, Wand2, RotateCcw, Palette,
   Settings as SettingsIcon, FileText, RefreshCw, Cpu, Info,
 } from "lucide-react";
-import { getFFmpeg, fetchFile } from "@/lib/ffmpeg-client";
+import { getFFmpeg, fetchFile, resetFFmpeg } from "@/lib/ffmpeg-client";
 
 export const Route = createFileRoute("/editor")({
   head: () => ({
@@ -559,6 +559,7 @@ function Editor() {
   const [snapV, setSnapV] = useState(false);
 
   const [exporting, setExporting] = useState(false);
+  const [ffReady, setFfReady] = useState(false);
   const [exportPct, setExportPct] = useState(0);
   const [exportMsg, setExportMsg] = useState("");
   const [exportUrl, setExportUrl] = useState<string | null>(null);
@@ -590,6 +591,22 @@ function Editor() {
   const [exportHistory, setExportHistory] = useState<Array<{ url: string; name: string; at: number; sizeMB: number }>>([]);
   const [diagRunning, setDiagRunning] = useState<null | "version" | "simple">(null);
   const [diagResult, setDiagResult] = useState<string>("");
+
+  useEffect(() => {
+    let mounted = true;
+    getFFmpeg()
+      .then(() => {
+        if (!mounted) return;
+        setFfReady(true);
+        console.log("FFmpeg pronto para exportação.");
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("FFmpeg não carregou.", err);
+        if (mounted) setError(`FFmpeg não carregou: ${msg}`);
+      });
+    return () => { mounted = false; };
+  }, []);
 
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; clipId: string | null } | null>(null);
   const [mediaCtx, setMediaCtx] = useState<{ x: number; y: number; mediaId: string } | null>(null);

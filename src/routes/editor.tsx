@@ -769,6 +769,20 @@ function Editor() {
   }, [items, zoom, flashSnap]);
   const snapTimeRef = useRef(snapTime);
   useEffect(() => { snapTimeRef.current = snapTime; }, [snapTime]);
+  const snapResizeRef = useRef(snapResize);
+  useEffect(() => { snapResizeRef.current = snapResize; }, [snapResize]);
+  const zoomRef = useRef(zoom);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  // Snap raw time to grid step (matches ruler tick step). Used during resize when enabled.
+  const snapToGrid = useCallback((t: number) => {
+    const z = zoomRef.current;
+    const step = z < 20 ? 10 : z < 40 ? 5 : z < 80 ? 2 : 1;
+    return Math.round(t / step) * step;
+  }, []);
+  const snapToGridRef = useRef(snapToGrid);
+  useEffect(() => { snapToGridRef.current = snapToGrid; }, [snapToGrid]);
+  // Limite máximo do projeto para evitar durações inconsistentes
+  const MAX_PROJECT_SEC = 3600; // 1 hora
 
   // ---- Add files → media library only ----
   const addFiles = useCallback(async (files: FileList | null) => {

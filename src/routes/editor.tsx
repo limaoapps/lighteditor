@@ -808,6 +808,39 @@ function Editor() {
     return entry;
   }, [ensureAudioCtx, ensureMaster]);
 
+  // Apply master L/R gains
+  useEffect(() => {
+    const m = masterRef.current; const ctx = audioCtxRef.current;
+    if (!m || !ctx) return;
+    const t = ctx.currentTime;
+    m.gainL.gain.setTargetAtTime(dbToGain(masterDbL), t, 0.01);
+    m.gainR.gain.setTargetAtTime(dbToGain(masterDbR), t, 0.01);
+  }, [masterDbL, masterDbR]);
+
+  // Peak meters (rAF)
+  useEffect(() => {
+    let raf = 0;
+    let pl = 0, pr = 0;
+    const buf = new Float32Array(1024);
+    const tick = () => {
+      const m = masterRef.current;
+      if (m) {
+        m.analyserL.getFloatTimeDomainData(buf);
+        let mL = 0; for (let i = 0; i < buf.length; i++) { const v = Math.abs(buf[i]); if (v > mL) mL = v; }
+        m.analyserR.getFloatTimeDomainData(buf);
+        let mR = 0; for (let i = 0; i < buf.length; i++) { const v = Math.abs(buf[i]); if (v > mR) mR = v; }
+        pl = Math.max(mL, pl * 0.9);
+        pr = Math.max(mR, pr * 0.9);
+        setMasterPeakL(pl); setMasterPeakR(pr);
+        if (mL >= 0.99) setMasterClipL(true);
+        if (mR >= 0.99) setMasterClipR(true);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   const previewBoxRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const tracksAreaRef = useRef<HTMLDivElement>(null);

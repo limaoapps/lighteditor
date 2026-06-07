@@ -516,10 +516,12 @@ async function buildMixedAudio(opts: WCExportOptions, sampleRate: number): Promi
       let abuf: AudioBuffer | null = null;
       try { abuf = await decodeAudio(probe, opts.music.file); } catch { abuf = null; }
       if (abuf) {
+        const m = opts.music;
         const src = ac.createBufferSource();
-        src.buffer = abuf; src.loop = true;
-        wireSource(src, opts.music, { ducker: opts.v1clips.length ? 0.4 : 1.0 });
-        try { src.start(0, 0, totalDur); } catch { /* ignore */ }
+        src.buffer = abuf;
+        const mDur = Math.max(0, m.outPoint - m.inPoint);
+        wireSource(src, m, { ducker: opts.v1clips.length ? 0.4 : 1.0 });
+        try { src.start(Math.max(0, m.start), Math.max(0, m.inPoint), mDur); } catch { /* ignore */ }
       }
     }
     for (const a of opts.audioClips) {

@@ -3342,7 +3342,7 @@ function Editor() {
               </div>
             </div>
           </div>
-          <div className="flex shrink-0 items-stretch gap-2 bg-panel px-3 py-2">
+          <div className="flex h-[280px] shrink-0 items-stretch gap-2 border-l border-border bg-panel px-3 py-2">
             <MasterFader label="L" db={masterDbL} setDb={setMasterDbL} peak={masterPeakL} clip={masterClipL} onClearClip={() => setMasterClipL(false)} />
             <MasterFader label="R" db={masterDbR} setDb={setMasterDbR} peak={masterPeakR} clip={masterClipR} onClearClip={() => setMasterClipR(false)} />
           </div>

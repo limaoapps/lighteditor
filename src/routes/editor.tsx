@@ -1945,14 +1945,18 @@ function Editor() {
       const offsetClips = <T extends { start: number }>(arr: T[]): T[] =>
         arr.map(c => ({ ...c, start: Math.max(0, c.start - shift) }));
 
-      const withLayer = <T extends TLItem>(arr: T[]) => arr.map(c => ({ ...c, zIndex: trackZ(c.trackId) }));
+      const withPreviewGeometry = <T extends TLItem>(arr: T[]) => arr.map(c => ({
+        ...c,
+        zIndex: trackZ(c.trackId),
+        previewBox: (c.kind === "video" || c.kind === "image") ? getItemBounds(c) : undefined,
+      }));
 
       const blob = await exportWithWebCodecs({
-        v1clips: withLayer(offsetClips(v1clips)) as unknown as import("@/lib/webcodecs-export").WCItem[],
+        v1clips: withPreviewGeometry(offsetClips(v1clips)) as unknown as import("@/lib/webcodecs-export").WCItem[],
         audioClips: offsetClips(audioClips) as unknown as import("@/lib/webcodecs-export").WCItem[],
         music: (music ? offsetClips([music])[0] : undefined) as unknown as import("@/lib/webcodecs-export").WCItem | undefined,
-        imageItems: withLayer(offsetClips(visualOverlayItems)) as unknown as import("@/lib/webcodecs-export").WCItem[],
-        textItems: withLayer(offsetClips(textItems)) as unknown as import("@/lib/webcodecs-export").WCItem[],
+        imageItems: withPreviewGeometry(offsetClips(visualOverlayItems)) as unknown as import("@/lib/webcodecs-export").WCItem[],
+        textItems: withPreviewGeometry(offsetClips(textItems)) as unknown as import("@/lib/webcodecs-export").WCItem[],
         targetW, targetH,
         fps, vKbps, aKbps, totalDuration: realDuration,
         onProgress: (p) => setExportPct(p),

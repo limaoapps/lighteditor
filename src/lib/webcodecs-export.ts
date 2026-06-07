@@ -227,6 +227,7 @@ function drawClipFrame(
   bgColor: string = "#000000",
   blurPx: number = 0,
   opacity: number = 1,
+  visualBlurPx: number = 0,
 ) {
   ctx.save();
   ctx.globalAlpha = 1;
@@ -254,7 +255,7 @@ function drawClipFrame(
   }
   // foreground
   ctx.globalAlpha = Math.max(0, Math.min(1, opacity));
-  try { (ctx as unknown as { filter: string }).filter = itemBlurPx({ blur: blurPx } as WCItem["fx"]) > 0 ? `blur(${itemBlurPx({ blur: blurPx } as WCItem["fx"])}px)` : "none"; } catch { /* ignore */ }
+  try { (ctx as unknown as { filter: string }).filter = visualBlurPx > 0 ? `blur(${visualBlurPx}px)` : "none"; } catch { /* ignore */ }
   if (fillMode === "stretch") {
     ctx.drawImage(source, 0, 0, targetW, targetH);
   } else {

@@ -2390,6 +2390,7 @@ function Editor() {
                     whiteSpace: "pre-wrap",
                     cursor: "move",
                     opacity: (computeVisualOpacity(ov, playhead)) * t.opacity,
+                    filter: cssFilter(ov.fx),
                     zIndex: 5,
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
                     maxWidth: "90%",
@@ -2979,7 +2980,7 @@ function Editor() {
           })()}
 
 
-          {selected && selected.fx && (selected.kind === "image" || selected.kind === "video") && (() => {
+          {selected && selected.fx && (selected.kind === "image" || selected.kind === "video" || selected.kind === "text") && (() => {
             const fx = selected.fx;
             const patchFx = (patch: Partial<Fx>) =>
               setItems(p => p.map(i => i.id === selected.id && i.fx ? { ...i, fx: { ...i.fx, ...patch } } : i));
@@ -3042,7 +3043,7 @@ function Editor() {
                   </div>
                 </details>
 
-                <details className="rounded border border-border/60 bg-background/40">
+                {(selected.kind === "image" || selected.kind === "video") && <details className="rounded border border-border/60 bg-background/40">
                   <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"><Palette className="h-3 w-3" /> Modo de Preenchimento</summary>
                   <div className="space-y-1.5 px-2 pb-2 pt-1">
                     <div className="grid grid-cols-2 gap-1">
@@ -3079,7 +3080,7 @@ function Editor() {
                       </label>
                     )}
                   </div>
-                </details>
+                </details>}
 
                 <details className="rounded border border-border/60 bg-background/40">
                   <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Vinheta</summary>

@@ -774,6 +774,10 @@ function Editor() {
   const snapResizeTime = useCallback((t: number, excludeId?: string) => {
     const thr = TIME_SNAP_PX / zoomRef.current;
     let best = t, bestD = thr;
+    for (const cand of [0, MAX_PROJECT_SEC]) {
+      const d = Math.abs(cand - t);
+      if (d < bestD) { best = cand; bestD = d; }
+    }
     for (const it of itemsRef.current) {
       if (it.id === excludeId) continue;
       for (const cand of [it.start, it.start + (it.outPoint - it.inPoint)]) {

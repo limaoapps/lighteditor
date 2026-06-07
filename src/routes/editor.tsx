@@ -3224,15 +3224,13 @@ function Editor() {
                           </button>
                         )}
                       </div>
-                      {(nextSameKind || lastOfKind) && (
-                        <button
-                          onClick={() => insertTrackAt(tr.kind, idx + 1)}
-                          title={`Adicionar trilha ${tr.kind === "video" ? "de vídeo" : "de áudio"}`}
-                          className="absolute -bottom-2.5 left-1/2 z-30 -translate-x-1/2 rounded-full border border-border bg-primary p-0.5 text-primary-foreground opacity-0 shadow transition hover:scale-110 group-hover/row:opacity-100"
-                          style={{ left: labelColW / 2 }}>
-                          <Plus className="h-3 w-3" />
-                        </button>
-                      )}
+                      <button
+                        onClick={() => insertTrackAt(tr.kind, tr.kind === "video" ? idx : idx + 1)}
+                        title={tr.kind === "video" ? "Adicionar trilha de vídeo acima" : "Adicionar trilha de áudio abaixo"}
+                        className={`absolute left-1/2 z-30 -translate-x-1/2 rounded-full border border-border bg-primary p-0.5 text-primary-foreground opacity-0 shadow transition hover:scale-110 group-hover/row:opacity-100 ${tr.kind === "video" ? "-top-2.5" : "-bottom-2.5"}`}
+                        style={{ left: labelColW / 2 }}>
+                        <Plus className="h-3 w-3" />
+                      </button>
                       <div
                         onDragOver={onTrackDragOver}
                         onDrop={(e) => onTrackDrop(e, tr.id)}

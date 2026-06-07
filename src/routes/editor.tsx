@@ -762,6 +762,28 @@ function Editor() {
     }
     return audioCtxRef.current;
   }, []);
+  const masterRef = useRef<{
+    input: GainNode; splitter: ChannelSplitterNode; merger: ChannelMergerNode;
+    gainL: GainNode; gainR: GainNode; analyserL: AnalyserNode; analyserR: AnalyserNode;
+  } | null>(null);
+  const ensureMaster = useCallback((ctx: AudioContext) => {
+    if (masterRef.current) return masterRef.current;
+    const input = ctx.createGain();
+    const splitter = ctx.createChannelSplitter(2);
+    const merger = ctx.createChannelMerger(2);
+    const gainL = ctx.createGain();
+    const gainR = ctx.createGain();
+    const analyserL = ctx.createAnalyser();
+    const analyserR = ctx.createAnalyser();
+    analyserL.fftSize = 1024; analyserR.fftSize = 1024;
+    input.connect(splitter);
+    splitter.connect(gainL, 0); splitter.connect(gainR, 1);
+    gainL.connect(analyserL); gainR.connect(analyserR);
+    analyserL.connect(merger, 0, 0); analyserR.connect(merger, 0, 1);
+    merger.connect(ctx.destination);
+    masterRef.current = { input, splitter, merger, gainL, gainR, analyserL, analyserR };
+    return masterRef.current;
+  }, []);
   const attachGraph = useCallback((id: string, el: HTMLMediaElement, item: TLItem) => {
     const ctx = ensureAudioCtx();
     if (!ctx) return null;
@@ -770,14 +792,15 @@ function Editor() {
       try {
         const src = ctx.createMediaElementSource(el);
         const nodes = buildAudioFxGraph(ctx, { initialFx: item.audioFx, initialGainDb: item.gainDb ?? 0 });
+        const master = ensureMaster(ctx);
         src.connect(nodes.input);
-        nodes.output.connect(ctx.destination);
+        nodes.output.connect(master.input);
         entry = { src, nodes };
         mediaGraphRef.current[id] = entry;
       } catch { return null; }
     }
     return entry;
-  }, [ensureAudioCtx]);
+  }, [ensureAudioCtx, ensureMaster]);
 
   const previewBoxRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);

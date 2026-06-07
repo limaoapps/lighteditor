@@ -2055,8 +2055,13 @@ function Editor() {
                                 if ((e.target as HTMLElement).dataset.handle) return;
                                 if (e.button !== 0) return;
                                 e.stopPropagation(); setSelectedId(i.id);
-                                const rect = timelineRef.current!.getBoundingClientRect();
-                                const xPx = e.clientX - rect.left + (timelineRef.current?.scrollLeft ?? 0) - labelColW;
+                                const timeline = timelineRef.current;
+                                if (!timeline) {
+                                  console.error("Timeline ainda não está pronta para arrastar o clipe.");
+                                  return;
+                                }
+                                const rect = timeline.getBoundingClientRect();
+                                const xPx = e.clientX - rect.left + timeline.scrollLeft - labelColW;
                                 skipHistory.current = true;
                                 dragRef.current = { type: "move", id: i.id, offsetSec: xPx / zoom - i.start, origTrackId: i.trackId };
                               }}

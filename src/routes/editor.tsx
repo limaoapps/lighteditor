@@ -560,6 +560,8 @@ function Editor() {
 
   const [exporting, setExporting] = useState(false);
   const [ffReady, setFfReady] = useState(false);
+  const [ffLoading, setFfLoading] = useState(true);
+  const [ffLoadError, setFfLoadError] = useState<string | null>(null);
   const [exportPct, setExportPct] = useState(0);
   const [exportMsg, setExportMsg] = useState("");
   const [exportUrl, setExportUrl] = useState<string | null>(null);
@@ -594,16 +596,24 @@ function Editor() {
 
   useEffect(() => {
     let mounted = true;
+    setFfLoading(true);
     getFFmpeg()
       .then(() => {
         if (!mounted) return;
         setFfReady(true);
+        setFfLoadError(null);
         console.log("FFmpeg pronto para exportação.");
       })
       .catch((err) => {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("FFmpeg não carregou.", err);
-        if (mounted) setError(`FFmpeg não carregou: ${msg}`);
+        if (mounted) {
+          setFfReady(false);
+          setFfLoadError(msg);
+        }
+      })
+      .finally(() => {
+        if (mounted) setFfLoading(false);
       });
     return () => { mounted = false; };
   }, []);

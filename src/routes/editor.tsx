@@ -1043,6 +1043,44 @@ function Editor() {
     return 10 + (videoTrackOrder.count - idx) * 2;
   }, [videoTrackOrder]);
 
+  // Box-select global listeners para a mídia
+  useEffect(() => {
+    if (!mediaBoxSel) return;
+    const onMove = (e: MouseEvent) => {
+      const container = mediaListRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top + container.scrollTop;
+      setMediaBoxSel(prev => prev ? { ...prev, x2: x, y2: y } : prev);
+      // recalcula seleção
+      const x1 = Math.min(mediaBoxSel.x1, x);
+      const y1 = Math.min(mediaBoxSel.y1, y);
+      const x2 = Math.max(mediaBoxSel.x1, x);
+      const y2 = Math.max(mediaBoxSel.y1, y);
+      const next = new Set(mediaBoxSel.baseline);
+      for (const [id, el] of Object.entries(mediaItemRefs.current)) {
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        const ix1 = r.left - rect.left;
+        const iy1 = r.top - rect.top + container.scrollTop;
+        const ix2 = ix1 + r.width;
+        const iy2 = iy1 + r.height;
+        const intersects = !(ix2 < x1 || ix1 > x2 || iy2 < y1 || iy1 > y2);
+        if (intersects) next.add(id);
+      }
+      setSelectedMediaIds(next);
+    };
+    const onUp = () => setMediaBoxSel(null);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [mediaBoxSel]);
+
+
 
   // ---- Track helpers ----
   const ensureTrack = useCallback((kind: TrackKind, after?: string): string => {

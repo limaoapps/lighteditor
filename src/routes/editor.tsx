@@ -2104,16 +2104,16 @@ function Editor() {
           <button onClick={redo} title="Refazer (Ctrl+Y)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Redo2 className="h-4 w-4" /></button>
           <div className="mx-2 h-6 w-px bg-border" />
           <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Proporção</label>
-          <select value={aspectKey} onChange={(e) => setAspectKey(e.target.value as AspectKey)}
+          <select value={aspectKey} onChange={(e) => setProjectAspect(e.target.value as AspectKey)}
             className="rounded-md border border-border bg-card px-2 py-1.5 text-xs">
             {(Object.keys(ASPECTS) as AspectKey[]).map(k => <option key={k} value={k}>{ASPECTS[k].label}</option>)}
           </select>
           {aspectKey === "custom" && (
             <div className="flex items-center gap-1 text-xs">
-              <input type="number" min={1} value={customAR.w} onChange={(e) => setCustomAR(s => ({ ...s, w: Math.max(1, Number(e.target.value) || 1) }))}
+              <input type="number" min={1} value={customAR.w} onChange={(e) => { setCustomAR(s => ({ ...s, w: Math.max(1, Number(e.target.value) || 1) })); setExportPreset("custom"); }}
                 className="w-14 rounded border border-border bg-card px-1.5 py-1" />
               <span className="text-muted-foreground">:</span>
-              <input type="number" min={1} value={customAR.h} onChange={(e) => setCustomAR(s => ({ ...s, h: Math.max(1, Number(e.target.value) || 1) }))}
+              <input type="number" min={1} value={customAR.h} onChange={(e) => { setCustomAR(s => ({ ...s, h: Math.max(1, Number(e.target.value) || 1) })); setExportPreset("custom"); }}
                 className="w-14 rounded border border-border bg-card px-1.5 py-1" />
             </div>
           )}

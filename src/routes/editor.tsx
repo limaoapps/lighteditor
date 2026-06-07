@@ -2022,8 +2022,9 @@ function Editor() {
       if (!asset) continue;
       addAssetToTimeline(asset, { trackId, start: cursor });
       // se múltiplos: encadeia
-      const dur = a.kind === "image" ? Math.min(a.duration || 5, 5) : (a.duration || 5);
+      const dur = asset.kind === "image" ? Math.min(asset.duration || 5, 5) : (asset.duration || 5);
       cursor += dur;
+
 
     }
   };

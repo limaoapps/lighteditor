@@ -1421,6 +1421,12 @@ function Editor() {
     return () => window.removeEventListener("click", onClick);
   }, []);
 
+  useEffect(() => {
+    const sync = () => setPreviewFullscreen(document.fullscreenElement === previewShellRef.current);
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
+
   // ---- Playback clock ----
   useEffect(() => {
     if (!playing) { if (rafRef.current) cancelAnimationFrame(rafRef.current); rafRef.current = null; return; }

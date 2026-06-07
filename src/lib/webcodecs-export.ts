@@ -365,7 +365,13 @@ function drawVisualOverlay(
   ctx.scale(scale, scale);
   const blurPx = itemBlurPx(item.fx, targetH);
   try { (ctx as unknown as { filter: string }).filter = blurPx > 0 ? `blur(${blurPx}px)` : "none"; } catch { /* ignore */ }
-  ctx.drawImage(source, -boxW / 2, -boxH / 2, boxW, boxH);
+  // WYSIWYG: inscreve a fonte no box preservando seu AR (object-fit: contain virtual).
+  const srcARo = srcW / Math.max(1, srcH);
+  const boxARo = boxW / Math.max(1, boxH);
+  let drawWo: number, drawHo: number;
+  if (srcARo >= boxARo) { drawWo = boxW; drawHo = boxW / srcARo; }
+  else { drawHo = boxH; drawWo = boxH * srcARo; }
+  ctx.drawImage(source, -drawWo / 2, -drawHo / 2, drawWo, drawHo);
   try { (ctx as unknown as { filter: string }).filter = "none"; } catch { /* ignore */ }
   ctx.restore();
 }

@@ -264,15 +264,17 @@ const EXPORT_PRESETS: Record<ExportPresetKey, ExportPreset> = {
 };
 
 function defaultVBitrate(q: Quality): number {
-  if (q === "720") return 5000;
-  if (q === "1080") return 8000;
-  return 35000;
+  // Bitrates calibrados para H.264 VBR em hardware (similar ao CapCut):
+  // arquivos consideravelmente menores mantendo qualidade visual percebida.
+  if (q === "720") return 2500;
+  if (q === "1080") return 4500;
+  return 16000; // 2160p / 4K
 }
 function bitrateFromMode(q: Quality, mode: BitrateMode, custom: number): number {
   if (mode === "custom") return Math.max(200, custom);
   const base = defaultVBitrate(q);
-  if (mode === "low")    return Math.round(base * 0.55);
-  if (mode === "high")   return Math.round(base * 1.5);
+  if (mode === "low")    return Math.round(base * 0.6);
+  if (mode === "high")   return Math.round(base * 1.6);
   return base; // medium
 }
 function estimateSizeMB(durationSec: number, vKbps: number, aKbps: number): number {
@@ -524,13 +526,27 @@ async function probeMedia(file: File, kind: ItemKind): Promise<{ url: string; du
 }
 
 function CornerHandles({ id, tr, onStartScale }: { id: string; tr: Transform; onStartScale: (id: string, e: React.MouseEvent, tr: Transform) => void }) {
-  const base: React.CSSProperties = { position: "absolute", width: 12, height: 12, background: "var(--primary)", border: "2px solid white", borderRadius: 2, pointerEvents: "auto", zIndex: 5 };
+  const base: React.CSSProperties = { position: "absolute", width: 12, height: 12, background: "var(--primary)", border: "2px solid white", borderRadius: 2, pointerEvents: "auto", zIndex: 50 };
+  const handle = (style: React.CSSProperties, cursor: string) => (
+    <div
+      data-handle="resize"
+      onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); onStartScale(id, e, tr); }}
+      onClick={(e) => e.stopPropagation()}
+      style={{ ...base, ...style, cursor }}
+    />
+  );
   return (
     <>
-      <div onMouseDown={(e) => onStartScale(id, e, tr)} style={{ ...base, left: -6, top: -6, cursor: "nwse-resize" }} />
-      <div onMouseDown={(e) => onStartScale(id, e, tr)} style={{ ...base, right: -6, top: -6, cursor: "nesw-resize" }} />
-      <div onMouseDown={(e) => onStartScale(id, e, tr)} style={{ ...base, left: -6, bottom: -6, cursor: "nesw-resize" }} />
-      <div onMouseDown={(e) => onStartScale(id, e, tr)} style={{ ...base, right: -6, bottom: -6, cursor: "nwse-resize" }} />
+      {/* 4 corners */}
+      {handle({ left: -6, top: -6 }, "nwse-resize")}
+      {handle({ right: -6, top: -6 }, "nesw-resize")}
+      {handle({ left: -6, bottom: -6 }, "nesw-resize")}
+      {handle({ right: -6, bottom: -6 }, "nwse-resize")}
+      {/* 4 mid-edges */}
+      {handle({ left: "50%", top: -6, transform: "translateX(-50%)" }, "ns-resize")}
+      {handle({ left: "50%", bottom: -6, transform: "translateX(-50%)" }, "ns-resize")}
+      {handle({ left: -6, top: "50%", transform: "translateY(-50%)" }, "ew-resize")}
+      {handle({ right: -6, top: "50%", transform: "translateY(-50%)" }, "ew-resize")}
     </>
   );
 }
@@ -1383,6 +1399,8 @@ function Editor() {
   }, [previewAR]);
 
   const startMove = (id: string, e: React.MouseEvent, tr: Transform) => {
+    const tgt = e.target as HTMLElement | null;
+    if (tgt && tgt.closest?.('[data-handle="resize"]')) return;
     e.stopPropagation();
     setSelectedId(id);
     const previewBox = previewBoxRef.current;
@@ -3179,30 +3197,6 @@ function Editor() {
               )}
             </div>
 
-            <div className="mt-6 rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
-              <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-amber-300">
-                <FileText className="h-3.5 w-3.5" /> Diagnóstico
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => void runFfmpegVersionTest()}
-                  disabled={diagRunning !== null}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50">
-                  {diagRunning === "version" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Cpu className="h-3.5 w-3.5" />}
-                  TESTAR FFMPEG
-                </button>
-                <button
-                  onClick={() => void runSimpleExportTest()}
-                  disabled={diagRunning !== null || !items.length}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50">
-                  {diagRunning === "simple" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-                  TESTE DE EXPORTAÇÃO (teste.mp4)
-                </button>
-              </div>
-              {diagResult && (
-                <pre className="mt-2 max-h-40 overflow-auto rounded bg-black/70 p-2 font-mono text-[10px] leading-snug text-green-300 whitespace-pre-wrap break-all">{diagResult}</pre>
-              )}
-            </div>
 
             <div className="mt-6 flex items-center justify-end gap-2">
               <button onClick={() => setShowExportSettings(false)}

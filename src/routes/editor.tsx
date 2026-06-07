@@ -2496,7 +2496,7 @@ function Editor() {
                     cursor: "move",
                     opacity: (computeVisualOpacity(ov, playhead)) * t.opacity,
                     filter: cssFilter(ov.fx),
-                    zIndex: 5,
+                    zIndex: trackZ(ov.trackId),
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
                     maxWidth: "90%",
                   };
@@ -2521,7 +2521,7 @@ function Editor() {
                   transform: `translate(-50%,-50%) scale(${tr.scale}) rotate(${tr.rotation}deg)`,
                   border: "1.5px dashed var(--primary)",
                   pointerEvents: "none",
-                  zIndex: 6,
+                  zIndex: trackZ(previewTarget.trackId) + 1,
                 };
                 return (
                   <div key={`sel-${previewTarget.id}`} style={style}>

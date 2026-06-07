@@ -359,6 +359,9 @@ function MasterFader({ label, db, setDb, peak, clip, onClearClip }: {
   const labelColor = db > 6 ? "text-red-400" : db > 0 ? "text-yellow-300" : "text-emerald-400";
   // Zero-dB tick position (in %)
   const zeroPct = 1 - (0 - minDb) / (maxDb - minDb);
+  const dbTicks = [12, 6, 0, -6, -12, -30, -60];
+  const tickTop = (tick: number) => `${(1 - (tick - minDb) / (maxDb - minDb)) * 100}%`;
+  const peakDbLabel = peak > 0.00001 ? `${peakDb >= 0 ? "+" : ""}${peakDb.toFixed(1)}` : "-∞";
   return (
     <div className="flex h-full flex-col items-center gap-1 select-none">
       <button
@@ -367,6 +370,13 @@ function MasterFader({ label, db, setDb, peak, clip, onClearClip }: {
         className={`h-2.5 w-5 shrink-0 rounded-sm transition ${clip ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.9)] animate-pulse" : "bg-zinc-700"}`}
       />
       <div className="flex min-h-0 flex-1 items-stretch gap-1">
+        <div className="relative w-7 shrink-0 font-mono text-[8px] tabular-nums text-muted-foreground">
+          {dbTicks.map(tick => (
+            <div key={tick} className="absolute right-0 -translate-y-1/2" style={{ top: tickTop(tick) }}>
+              {tick > 0 ? `+${tick}` : tick}
+            </div>
+          ))}
+        </div>
         {/* Meter */}
         <div className="relative w-2.5 overflow-hidden rounded bg-zinc-900 ring-1 ring-zinc-800">
           <div
@@ -398,6 +408,7 @@ function MasterFader({ label, db, setDb, peak, clip, onClearClip }: {
       <div className={`shrink-0 font-mono text-[9px] tabular-nums ${labelColor}`}>
         {db > 0 ? "+" : ""}{db.toFixed(1)}
       </div>
+      <div className="shrink-0 font-mono text-[8px] text-muted-foreground">pk {peakDbLabel}</div>
       <div className="shrink-0 text-[9px] font-bold text-muted-foreground">{label}</div>
     </div>
   );

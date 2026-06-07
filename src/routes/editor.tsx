@@ -1844,10 +1844,10 @@ function Editor() {
 
     const v1trackId = tracks.find(t => t.kind === "video")?.id;
     const v1clips = items
-      .filter(i => i.trackId === v1trackId && (i.kind === "video" || i.kind === "image"))
+      .filter(i => i.trackId === v1trackId && i.kind === "video")
       .sort((a, b) => a.start - b.start);
     const visualOverlayItems = items
-      .filter(i => (i.kind === "video" || i.kind === "image") && i.trackId !== v1trackId)
+      .filter(i => i.kind === "image" || (i.kind === "video" && i.trackId !== v1trackId))
       .sort((a, b) => a.start - b.start);
     const audioClips = items.filter(i => i.kind === "audio");
     if (!v1clips.length && !visualOverlayItems.length && !audioClips.length) {

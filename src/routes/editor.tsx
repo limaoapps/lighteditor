@@ -1368,11 +1368,6 @@ function Editor() {
   const doExport = async () => {
     try {
       console.log("Iniciando exportação...");
-      if (!ffReady) {
-        console.error("FFmpeg ainda não está pronto.");
-        setError("FFmpeg ainda está carregando. Aguarde alguns segundos e tente novamente.");
-        return;
-      }
       if (!items || items.length === 0) {
         console.error("Nenhum clipe carregado.");
         setError("Nenhum clipe carregado.");
@@ -1420,7 +1415,7 @@ function Editor() {
     const vEncArgs = ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", String(fps), ...vBitArgs];
     const aEncArgs = ["-c:a", "aac", "-b:a", `${aKbps}k`, "-ar", "44100", "-ac", "2"];
 
-    setExporting(true); setExportPct(0); setExportMsg("Carregando engine...");
+    setExporting(true); setExportPct(0); setExportMsg(ffReady ? "Carregando engine..." : "Inicializando FFmpeg...");
     setExportUrl(null); setError(null);
     setExportLog([]); setExportFfCmd("");
     setExportElapsed(0); setExportFpsLive(null); setExportSpeed(null);
@@ -1447,7 +1442,7 @@ function Editor() {
         `Clipes vídeo/imagem na V1: ${items.filter(i => (i.kind === "video" || i.kind === "image")).length}`,
         `Clipes áudio: ${items.filter(i => i.kind === "audio").length}`,
         `Duração total: ${totalDuration.toFixed(2)}s`,
-        `FFmpeg core URL: https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.js`,
+        `FFmpeg core URL: /ffmpeg/ffmpeg-core.js`,
         `User-Agent: ${navigator.userAgent}`,
         `=================================`,
         `Iniciando processo FFmpeg...`,
@@ -1472,7 +1467,11 @@ function Editor() {
         setExportPct(Math.max(0, Math.min(1, p)));
 
 
+      setFfLoading(true);
       const ff = await getFFmpeg();
+      setFfReady(true);
+      setFfLoadError(null);
+      setFfLoading(false);
       if (!ff) {
         console.error("FFmpeg não carregou.");
         setError("FFmpeg não carregou.");

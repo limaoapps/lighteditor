@@ -549,6 +549,7 @@ function Editor() {
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [zoom, setZoom] = useState(40);
+  const [dragExtraSec, setDragExtraSec] = useState(0);
   const [tlViewportW, setTlViewportW] = useState(800);
   const [quality, setQuality] = useState<Quality>("1080");
 
@@ -646,6 +647,9 @@ function Editor() {
   const previewBoxRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const tracksAreaRef = useRef<HTMLDivElement>(null);
+  const itemsRef = useRef<TLItem[]>(items);
+  const tracksRef = useRef<Track[]>(tracks);
+  const lastTimelinePointer = useRef<{ x: number; y: number } | null>(null);
   const rafRef = useRef<number | null>(null);
   const lastTick = useRef<number>(0);
 
@@ -679,6 +683,9 @@ function Editor() {
     () => items.reduce((m, i) => Math.max(m, i.start + (i.outPoint - i.inPoint)), 0),
     [items]
   );
+
+  useEffect(() => { itemsRef.current = items; }, [items]);
+  useEffect(() => { tracksRef.current = tracks; }, [tracks]);
 
   const usedMediaIds = useMemo(() => new Set(items.map(i => i.mediaId).filter(Boolean) as string[]), [items]);
 
@@ -759,6 +766,8 @@ function Editor() {
     if (hitEdge !== null) flashSnap(hitEdge);
     return v;
   }, [items, zoom, flashSnap]);
+  const snapTimeRef = useRef(snapTime);
+  useEffect(() => { snapTimeRef.current = snapTime; }, [snapTime]);
 
   // ---- Add files → media library only ----
   const addFiles = useCallback(async (files: FileList | null) => {
@@ -1020,8 +1029,8 @@ function Editor() {
   // ---- Timeline drags ----
   type Drag =
     | { type: "move"; id: string; offsetSec: number; origTrackId: string }
-    | { type: "resizeL"; id: string; origStart: number; origIn: number; origEnd: number; isImage: boolean }
-    | { type: "resizeR"; id: string; origOut: number }
+    | { type: "resizeL"; id: string; origStart: number; origIn: number; origEnd: number; isImage: boolean; pointerOffsetPx: number }
+    | { type: "resizeR"; id: string; origOut: number; pointerOffsetPx: number }
     | { type: "fadeIn"; id: string }
     | { type: "fadeOut"; id: string }
     | { type: "gain"; id: string; baseDb: number; baseY: number }
@@ -1031,6 +1040,29 @@ function Editor() {
   const labelColW = 140;
   const trackHeight = 60;
   const rulerH = 28;
+  const getTimelineTimeFromClientX = useCallback((clientX: number, pointerOffsetPx = 0) => {
+    const tl = timelineRef.current;
+    const rect = tl?.getBoundingClientRect();
+    if (!tl || !rect) return null;
+    const xPx = clientX - rect.left + tl.scrollLeft - labelColW - pointerOffsetPx;
+    return Math.max(0, xPx / zoom);
+  }, [zoom]);
+
+  const extendTimelineForDrag = useCallback((clientX: number) => {
+    const tl = timelineRef.current;
+    const rect = tl?.getBoundingClientRect();
+    if (!tl || !rect) return;
+    const edge = 64;
+    const overRight = clientX - (rect.right - edge);
+    const overLeft = (rect.left + edge) - clientX;
+    if (overRight > 0) {
+      const next = tl.scrollLeft + Math.min(56, 8 + overRight * 0.75);
+      if (next + tl.clientWidth >= tl.scrollWidth - 24) setDragExtraSec(s => Math.min(24 * 3600, s + 10));
+      tl.scrollLeft = next;
+    } else if (overLeft > 0) {
+      tl.scrollLeft = Math.max(0, tl.scrollLeft - Math.min(56, 8 + overLeft * 0.75));
+    }
+  }, []);
 
   const onTimelineMouseDown = (e: React.MouseEvent) => {
     const rect = timelineRef.current?.getBoundingClientRect();
@@ -1043,59 +1075,42 @@ function Editor() {
   };
 
   useEffect(() => {
-    const onMove = (e: MouseEvent) => {
+    const applyTimelineDrag = (clientX: number, clientY: number) => {
       const d = dragRef.current; if (!d) return;
-      const rect = timelineRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      // Auto-scroll horizontally when dragging near/past edges (move/resize handles)
-      if (d.type === "move" || d.type === "resizeL" || d.type === "resizeR") {
-        const edge = 60;
-        const tl = timelineRef.current;
-        if (tl) {
-          const overRight = e.clientX - (rect.right - edge);
-          const overLeft = (rect.left + edge) - e.clientX;
-          if (overRight > 0) tl.scrollLeft += Math.min(40, overRight * 0.5);
-          else if (overLeft > 0) tl.scrollLeft = Math.max(0, tl.scrollLeft - Math.min(40, overLeft * 0.5));
-        }
-      }
-      const xPx = e.clientX - rect.left + (timelineRef.current?.scrollLeft ?? 0) - labelColW;
-      const tSec = Math.max(0, xPx / zoom);
+      if (d.type === "move" || d.type === "resizeL" || d.type === "resizeR") extendTimelineForDrag(clientX);
+      const pointerOffsetPx = d.type === "resizeL" || d.type === "resizeR" ? d.pointerOffsetPx : 0;
+      const tSec = getTimelineTimeFromClientX(clientX, pointerOffsetPx);
+      if (tSec == null) return;
       skipHistory.current = true;
-      if (d.type === "playhead") setPlayhead(snapTime(tSec));
+      if (d.type === "playhead") setPlayhead(snapTimeRef.current(tSec));
       else if (d.type === "move") {
-        const newStart = snapTime(Math.max(0, tSec - d.offsetSec), d.id);
-        // vertical track switching
+        const newStart = snapTimeRef.current(Math.max(0, tSec - d.offsetSec), d.id);
         const tracksRect = tracksAreaRef.current?.getBoundingClientRect();
         let newTrackId = d.origTrackId;
         if (tracksRect) {
-          const yPx = e.clientY - tracksRect.top;
+          const currentItems = itemsRef.current;
+          const currentTracks = tracksRef.current;
+          const yPx = clientY - tracksRect.top;
           const idx = Math.floor(yPx / trackHeight);
-          const draggedItem = items.find(i => i.id === d.id);
+          const draggedItem = currentItems.find(i => i.id === d.id);
           const wantKind: TrackKind = draggedItem?.kind === "audio" ? "audio" : "video";
-          const sameKindIdxs = tracks.map((t, i) => ({ t, i })).filter(x => x.t.kind === wantKind);
+          const sameKindIdxs = currentTracks.map((t, i) => ({ t, i })).filter(x => x.t.kind === wantKind);
           if (sameKindIdxs.length) {
             const minI = sameKindIdxs[0].i;
             const maxI = sameKindIdxs[sameKindIdxs.length - 1].i;
-            if (idx >= 0 && idx < tracks.length && tracks[idx].kind === wantKind) {
-              newTrackId = tracks[idx].id;
-            } else if (idx > maxI) {
-              // create new track
-              newTrackId = ensureTrack(wantKind);
-            } else if (idx < minI) {
-              newTrackId = tracks[minI].id;
-            }
+            if (idx >= 0 && idx < currentTracks.length && currentTracks[idx].kind === wantKind) newTrackId = currentTracks[idx].id;
+            else if (idx > maxI) newTrackId = ensureTrack(wantKind);
+            else if (idx < minI) newTrackId = currentTracks[minI].id;
           }
         }
         setItems(prev => prev.map(i => i.id === d.id ? { ...i, start: newStart, trackId: newTrackId } : i), false);
       } else if (d.type === "resizeL") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
-          // raw cursor follow (no snap) so it always tracks where the user is
           const raw = Math.max(0, tSec);
           if (d.isImage) {
             const newStart = Math.max(0, Math.min(d.origEnd - 0.1, raw));
-            const newOut = d.origEnd - newStart; // inPoint stays 0
-            return { ...i, start: newStart, inPoint: 0, outPoint: newOut };
+            return { ...i, start: newStart, inPoint: 0, outPoint: d.origEnd - newStart };
           }
           const delta = raw - d.origStart;
           const newIn = Math.max(0, Math.min(i.outPoint - 0.1, d.origIn + delta));
@@ -1114,57 +1129,48 @@ function Editor() {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
           const dur = i.outPoint - i.inPoint;
-          const f = Math.max(0, Math.min(dur, tSec - i.start));
-          return { ...i, fadeIn: f };
+          return { ...i, fadeIn: Math.max(0, Math.min(dur, tSec - i.start)) };
         }), false);
       } else if (d.type === "fadeOut") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
           const dur = i.outPoint - i.inPoint;
           const end = i.start + dur;
-          const f = Math.max(0, Math.min(dur, end - tSec));
-          return { ...i, fadeOut: f };
+          return { ...i, fadeOut: Math.max(0, Math.min(dur, end - tSec)) };
         }), false);
       } else if (d.type === "gain") {
-        const dyPx = e.clientY - d.baseY;
+        const dyPx = clientY - d.baseY;
         const db = Math.max(-30, Math.min(12, d.baseDb - dyPx * 0.25));
         setItems(prev => prev.map(i => i.id === d.id ? { ...i, gainDb: db } : i), false);
       }
     };
-    // Continuous auto-scroll + resize while mouse held at edge (no mousemove events)
-    let lastMouseX = 0, lastMouseY = 0;
-    const trackMouse = (e: MouseEvent) => { lastMouseX = e.clientX; lastMouseY = e.clientY; };
+    const onMove = (e: MouseEvent) => {
+      lastTimelinePointer.current = { x: e.clientX, y: e.clientY };
+      applyTimelineDrag(e.clientX, e.clientY);
+    };
     const tick = window.setInterval(() => {
-      const d = dragRef.current; if (!d) return;
-      if (d.type !== "move" && d.type !== "resizeL" && d.type !== "resizeR") return;
-      const tl = timelineRef.current; const rect = tl?.getBoundingClientRect();
-      if (!tl || !rect) return;
-      const edge = 60;
-      const overRight = lastMouseX - (rect.right - edge);
-      const overLeft = (rect.left + edge) - lastMouseX;
-      if (overRight > 0 || overLeft > 0) {
-        if (overRight > 0) tl.scrollLeft += Math.min(30, overRight * 0.4);
-        else tl.scrollLeft = Math.max(0, tl.scrollLeft - Math.min(30, overLeft * 0.4));
-        onMove(new MouseEvent("mousemove", { clientX: lastMouseX, clientY: lastMouseY }));
-      }
-    }, 30);
+      const d = dragRef.current;
+      const p = lastTimelinePointer.current;
+      if (!d || !p || (d.type !== "move" && d.type !== "resizeL" && d.type !== "resizeR")) return;
+      applyTimelineDrag(p.x, p.y);
+    }, 16);
     const onUp = () => {
       if (dragRef.current) {
         skipHistory.current = false;
         setItemsRaw(prev => { pushHistory(prev); return prev; });
       }
       dragRef.current = null;
+      lastTimelinePointer.current = null;
+      setDragExtraSec(0);
     };
     window.addEventListener("mousemove", onMove);
-    window.addEventListener("mousemove", trackMouse);
     window.addEventListener("mouseup", onUp);
     return () => {
       window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mousemove", trackMouse);
       window.removeEventListener("mouseup", onUp);
       window.clearInterval(tick);
     };
-  }, [zoom, snapTime, setItems, pushHistory, items, tracks, ensureTrack]);
+  }, [extendTimelineForDrag, getTimelineTimeFromClientX, setItems, pushHistory, ensureTrack]);
 
   // ---- Preview transform drag with center-snap ----
   const transformDrag = useRef<{ id: string; startX: number; startY: number; baseX: number; baseY: number; rect: DOMRect } | null>(null);
@@ -1273,7 +1279,7 @@ function Editor() {
   };
 
   // Ruler ticks
-  const rulerSpan = Math.max(totalDuration + 5, 10);
+  const rulerSpan = Math.max(totalDuration + dragExtraSec + 5, 10);
   const minZoom = Math.max(2, Math.floor((tlViewportW - labelColW - 4) / rulerSpan));
   const tickStep = zoom < 20 ? 10 : zoom < 40 ? 5 : zoom < 80 ? 2 : 1;
   const ticks: number[] = [];
@@ -2154,9 +2160,9 @@ function Editor() {
                                 <div className="pointer-events-none absolute inset-y-0 right-0" style={{ width: foW, background: "linear-gradient(to left, rgba(0,0,0,0.55), transparent)" }} />
                               )}
 
-                              <div data-handle="L" onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "resizeL", id: i.id, origStart: i.start, origIn: i.inPoint, origEnd: i.start + (i.outPoint - i.inPoint), isImage: i.kind === "image" }; }}
+                              <div data-handle="L" onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); const time = getTimelineTimeFromClientX(e.clientX) ?? i.start; skipHistory.current = true; lastTimelinePointer.current = { x: e.clientX, y: e.clientY }; dragRef.current = { type: "resizeL", id: i.id, origStart: i.start, origIn: i.inPoint, origEnd: i.start + (i.outPoint - i.inPoint), isImage: i.kind === "image", pointerOffsetPx: (time - i.start) * zoom }; }}
                                 className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-ew-resize bg-white/40 hover:bg-white" />
-                              <div data-handle="R" onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "resizeR", id: i.id, origOut: i.outPoint }; }}
+                              <div data-handle="R" onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); const end = i.start + (i.outPoint - i.inPoint); const time = getTimelineTimeFromClientX(e.clientX) ?? end; skipHistory.current = true; lastTimelinePointer.current = { x: e.clientX, y: e.clientY }; dragRef.current = { type: "resizeR", id: i.id, origOut: i.outPoint, pointerOffsetPx: (time - end) * zoom }; }}
                                 className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-ew-resize bg-white/40 hover:bg-white" />
 
                               <div data-handle="FI" title="Fade in (arraste à direita)"

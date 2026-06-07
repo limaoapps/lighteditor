@@ -2798,6 +2798,24 @@ function Editor() {
                 </div>
               </div>
 
+              <div className="md:col-span-2">
+                <label className="flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={useHardwareAccel}
+                    onChange={(e) => setUseHardwareAccel(e.target.checked)}
+                    className="h-3.5 w-3.5"
+                  />
+                  <span className="font-semibold uppercase tracking-wider text-muted-foreground">
+                    Aceleração por hardware (WebCodecs)
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">
+                    Usa NVENC/QuickSync/VideoToolbox quando disponível · fallback automático para WASM
+                  </span>
+                </label>
+              </div>
+
+
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Codec de vídeo</label>
                 <select value={exportCodec} onChange={(e) => setExportCodec(e.target.value as Codec)}

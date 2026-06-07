@@ -27,6 +27,8 @@ export type WCItem = {
   trackId: string;
   name: string;
   file?: File;
+  width?: number;
+  height?: number;
   start: number;
   inPoint: number;
   outPoint: number;
@@ -39,6 +41,7 @@ export type WCItem = {
     bgColor?: string;
     blurBg?: number;
     opacity?: number;
+    zoom?: { dir: "in" | "out"; speed: "slow" | "med" | "fast" } | null;
   };
   text?: {
     content: string;
@@ -71,6 +74,7 @@ export type WCExportOptions = {
   v1clips: WCItem[];
   audioClips: WCItem[];
   music?: WCItem;
+  imageItems?: WCItem[];
   textItems?: WCItem[];
   /** @deprecated use textItems */
   textItem?: WCItem;

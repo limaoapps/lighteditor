@@ -6,6 +6,7 @@ import {
   Image as ImageIcon, Video as VideoIcon, RotateCw, Maximize2, AlignCenter,
   Lock, Unlock, Undo2, Redo2, Check, Copy as CopyIcon, ClipboardPaste,
   Sparkles, Sliders, Wand2, RotateCcw, Palette,
+  Settings as SettingsIcon, FileText, RefreshCw, Cpu, Info,
 } from "lucide-react";
 import { getFFmpeg, fetchFile } from "@/lib/ffmpeg-client";
 
@@ -221,6 +222,66 @@ const IMAGE_MAX_DUR = 3600;
 
 type Quality = "720" | "1080" | "2160";
 const QUALITY_HEIGHT: Record<Quality, number> = { "720": 720, "1080": 1080, "2160": 2160 };
+
+type Codec = "h264" | "h265" | "vp9";
+type BitrateMode = "low" | "medium" | "high" | "custom";
+type AudioBitrate = 128 | 192 | 256 | 320;
+
+type ExportPresetKey =
+  | "youtube_1080" | "youtube_4k" | "tiktok" | "reels"
+  | "ig_feed" | "facebook" | "whatsapp" | "custom";
+
+type ExportPreset = {
+  label: string;
+  aspect: AspectKey;
+  quality: Quality;
+  fps: number;
+  vBitrate: number; // kbps
+  aBitrate: AudioBitrate;
+};
+
+const EXPORT_PRESETS: Record<ExportPresetKey, ExportPreset> = {
+  youtube_1080: { label: "YouTube 1080p",    aspect: "16:9", quality: "1080", fps: 30, vBitrate: 8000,  aBitrate: 192 },
+  youtube_4k:   { label: "YouTube 4K",       aspect: "16:9", quality: "2160", fps: 30, vBitrate: 35000, aBitrate: 256 },
+  tiktok:       { label: "TikTok 1080×1920", aspect: "9:16", quality: "1080", fps: 30, vBitrate: 6000,  aBitrate: 192 },
+  reels:        { label: "Instagram Reels",  aspect: "9:16", quality: "1080", fps: 30, vBitrate: 6000,  aBitrate: 192 },
+  ig_feed:      { label: "Instagram 1:1",    aspect: "1:1",  quality: "1080", fps: 30, vBitrate: 5000,  aBitrate: 192 },
+  facebook:     { label: "Facebook",         aspect: "16:9", quality: "1080", fps: 30, vBitrate: 6000,  aBitrate: 192 },
+  whatsapp:     { label: "WhatsApp",         aspect: "16:9", quality: "720",  fps: 30, vBitrate: 2500,  aBitrate: 128 },
+  custom:       { label: "Personalizado",    aspect: "16:9", quality: "1080", fps: 30, vBitrate: 8000,  aBitrate: 192 },
+};
+
+function defaultVBitrate(q: Quality): number {
+  if (q === "720") return 5000;
+  if (q === "1080") return 8000;
+  return 35000;
+}
+function bitrateFromMode(q: Quality, mode: BitrateMode, custom: number): number {
+  if (mode === "custom") return Math.max(200, custom);
+  const base = defaultVBitrate(q);
+  if (mode === "low")    return Math.round(base * 0.55);
+  if (mode === "high")   return Math.round(base * 1.5);
+  return base; // medium
+}
+function estimateSizeMB(durationSec: number, vKbps: number, aKbps: number): number {
+  const bits = (vKbps + aKbps) * 1000 * Math.max(0.1, durationSec);
+  return bits / 8 / (1024 * 1024);
+}
+function detectGpu(): { available: boolean; vendor: string } {
+  try {
+    const c = document.createElement("canvas");
+    const gl = (c.getContext("webgl2") || c.getContext("webgl")) as WebGLRenderingContext | null;
+    if (!gl) return { available: false, vendor: "—" };
+    const ext = gl.getExtension("WEBGL_debug_renderer_info");
+    const r = (ext && gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) || "GPU";
+    return { available: true, vendor: String(r) };
+  } catch { return { available: false, vendor: "—" }; }
+}
+function fmtClock(s: number): string {
+  if (!isFinite(s) || s < 0) s = 0;
+  const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+  return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+}
 
 const CENTER_SNAP = 1.5;
 const TIME_SNAP_PX = 8;
@@ -502,6 +563,31 @@ function Editor() {
   const [exportMsg, setExportMsg] = useState("");
   const [exportUrl, setExportUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // ---- Export Settings ----
+  const [showExportSettings, setShowExportSettings] = useState(false);
+  const [exportPreset, setExportPreset] = useState<ExportPresetKey>("youtube_1080");
+  const [exportFileName, setExportFileName] = useState("meu-video");
+  const [exportFps, setExportFps] = useState<number>(30);
+  const [exportCodec, setExportCodec] = useState<Codec>("h264");
+  const [bitrateMode, setBitrateMode] = useState<BitrateMode>("medium");
+  const [customBitrate, setCustomBitrate] = useState<number>(8000);
+  const [audioBitrate, setAudioBitrate] = useState<AudioBitrate>(192);
+  const [useGpu, setUseGpu] = useState(false);
+  const [postAutoDownload, setPostAutoDownload] = useState(true);
+  const [postPlay, setPostPlay] = useState(false);
+  const [postBeep, setPostBeep] = useState(true);
+  const [showExportLog, setShowExportLog] = useState(false);
+  const [exportLog, setExportLog] = useState<string[]>([]);
+  const [exportFfCmd, setExportFfCmd] = useState<string>("");
+  const [exportElapsed, setExportElapsed] = useState(0);
+  const [exportFpsLive, setExportFpsLive] = useState<number | null>(null);
+  const [exportSpeed, setExportSpeed] = useState<number | null>(null);
+  const exportStartRef = useRef<number>(0);
+  const exportElapsedTimerRef = useRef<number | null>(null);
+  const lastExportSettingsRef = useRef<null | (() => void)>(null);
+  const gpuInfoRef = useRef<{ available: boolean; vendor: string } | null>(null);
+  const [exportHistory, setExportHistory] = useState<Array<{ url: string; name: string; at: number; sizeMB: number }>>([]);
 
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; clipId: string | null } | null>(null);
   const [mediaCtx, setMediaCtx] = useState<{ x: number; y: number; mediaId: string } | null>(null);
@@ -1137,6 +1223,12 @@ function Editor() {
   }, [minZoom]);
 
   // ---- Export ----
+  const computedVBitrate = bitrateFromMode(quality, bitrateMode, customBitrate);
+  const estimatedMB = useMemo(
+    () => estimateSizeMB(Math.max(1, totalDuration), computedVBitrate, audioBitrate),
+    [totalDuration, computedVBitrate, audioBitrate],
+  );
+
   const doExport = async () => {
     const v1trackId = tracks.find(t => t.kind === "video")?.id;
     const v1clips = items
@@ -1147,25 +1239,69 @@ function Editor() {
       setError("Adicione pelo menos um vídeo, imagem ou áudio na timeline.");
       return;
     }
-    setExporting(true); setExportPct(0); setExportMsg("Carregando engine..."); setExportUrl(null); setError(null);
+    // Save retry handle (same settings)
+    lastExportSettingsRef.current = () => { void doExport(); };
+
+    // Codec mapping — only libx264 ships in @ffmpeg/core WASM; fallback w/ note.
+    const codecRequested = exportCodec;
+    if (exportCodec === "h265" || exportCodec === "vp9") {
+      // we silently fallback but record in log
+    }
+    const fps = Math.max(1, Math.min(60, exportFps || 30));
+    const vKbps = computedVBitrate;
+    const aKbps = audioBitrate;
+    const vBitArgs = ["-b:v", `${vKbps}k`, "-maxrate", `${Math.round(vKbps * 1.5)}k`, "-bufsize", `${vKbps * 2}k`];
+    const vEncArgs = ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", String(fps), ...vBitArgs];
+    const aEncArgs = ["-c:a", "aac", "-b:a", `${aKbps}k`, "-ar", "44100", "-ac", "2"];
+
+    setExporting(true); setExportPct(0); setExportMsg("Carregando engine...");
+    setExportUrl(null); setError(null);
+    setExportLog([]); setExportFfCmd("");
+    setExportElapsed(0); setExportFpsLive(null); setExportSpeed(null);
+    exportStartRef.current = performance.now();
+    if (exportElapsedTimerRef.current) window.clearInterval(exportElapsedTimerRef.current);
+    exportElapsedTimerRef.current = window.setInterval(() => {
+      setExportElapsed((performance.now() - exportStartRef.current) / 1000);
+    }, 250) as unknown as number;
+
     const logs: string[] = [];
+    const onLog = ({ message }: { message: string }) => {
+      logs.push(message); if (logs.length > 500) logs.shift();
+      // Parse "fps= 48" and "speed=2.10x"
+      const m1 = /fps=\s*([\d.]+)/.exec(message);
+      if (m1) setExportFpsLive(parseFloat(m1[1]));
+      const m2 = /speed=\s*([\d.]+)x/.exec(message);
+      if (m2) setExportSpeed(parseFloat(m2[1]));
+      setExportLog(prev => {
+        const next = [...prev, message];
+        return next.length > 500 ? next.slice(-500) : next;
+      });
+    };
+    const onProg = ({ progress: p }: { progress: number }) =>
+      setExportPct(Math.max(0, Math.min(1, p)));
+
     try {
       const ff = await getFFmpeg();
-      ff.on("log", ({ message }) => { logs.push(message); if (logs.length > 200) logs.shift(); });
-      ff.on("progress", ({ progress: p }) => setExportPct(Math.max(0, Math.min(1, p))));
+      ff.on("log", onLog);
+      ff.on("progress", onProg);
       const targetH = QUALITY_HEIGHT[quality];
       const targetW = Math.round((targetH * aspect.w) / aspect.h / 2) * 2;
       const inputs: string[] = [];
 
+      if (codecRequested !== "h264") {
+        logs.push(`[warn] Codec ${codecRequested.toUpperCase()} indisponível no engine WASM — usando H.264.`);
+      }
+      if (useGpu) {
+        logs.push(`[warn] Aceleração por GPU não é suportada no FFmpeg WASM — usando CPU.`);
+      }
+
       if (!v1clips.length) {
-        // Sem V1: gera fundo preto do tamanho do áudio total
         const dur = Math.max(1, totalDuration).toFixed(3);
         setExportMsg("Gerando vídeo base (áudio)...");
         await ff.exec([
-          "-f", "lavfi", "-t", dur, "-i", `color=c=black:s=${targetW}x${targetH}:r=30`,
+          "-f", "lavfi", "-t", dur, "-i", `color=c=black:s=${targetW}x${targetH}:r=${fps}`,
           "-f", "lavfi", "-t", dur, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
-          "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-          "-c:a", "aac", "-ar", "44100", "-ac", "2", "-shortest", "joined.mp4",
+          ...vEncArgs, ...aEncArgs, "-shortest", "joined.mp4",
         ]);
       } else {
         for (let i = 0; i < v1clips.length; i++) {
@@ -1187,41 +1323,29 @@ function Editor() {
 
           const args: string[] = [];
           if (isImg) {
-            args.push("-loop", "1", "-framerate", "30", "-t", to, "-i", inName);
+            args.push("-loop", "1", "-framerate", String(fps), "-t", to, "-i", inName);
             args.push("-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
             if (filter.type === "vf") args.push("-vf", filter.value, "-map", "0:v", "-map", "1:a");
             else args.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "1:a");
-            args.push(
-              "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", "30",
-              "-c:a", "aac", "-ar", "44100", "-ac", "2", "-shortest", outName,
-            );
+            args.push(...vEncArgs, ...aEncArgs, "-shortest", outName);
           } else {
-            // Vídeo: sempre incluir trilha de áudio silenciosa de fallback
-            // e mixar com a original (se existir) garante stream de áudio consistente para o concat.
             args.push("-ss", c.inPoint.toFixed(3), "-i", inName, "-t", to);
             args.push("-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
-            const vPart = filter.type === "vf"
-              ? `[0:v]${filter.value}[vout]`
-              : filter.value;
+            const vPart = filter.type === "vf" ? `[0:v]${filter.value}[vout]` : filter.value;
             const aPart = afilters.length
               ? `[0:a]${afilters.join(",")}[a0src];[a0src][1:a]amix=inputs=2:duration=first:dropout_transition=0:weights=1 0[aout]`
               : `[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=0:weights=1 0[aout]`;
-            // Use ?-fallback by detecting absence via a different filtergraph if needed:
-            args.push("-filter_complex", `${vPart};${aPart}`,
-              "-map", "[vout]", "-map", "[aout]");
-            args.push("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", "30",
-              "-c:a", "aac", "-ar", "44100", "-ac", "2", "-shortest", outName);
+            args.push("-filter_complex", `${vPart};${aPart}`, "-map", "[vout]", "-map", "[aout]");
+            args.push(...vEncArgs, ...aEncArgs, "-shortest", outName);
           }
           try {
             await ff.exec(args);
           } catch (err) {
-            // Fallback: fonte sem áudio — refazer descartando trilha original
             const fbArgs: string[] = ["-ss", c.inPoint.toFixed(3), "-i", inName, "-t", to,
               "-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"];
             if (filter.type === "vf") fbArgs.push("-vf", filter.value, "-map", "0:v", "-map", "1:a");
             else fbArgs.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "1:a");
-            fbArgs.push("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", "30",
-              "-c:a", "aac", "-ar", "44100", "-ac", "2", "-shortest", outName);
+            fbArgs.push(...vEncArgs, ...aEncArgs, "-shortest", outName);
             await ff.exec(fbArgs);
           }
           await ff.deleteFile(inName);
@@ -1230,10 +1354,8 @@ function Editor() {
         setExportMsg("Juntando clipes...");
         const list = inputs.map(n => `file '${n}'`).join("\n");
         await ff.writeFile("list.txt", new TextEncoder().encode(list));
-        // Re-encode no concat para tolerar pequenas variações entre clipes
         await ff.exec(["-f", "concat", "-safe", "0", "-i", "list.txt",
-          "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-          "-c:a", "aac", "-ar", "44100", "-ac", "2", "joined.mp4"]);
+          ...vEncArgs, ...aEncArgs, "joined.mp4"]);
       }
 
       const vf: string[] = [];
@@ -1258,28 +1380,75 @@ function Editor() {
           "-map", "0:v", "-map", "[aout]",
         );
       }
-      finalArgs.push("-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "output.mp4");
+      finalArgs.push(...vEncArgs, ...aEncArgs, "-movflags", "+faststart", "-shortest", "output.mp4");
+      setExportFfCmd("ffmpeg " + finalArgs.map(a => a.includes(" ") ? `"${a}"` : a).join(" "));
       await ff.exec(finalArgs);
 
       const data = (await ff.readFile("output.mp4")) as Uint8Array;
       const buf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
       const blob = new Blob([buf], { type: "video/mp4" });
-      setExportUrl(URL.createObjectURL(blob));
+      const url = URL.createObjectURL(blob);
+      const sizeMB = blob.size / (1024 * 1024);
+      const fileName = `${exportFileName || "video"}.mp4`;
+      setExportUrl(url);
       setExportMsg("Pronto!"); setExportPct(1);
+      setExportHistory(h => [{ url, name: fileName, at: Date.now(), sizeMB }, ...h].slice(0, 8));
 
       for (const n of inputs) await ff.deleteFile(n).catch(() => {});
       await ff.deleteFile("list.txt").catch(() => {});
       await ff.deleteFile("joined.mp4").catch(() => {});
       await ff.deleteFile("output.mp4").catch(() => {});
       if (music) await ff.deleteFile("bgm.bin").catch(() => {});
+
+      // Post-export actions
+      if (postBeep) {
+        try {
+          const Ctx = (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
+          const ctx = new Ctx();
+          const o = ctx.createOscillator(); const g2 = ctx.createGain();
+          o.frequency.value = 880; g2.gain.value = 0.08;
+          o.connect(g2).connect(ctx.destination); o.start();
+          setTimeout(() => { o.stop(); ctx.close(); }, 220);
+        } catch {}
+      }
+      if (postAutoDownload) {
+        const a = document.createElement("a");
+        a.href = url; a.download = fileName;
+        document.body.appendChild(a); a.click(); a.remove();
+      }
+      if (postPlay) {
+        setTimeout(() => {
+          const v = document.querySelector<HTMLVideoElement>(`video[src="${url}"]`);
+          if (v) void v.play().catch(() => {});
+        }, 200);
+      }
     } catch (e) {
       const tail = logs.slice(-6).join("\n");
       console.error("[export] FFmpeg falhou:", e, "\nÚltimos logs:\n", tail);
       const baseMsg = e instanceof Error ? e.message : "Falha na exportação";
       setError(`${baseMsg}${tail ? `\n\nDetalhes:\n${tail}` : ""}`);
       setExportMsg("Erro");
-    } finally { setExporting(false); }
+    } finally {
+      setExporting(false);
+      if (exportElapsedTimerRef.current) {
+        window.clearInterval(exportElapsedTimerRef.current);
+        exportElapsedTimerRef.current = null;
+      }
+    }
   };
+
+  const applyExportPreset = (key: ExportPresetKey) => {
+    setExportPreset(key);
+    if (key === "custom") return;
+    const p = EXPORT_PRESETS[key];
+    setAspectKey(p.aspect);
+    setQuality(p.quality);
+    setExportFps(p.fps);
+    setBitrateMode("custom");
+    setCustomBitrate(p.vBitrate);
+    setAudioBitrate(p.aBitrate);
+  };
+
 
   // ---- Drag from Media to Timeline ----
   const onTrackDragOver = (e: React.DragEvent) => {
@@ -1333,7 +1502,12 @@ function Editor() {
             className="rounded-md border border-border bg-card px-2 py-1.5 text-xs">
             <option value="720">720p</option><option value="1080">1080p</option><option value="2160">4K</option>
           </select>
-          <button onClick={doExport} disabled={exporting || !items.length}
+          <button
+            onClick={() => {
+              if (!gpuInfoRef.current) gpuInfoRef.current = detectGpu();
+              setShowExportSettings(true);
+            }}
+            disabled={exporting || !items.length}
             className="glow-primary inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50">
             {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
             Exportar
@@ -2217,6 +2391,150 @@ function Editor() {
         </div>
       )}
 
+      {/* Export Settings Dialog */}
+      {showExportSettings && !exporting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setShowExportSettings(false)}>
+          <div onClick={(e) => e.stopPropagation()} className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-border bg-card p-6 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display text-lg font-semibold flex items-center gap-2"><SettingsIcon className="h-5 w-5" /> Configurações de Exportação</h3>
+              <button onClick={() => setShowExportSettings(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+            </div>
+
+            <div className="mt-5 grid gap-5 md:grid-cols-2">
+              <div>
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Preset</label>
+                <select value={exportPreset} onChange={(e) => applyExportPreset(e.target.value as ExportPresetKey)}
+                  className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm">
+                  {(Object.keys(EXPORT_PRESETS) as ExportPresetKey[]).map(k => (
+                    <option key={k} value={k}>{EXPORT_PRESETS[k].label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Nome do arquivo</label>
+                <div className="mt-1 flex items-center rounded-md border border-border bg-background">
+                  <input value={exportFileName} onChange={(e) => setExportFileName(e.target.value.replace(/[^\w\-]+/g, "-").slice(0, 64))}
+                    className="w-full bg-transparent px-2 py-1.5 text-sm outline-none" placeholder="meu-video" />
+                  <span className="px-2 text-xs text-muted-foreground">.mp4</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Resolução</label>
+                <select value={quality} onChange={(e) => { setQuality(e.target.value as Quality); setExportPreset("custom"); }}
+                  className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm">
+                  <option value="720">720p</option><option value="1080">1080p</option><option value="2160">4K (2160p)</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">FPS</label>
+                <select value={exportFps} onChange={(e) => { setExportFps(Number(e.target.value)); setExportPreset("custom"); }}
+                  className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm">
+                  {[24, 25, 30, 50, 60].map(f => <option key={f} value={f}>{f} fps</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Codec de vídeo</label>
+                <select value={exportCodec} onChange={(e) => setExportCodec(e.target.value as Codec)}
+                  className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm">
+                  <option value="h264">H.264 (Recomendado)</option>
+                  <option value="h265">H.265 / HEVC — indisponível no WASM</option>
+                  <option value="vp9">VP9 — indisponível no WASM</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Áudio</label>
+                <select value={audioBitrate} onChange={(e) => { setAudioBitrate(Number(e.target.value) as AudioBitrate); setExportPreset("custom"); }}
+                  className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm">
+                  {[128, 192, 256, 320].map(b => <option key={b} value={b}>{b} kbps · AAC</option>)}
+                </select>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Bitrate de vídeo</label>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  {(["low", "medium", "high", "custom"] as BitrateMode[]).map(m => (
+                    <button key={m} onClick={() => { setBitrateMode(m); setExportPreset("custom"); }}
+                      className={`rounded-md border px-3 py-1.5 text-xs ${bitrateMode === m ? "border-primary bg-primary/15 text-primary" : "border-border bg-background hover:border-ring/50"}`}>
+                      {m === "low" ? "Baixo" : m === "medium" ? "Médio" : m === "high" ? "Alto" : "Personalizado"}
+                    </button>
+                  ))}
+                  {bitrateMode === "custom" && (
+                    <div className="flex items-center gap-1 text-xs">
+                      <input type="number" min={200} max={80000} value={customBitrate}
+                        onChange={(e) => setCustomBitrate(Math.max(200, Number(e.target.value) || 200))}
+                        className="w-24 rounded border border-border bg-background px-2 py-1" />
+                      <span className="text-muted-foreground">kbps</span>
+                    </div>
+                  )}
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    Efetivo: <span className="font-mono text-foreground">{computedVBitrate} kbps</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="md:col-span-2 rounded-md border border-border bg-background/60 p-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Tamanho estimado</span>
+                  <span className="font-mono text-base font-semibold">{estimatedMB.toFixed(1)} MB</span>
+                </div>
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  Duração {fmt(totalDuration)} · {computedVBitrate} kbps vídeo + {audioBitrate} kbps áudio
+                </div>
+              </div>
+
+              <div className="md:col-span-2 rounded-md border border-border bg-background/60 p-3">
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <input type="checkbox" checked={useGpu} onChange={(e) => setUseGpu(e.target.checked)} />
+                  <Cpu className="h-4 w-4" /> Usar aceleração por hardware (GPU)
+                </label>
+                <div className="mt-1 flex items-start gap-1.5 text-[11px] text-muted-foreground">
+                  <Info className="mt-0.5 h-3 w-3 shrink-0" />
+                  <span>Detectado: <span className="text-foreground">{(gpuInfoRef.current?.vendor) ?? "GPU não detectada"}</span>. O FFmpeg WASM roda no navegador e não acessa NVENC/QSV/VCE — o encode será feito em CPU automaticamente.</span>
+                </div>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Ao concluir</label>
+                <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={postAutoDownload} onChange={(e) => setPostAutoDownload(e.target.checked)} /> Baixar vídeo automaticamente</label>
+                  <label className="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={postPlay} onChange={(e) => setPostPlay(e.target.checked)} /> Reproduzir prévia</label>
+                  <label className="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={postBeep} onChange={(e) => setPostBeep(e.target.checked)} /> Emitir som de aviso</label>
+                </div>
+              </div>
+
+              {exportHistory.length > 0 && (
+                <div className="md:col-span-2">
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Exportações recentes</label>
+                  <div className="mt-1 max-h-32 overflow-y-auto rounded-md border border-border bg-background/60">
+                    {exportHistory.map((h, idx) => (
+                      <div key={idx} className="flex items-center justify-between border-b border-border/50 px-2 py-1.5 text-xs last:border-b-0">
+                        <span className="truncate">{h.name}</span>
+                        <span className="ml-2 shrink-0 text-muted-foreground">{h.sizeMB.toFixed(1)} MB</span>
+                        <a href={h.url} download={h.name} className="ml-2 shrink-0 text-primary hover:underline"><Download className="inline h-3 w-3" /></a>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-2">
+              <button onClick={() => setShowExportSettings(false)}
+                className="rounded-md border border-border bg-background px-4 py-2 text-sm hover:bg-muted">Cancelar</button>
+              <button
+                onClick={() => { setShowExportSettings(false); void doExport(); }}
+                disabled={!items.length}
+                className="glow-primary inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
+                <Download className="h-4 w-4" /> Iniciar exportação
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export progress / result / error */}
       {(exporting || exportUrl || error) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl">
@@ -2226,30 +2544,75 @@ function Editor() {
                 <button onClick={() => { setExportUrl(null); setError(null); setExportPct(0); }} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
               )}
             </div>
-            {error && <p className="mt-3 whitespace-pre-wrap text-sm text-destructive">{error}</p>}
+
+            {error && (
+              <>
+                <p className="mt-3 whitespace-pre-wrap text-sm text-destructive">{error}</p>
+                <div className="mt-4 flex gap-2">
+                  {lastExportSettingsRef.current && (
+                    <button
+                      onClick={() => { setError(null); lastExportSettingsRef.current?.(); }}
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground">
+                      <RefreshCw className="h-4 w-4" /> Tentar novamente
+                    </button>
+                  )}
+                  <button onClick={() => setShowExportLog(s => !s)}
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-3 py-2 text-sm hover:bg-muted/70">
+                    <FileText className="h-4 w-4" /> Log
+                  </button>
+                </div>
+              </>
+            )}
+
             {exporting && (<>
               <p className="mt-3 text-xs text-muted-foreground">{exportMsg}</p>
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
                 <div className="h-full bg-primary transition-all" style={{ width: `${Math.round(exportPct * 100)}%` }} />
               </div>
-              <div className="mt-2 text-right text-xs text-muted-foreground">{Math.round(exportPct * 100)}%</div>
-              <button
-                onClick={async () => {
-                  try { const ff = await getFFmpeg(); ff.terminate(); } catch {}
-                  setExporting(false); setExportPct(0); setExportMsg(""); setError("Exportação cancelada.");
-                }}
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md border border-border bg-muted px-4 py-2 text-sm font-medium hover:bg-muted/70"
-              >
-                Cancelar
-              </button>
+              <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-muted-foreground sm:grid-cols-4">
+                <div><div className="text-foreground font-mono text-sm">{Math.round(exportPct * 100)}%</div>progresso</div>
+                <div><div className="text-foreground font-mono text-sm">{fmtClock(exportElapsed)}</div>decorrido</div>
+                <div><div className="text-foreground font-mono text-sm">{exportPct > 0.02 ? fmtClock((exportElapsed / exportPct) - exportElapsed) : "—"}</div>restante</div>
+                <div><div className="text-foreground font-mono text-sm">{exportFpsLive ? `${exportFpsLive.toFixed(0)} fps` : "—"}{exportSpeed ? ` · ${exportSpeed.toFixed(1)}x` : ""}</div>velocidade</div>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={async () => {
+                    try { const ff = await getFFmpeg(); ff.terminate(); } catch {}
+                    setExporting(false); setExportPct(0); setExportMsg(""); setError("Exportação cancelada.");
+                    if (exportElapsedTimerRef.current) { window.clearInterval(exportElapsedTimerRef.current); exportElapsedTimerRef.current = null; }
+                  }}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-border bg-muted px-4 py-2 text-sm font-medium hover:bg-muted/70"
+                >
+                  Cancelar
+                </button>
+                <button onClick={() => setShowExportLog(s => !s)}
+                  className="inline-flex items-center gap-1 rounded-md border border-border bg-muted px-3 py-2 text-sm hover:bg-muted/70">
+                  <FileText className="h-4 w-4" /> Log
+                </button>
+              </div>
             </>)}
+
             {exportUrl && (<>
               <video src={exportUrl} controls className="mt-4 w-full rounded-md" />
-              <a href={exportUrl} download={`video-lite-editor-${Date.now()}.mp4`}
+              <div className="mt-2 text-xs text-muted-foreground">Tempo total: <span className="font-mono text-foreground">{fmtClock(exportElapsed)}</span></div>
+              <a href={exportUrl} download={`${exportFileName || "video"}.mp4`}
                 className="glow-primary mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-                <Download className="h-4 w-4" /> Baixar MP4
+                <Download className="h-4 w-4" /> Baixar {exportFileName || "video"}.mp4
               </a>
+              <button onClick={() => setShowExportLog(s => !s)}
+                className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-md border border-border bg-muted px-3 py-2 text-xs hover:bg-muted/70">
+                <FileText className="h-3.5 w-3.5" /> {showExportLog ? "Ocultar" : "Ver"} log técnico
+              </button>
             </>)}
+
+            {showExportLog && (
+              <div className="mt-3 max-h-56 overflow-auto rounded-md border border-border bg-black/80 p-2 font-mono text-[10px] leading-snug text-green-300">
+                {exportFfCmd && <div className="mb-2 break-all text-amber-300">$ {exportFfCmd}</div>}
+                {exportLog.length === 0 ? <div className="text-muted-foreground">Sem entradas.</div> :
+                  exportLog.slice(-200).map((l, i) => <div key={i} className="break-all">{l}</div>)}
+              </div>
+            )}
           </div>
         </div>
       )}

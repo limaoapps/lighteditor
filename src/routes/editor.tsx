@@ -524,13 +524,27 @@ async function probeMedia(file: File, kind: ItemKind): Promise<{ url: string; du
 }
 
 function CornerHandles({ id, tr, onStartScale }: { id: string; tr: Transform; onStartScale: (id: string, e: React.MouseEvent, tr: Transform) => void }) {
-  const base: React.CSSProperties = { position: "absolute", width: 12, height: 12, background: "var(--primary)", border: "2px solid white", borderRadius: 2, pointerEvents: "auto", zIndex: 5 };
+  const base: React.CSSProperties = { position: "absolute", width: 12, height: 12, background: "var(--primary)", border: "2px solid white", borderRadius: 2, pointerEvents: "auto", zIndex: 50 };
+  const handle = (style: React.CSSProperties, cursor: string) => (
+    <div
+      data-handle="resize"
+      onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); onStartScale(id, e, tr); }}
+      onClick={(e) => e.stopPropagation()}
+      style={{ ...base, ...style, cursor }}
+    />
+  );
   return (
     <>
-      <div onMouseDown={(e) => onStartScale(id, e, tr)} style={{ ...base, left: -6, top: -6, cursor: "nwse-resize" }} />
-      <div onMouseDown={(e) => onStartScale(id, e, tr)} style={{ ...base, right: -6, top: -6, cursor: "nesw-resize" }} />
-      <div onMouseDown={(e) => onStartScale(id, e, tr)} style={{ ...base, left: -6, bottom: -6, cursor: "nesw-resize" }} />
-      <div onMouseDown={(e) => onStartScale(id, e, tr)} style={{ ...base, right: -6, bottom: -6, cursor: "nwse-resize" }} />
+      {/* 4 corners */}
+      {handle({ left: -6, top: -6 }, "nwse-resize")}
+      {handle({ right: -6, top: -6 }, "nesw-resize")}
+      {handle({ left: -6, bottom: -6 }, "nesw-resize")}
+      {handle({ right: -6, bottom: -6 }, "nwse-resize")}
+      {/* 4 mid-edges */}
+      {handle({ left: "50%", top: -6, transform: "translateX(-50%)" }, "ns-resize")}
+      {handle({ left: "50%", bottom: -6, transform: "translateX(-50%)" }, "ns-resize")}
+      {handle({ left: -6, top: "50%", transform: "translateY(-50%)" }, "ew-resize")}
+      {handle({ right: -6, top: "50%", transform: "translateY(-50%)" }, "ew-resize")}
     </>
   );
 }

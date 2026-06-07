@@ -235,6 +235,13 @@ const IMAGE_MAX_DUR = 3600;
 type Quality = "720" | "1080" | "2160";
 const QUALITY_HEIGHT: Record<Quality, number> = { "720": 720, "1080": 1080, "2160": 2160 };
 
+function computeExportSize(q: Quality, ar: { w: number; h: number }) {
+  const base = QUALITY_HEIGHT[q];
+  const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
+  if (ar.w >= ar.h) return { targetW: even((base * ar.w) / ar.h), targetH: even(base) };
+  return { targetW: even(base), targetH: even((base * ar.h) / ar.w) };
+}
+
 type Codec = "h264" | "h265" | "vp9";
 type BitrateMode = "low" | "medium" | "high" | "custom";
 type AudioBitrate = 128 | 192 | 256 | 320;

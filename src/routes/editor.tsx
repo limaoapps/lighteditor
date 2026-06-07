@@ -3195,30 +3195,6 @@ function Editor() {
               )}
             </div>
 
-            <div className="mt-6 rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
-              <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-amber-300">
-                <FileText className="h-3.5 w-3.5" /> Diagnóstico
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => void runFfmpegVersionTest()}
-                  disabled={diagRunning !== null}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50">
-                  {diagRunning === "version" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Cpu className="h-3.5 w-3.5" />}
-                  TESTAR FFMPEG
-                </button>
-                <button
-                  onClick={() => void runSimpleExportTest()}
-                  disabled={diagRunning !== null || !items.length}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50">
-                  {diagRunning === "simple" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-                  TESTE DE EXPORTAÇÃO (teste.mp4)
-                </button>
-              </div>
-              {diagResult && (
-                <pre className="mt-2 max-h-40 overflow-auto rounded bg-black/70 p-2 font-mono text-[10px] leading-snug text-green-300 whitespace-pre-wrap break-all">{diagResult}</pre>
-              )}
-            </div>
 
             <div className="mt-6 flex items-center justify-end gap-2">
               <button onClick={() => setShowExportSettings(false)}

@@ -27,6 +27,8 @@ export type WCItem = {
   trackId: string;
   name: string;
   file?: File;
+  width?: number;
+  height?: number;
   start: number;
   inPoint: number;
   outPoint: number;
@@ -39,6 +41,7 @@ export type WCItem = {
     bgColor?: string;
     blurBg?: number;
     opacity?: number;
+    zoom?: { dir: "in" | "out"; speed: "slow" | "med" | "fast" } | null;
   };
   text?: {
     content: string;
@@ -71,6 +74,7 @@ export type WCExportOptions = {
   v1clips: WCItem[];
   audioClips: WCItem[];
   music?: WCItem;
+  imageItems?: WCItem[];
   textItems?: WCItem[];
   /** @deprecated use textItems */
   textItem?: WCItem;
@@ -216,6 +220,44 @@ function drawClipFrame(
     const x = (targetW - w) / 2, y = (targetH - h) / 2;
     ctx.drawImage(source, x, y, w, h);
   }
+  ctx.restore();
+}
+
+function computeZoomScale(fx: WCItem["fx"] | undefined, localT: number, dur: number): number {
+  if (!fx?.zoom) return 1;
+  const speedMul = fx.zoom.speed === "slow" ? 0.1 : fx.zoom.speed === "fast" ? 0.35 : 0.2;
+  const p = dur > 0 ? Math.min(1, Math.max(0, localT / dur)) : 0;
+  return fx.zoom.dir === "in" ? 1 + speedMul * p : 1 + speedMul * (1 - p);
+}
+
+function drawImageOverlay(
+  ctx: OffscreenCanvasRenderingContext2D,
+  img: HTMLImageElement,
+  item: WCItem,
+  localT: number,
+  dur: number,
+  targetW: number,
+  targetH: number,
+) {
+  const srcW = img.naturalWidth || item.width || targetW;
+  const srcH = img.naturalHeight || item.height || targetH;
+  if (srcW <= 0 || srcH <= 0) return;
+  const ar = srcW / srcH;
+  let boxH = targetH * 0.6;
+  let boxW = boxH * ar;
+  if (boxW > targetW * 0.9) { boxW = targetW * 0.9; boxH = boxW / ar; }
+  const x = ((item.transform?.xPct ?? 50) / 100) * targetW;
+  const y = ((item.transform?.yPct ?? 50) / 100) * targetH;
+  const scale = (item.transform?.scale ?? 1) * computeZoomScale(item.fx, localT, dur);
+  const rot = ((item.transform?.rotation ?? 0) * Math.PI) / 180;
+  const op = computeOpacity(item, localT);
+
+  ctx.save();
+  ctx.globalAlpha = op;
+  ctx.translate(x, y);
+  if (rot) ctx.rotate(rot);
+  ctx.scale(scale, scale);
+  ctx.drawImage(img, -boxW / 2, -boxH / 2, boxW, boxH);
   ctx.restore();
 }
 
@@ -444,6 +486,7 @@ function* iterAudioChunks(buf: AudioBuffer, chunkFrames: number) {
 
 export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> {
   const { targetW, targetH, fps, vKbps, aKbps, totalDuration, v1clips } = opts;
+  const imageItems: WCItem[] = opts.imageItems ?? [];
   const textItems: WCItem[] = opts.textItems ?? (opts.textItem ? [opts.textItem] : []);
   const log = (m: string) => { opts.onLog?.(m); };
   const msg = (m: string) => { opts.onMessage?.(m); };
@@ -508,7 +551,7 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
   };
 
   // pré-carrega todos sequencialmente (curto)
-  for (const c of v1clips) { try { await loadFor(c); } catch (e) { log(`[wc] load falhou ${c.name}: ${String(e)}`); } }
+  for (const c of [...v1clips, ...imageItems]) { try { await loadFor(c); } catch (e) { log(`[wc] load falhou ${c.name}: ${String(e)}`); } }
 
   const findActive = (t: number) => v1clips.find(c => t >= c.start && t < c.start + (c.outPoint - c.inPoint));
 
@@ -554,6 +597,15 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
       } catch (e) {
         log(`[wc] frame ${f} erro: ${String(e)}`);
       }
+    }
+
+    // overlays de imagem em trilhas superiores (respeita tempo/posição/escala/fade)
+    for (const imgItem of imageItems) {
+      const dur = imgItem.outPoint - imgItem.inPoint;
+      const localT = t - imgItem.start;
+      if (localT < 0 || localT > dur) continue;
+      const el = await loadFor(imgItem);
+      if (el) drawImageOverlay(ctx, el as HTMLImageElement, imgItem, localT, dur, targetW, targetH);
     }
 
     // overlays de texto (múltiplos, respeitando timing/posição/estilo)

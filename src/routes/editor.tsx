@@ -463,6 +463,21 @@ function exportVideoFilter(c: TLItem, targetW: number, targetH: number) {
   };
 }
 
+function exportImageOverlayBox(c: TLItem, targetW: number, targetH: number) {
+  const srcW = c.width || 16;
+  const srcH = c.height || 9;
+  const ar = srcW / Math.max(1, srcH);
+  let h = targetH * 0.6;
+  let w = h * ar;
+  if (w > targetW * 0.9) { w = targetW * 0.9; h = w / ar; }
+  const scale = c.transform?.scale ?? 1;
+  w = Math.max(2, Math.round(w * scale));
+  h = Math.max(2, Math.round(h * scale));
+  const x = Math.round(((c.transform?.xPct ?? 50) / 100) * targetW - w / 2);
+  const y = Math.round(((c.transform?.yPct ?? 50) / 100) * targetH - h / 2);
+  return { w, h, x, y };
+}
+
 // Vignette overlay style — radial gradient (smooth, no hard edges)
 function vignetteStyle(fx?: Fx): React.CSSProperties | null {
   if (!fx) return null;
@@ -1586,12 +1601,15 @@ function Editor() {
     const v1clips = items
       .filter(i => i.trackId === v1trackId && (i.kind === "video" || i.kind === "image"))
       .sort((a, b) => a.start - b.start);
+    const imageOverlayItems = items
+      .filter(i => i.kind === "image" && i.trackId !== v1trackId)
+      .sort((a, b) => a.start - b.start);
     const audioClips = items.filter(i => i.kind === "audio");
-    if (!v1clips.length && !audioClips.length) {
+    if (!v1clips.length && !imageOverlayItems.length && !audioClips.length) {
       setError("Adicione pelo menos um vídeo, imagem ou áudio na timeline.");
       return;
     }
-    const missingFiles = [...v1clips, ...audioClips].filter(c => !c.file);
+    const missingFiles = [...v1clips, ...imageOverlayItems, ...audioClips].filter(c => !c.file);
     if (missingFiles.length) {
       const names = missingFiles.map(c => c.name).join(", ");
       console.error("Clipes sem arquivo original:", names);
@@ -1663,6 +1681,7 @@ function Editor() {
             v1clips: v1clips as unknown as import("@/lib/webcodecs-export").WCItem[],
             audioClips: audioClips as unknown as import("@/lib/webcodecs-export").WCItem[],
             music: music as unknown as import("@/lib/webcodecs-export").WCItem | undefined,
+            imageItems: imageOverlayItems as unknown as import("@/lib/webcodecs-export").WCItem[],
             textItems: textItems as unknown as import("@/lib/webcodecs-export").WCItem[],
             targetW: targetWwc, targetH: targetHwc,
             fps, vKbps, aKbps, totalDuration: Math.max(0.1, totalDuration),
@@ -1836,34 +1855,61 @@ function Editor() {
         }
       }
 
-      const vf: string[] = [];
+      const music = audioClips[0];
+      setExportMsg("Renderizando saída...");
+      const finalArgs: string[] = ["-i", "joined.mp4"];
+      const overlayInputs: Array<{ item: TLItem; name: string; index: number }> = [];
+      for (const img of imageOverlayItems) {
+        if (!img.file) continue;
+        const ext = (img.file.name.split(".").pop() || "png").toLowerCase();
+        const name = `ov_${overlayInputs.length}.${ext}`;
+        await ff.writeFile(name, await fetchFile(img.file));
+        overlayInputs.push({ item: img, name, index: overlayInputs.length + 1 });
+        finalArgs.push("-loop", "1", "-framerate", String(fps), "-t", Math.max(0.1, totalDuration).toFixed(3), "-i", name);
+      }
+      const musicInputIndex = overlayInputs.length + 1;
+      if (music) {
+        if (!music.file) throw new Error(`Áudio sem arquivo original: ${music.name}`);
+        await ff.writeFile("bgm.bin", await fetchFile(music.file)); finalArgs.push("-i", "bgm.bin");
+      }
+      const filterParts: string[] = [];
+      let videoLabel = "0:v";
+      overlayInputs.forEach((ov, idx) => {
+        const it = ov.item;
+        const dur = it.outPoint - it.inPoint;
+        const end = it.start + dur;
+        const box = exportImageOverlayBox(it, targetW, targetH);
+        const alpha = Math.max(0, Math.min(1, (it.fx?.opacity ?? 100) / 100));
+        const fades = [
+          it.fadeIn && it.fadeIn > 0.01 ? `fade=t=in:st=${it.start.toFixed(3)}:d=${it.fadeIn.toFixed(3)}:alpha=1` : null,
+          it.fadeOut && it.fadeOut > 0.01 ? `fade=t=out:st=${Math.max(it.start, end - it.fadeOut).toFixed(3)}:d=${it.fadeOut.toFixed(3)}:alpha=1` : null,
+        ].filter(Boolean).join(",");
+        const imgLabel = `img${idx}`;
+        filterParts.push(`[${ov.index}:v]scale=${box.w}:${box.h},format=rgba,colorchannelmixer=aa=${alpha.toFixed(3)}${fades ? `,${fades}` : ""}[${imgLabel}]`);
+        const out = `vov${idx}`;
+        filterParts.push(`[${videoLabel}][${imgLabel}]overlay=${box.x}:${box.y}:enable='between(t,${it.start.toFixed(3)},${end.toFixed(3)})'[${out}]`);
+        videoLabel = out;
+      });
       const firstText = items.find(i => i.kind === "text" && i.text?.content);
       if (firstText && firstText.text) {
         const t = firstText.text;
         const y = `${Math.round((firstText.transform?.yPct ?? 80) / 100 * targetH - t.size / 2)}`;
         const esc = t.content.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\\'");
-        vf.push(`drawtext=text='${esc}':fontcolor=${t.color}:fontsize=${t.size}:x=(w-text_w)/2:y=${y}:box=1:boxcolor=black@0.4:boxborderw=12`);
+        filterParts.push(`[${videoLabel}]drawtext=text='${esc}':fontcolor=${t.color}:fontsize=${t.size}:x=(w-text_w)/2:y=${y}:box=1:boxcolor=black@0.4:boxborderw=12[vtext]`);
+        videoLabel = "vtext";
       }
-
-      const music = audioClips[0];
-      setExportMsg("Renderizando saída...");
-      const needsReencode = vf.length > 0 || !!music;
-      const finalArgs: string[] = ["-i", "joined.mp4"];
-      if (music) {
-        if (!music.file) throw new Error(`Áudio sem arquivo original: ${music.name}`);
-        await ff.writeFile("bgm.bin", await fetchFile(music.file)); finalArgs.push("-i", "bgm.bin");
-      }
-      if (vf.length) finalArgs.push("-vf", vf.join(","));
       if (music) {
         const ducker = v1clips.length ? 0.4 : 1.0;
         const musicChain = buildAudioFilterChain(music.audioFx, music.gainDb ?? 0);
         // ducker aplicado depois (não somar dB), aloop infinito
         const musicFilters = [...musicChain, `volume=${ducker.toFixed(3)}`, "aloop=loop=-1:size=2e9"].join(",");
-        finalArgs.push(
-          "-filter_complex",
-          `[0:a]volume=1[a0];[1:a]${musicFilters}[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`,
-          "-map", "0:v", "-map", "[aout]",
-        );
+        filterParts.push(`[0:a]volume=1[a0];[${musicInputIndex}:a]${musicFilters}[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`);
+      }
+
+      const needsReencode = filterParts.length > 0 || !!music;
+      if (filterParts.length) {
+        finalArgs.push("-filter_complex", filterParts.join(";"));
+        finalArgs.push("-map", videoLabel === "0:v" ? "0:v" : `[${videoLabel}]`, "-map", music ? "[aout]" : "0:a");
       }
 
       if (needsReencode) {
@@ -1890,6 +1936,7 @@ function Editor() {
       await ff.deleteFile("list.txt").catch(() => {});
       await ff.deleteFile("joined.mp4").catch(() => {});
       await ff.deleteFile("output.mp4").catch(() => {});
+      for (const ov of overlayInputs) await ff.deleteFile(ov.name).catch(() => {});
       if (music) await ff.deleteFile("bgm.bin").catch(() => {});
 
       // Post-export actions

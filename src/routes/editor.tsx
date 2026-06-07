@@ -1771,8 +1771,8 @@ function Editor() {
             args.push("-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
             const vPart = filter.type === "vf" ? `[0:v]${filter.value}[vout]` : filter.value;
             const aPart = afilters.length
-              ? `[0:a]${afilters.join(",")}[a0src];[a0src][1:a]amix=inputs=2:duration=first:dropout_transition=0:weights=1 0[aout]`
-              : `[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=0:weights=1 0[aout]`;
+              ? `[0:a]${afilters.join(",")}[a0src];[a0src][1:a]amix=inputs=2:duration=first:dropout_transition=0:normalize=0:weights=1 0[aout]`
+              : `[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=0:normalize=0:weights=1 0[aout]`;
             args.push("-filter_complex", `${vPart};${aPart}`, "-map", "[vout]", "-map", "[aout]");
             args.push(...vEncArgs, ...aEncArgs, "-shortest", outName);
           }

@@ -722,94 +722,13 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
   for (let f = 0; f < totalFrames; f++) {
     if (vEncError) throw new Error(`Encoder de vídeo falhou: ${String(vEncError)}`);
     const t = f / fps;
-    const active = findActive(t);
-    // limpa
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, targetW, targetH);
-
-    if (active) {
-      const localT = t - active.start;
-      const srcT = active.inPoint + localT;
-      const fill = active.fx?.fillMode ?? "bars";
-      const bg = active.fx?.bgColor ?? "#000000";
-      const blurPx = blurCanvasPx(active.fx, targetH);
-      const op = computeOpacity(active, localT);
-
-      try {
-        const el = await loadFor(active);
-        if (el) {
-          if (active.kind === "video") {
-            const v = el as HTMLVideoElement;
-            // seek only when needed (mais de meio frame de diferença)
-            const needSeek = active.id !== lastSeekClipId || Math.abs(v.currentTime - srcT) > (0.5 / fps);
-            if (needSeek) {
-              await seekVideo(v, srcT);
-              lastSeekClipId = active.id;
-              lastSeekClipTime = srcT;
-            }
-            const sw = v.videoWidth || targetW;
-            const sh = v.videoHeight || targetH;
-            drawClipFrame(ctx, v, sw, sh, targetW, targetH, fill, bg, blurPx, op, itemBlurPx(active.fx, targetH), active, localT, active.outPoint - active.inPoint);
-          } else {
-            const img = el as HTMLImageElement;
-            drawClipFrame(ctx, img, img.naturalWidth, img.naturalHeight, targetW, targetH, fill, bg, blurPx, op, itemBlurPx(active.fx, targetH), active, localT, active.outPoint - active.inPoint);
-          }
-        }
-      } catch (e) {
-        log(`[wc] frame ${f} erro: ${String(e)}`);
-      }
-    }
-
-    // fundos desfocados/espelhados das camadas ficam atrás dos objetos principais
-    for (const visualItem of visualItems) {
-      const dur = visualItem.outPoint - visualItem.inPoint;
-      const localT = t - visualItem.start;
-      if (localT < 0 || localT > dur) continue;
-      if (visualItem.fx?.fillMode !== "blur" && visualItem.fx?.fillMode !== "mirror") continue;
-      const el = await loadFor(visualItem);
-      if (!el) continue;
-      if (visualItem.kind === "video") {
-        const v = el as HTMLVideoElement;
-        const srcT = visualItem.inPoint + localT;
-        if (visualItem.id !== lastSeekClipId || Math.abs(v.currentTime - srcT) > (0.5 / fps)) {
-          await seekVideo(v, srcT);
-          lastSeekClipId = visualItem.id;
-        }
-        drawVisualOverlay(ctx, v, v.videoWidth || targetW, v.videoHeight || targetH, visualItem, localT, dur, targetW, targetH, "background");
-      } else {
-        const img = el as HTMLImageElement;
-        drawVisualOverlay(ctx, img, img.naturalWidth, img.naturalHeight, visualItem, localT, dur, targetW, targetH, "background");
-      }
-    }
-
-    // overlays de imagem/vídeo em todas as trilhas, respeitando ordem visual da timeline
-    for (const visualItem of visualItems) {
-      const dur = visualItem.outPoint - visualItem.inPoint;
-      const localT = t - visualItem.start;
-      if (localT < 0 || localT > dur) continue;
-      const el = await loadFor(visualItem);
-      if (!el) continue;
-      if (visualItem.kind === "video") {
-        const v = el as HTMLVideoElement;
-        const srcT = visualItem.inPoint + localT;
-        if (visualItem.id !== lastSeekClipId || Math.abs(v.currentTime - srcT) > (0.5 / fps)) {
-          await seekVideo(v, srcT);
-          lastSeekClipId = visualItem.id;
-        }
-        drawVisualOverlay(ctx, v, v.videoWidth || targetW, v.videoHeight || targetH, visualItem, localT, dur, targetW, targetH, "foreground");
-      } else {
-        const img = el as HTMLImageElement;
-        drawVisualOverlay(ctx, img, img.naturalWidth, img.naturalHeight, visualItem, localT, dur, targetW, targetH, "foreground");
-      }
-    }
-
-    // overlays de texto (múltiplos, respeitando timing/posição/estilo)
-    for (const tItem of sortedTextItems) {
-      if (!tItem.text?.content) continue;
-      const dur = tItem.outPoint - tItem.inPoint;
-      const localT = t - tItem.start;
-      if (localT < 0 || localT > dur) continue;
-      drawTextOverlay(ctx, tItem, localT, dur, targetW, targetH);
+    try {
+      await seekActiveVideos(t);
+      drawScene(ctx, scene, t, targetW, targetH, mediaResolver);
+    } catch (e) {
+      log(`[wc] frame ${f} erro: ${String(e)}`);
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, targetW, targetH);
     }
 
 

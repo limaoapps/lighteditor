@@ -388,6 +388,7 @@ function cssFilter(fx?: Fx): string {
   if (fx.highlights) parts.push(`contrast(${(1 + fx.highlights / 400).toFixed(3)})`);
   // sharpness: real unsharp-mask via SVG filter (no saturation/contrast bleed)
   if (fx.sharpness > 0) parts.push(`url(#lle-sharpen)`);
+  if (fx.blur > 0) parts.push(`blur(${Math.max(0.2, fx.blur * 0.45).toFixed(1)}px)`);
   // preset overlays — keep purely tonal; "sharp"/"vignette" handled outside cssFilter
   switch (fx.preset) {
     case "bw":       parts.push("grayscale(1)"); break;

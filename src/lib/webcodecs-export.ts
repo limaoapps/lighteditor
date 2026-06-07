@@ -333,18 +333,18 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
     output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
     error: (e: unknown) => { vEncError = e; log(`[wc] vEnc erro: ${String(e)}`); },
   });
-  vEnc.configure({
+  const configBase: VideoEncoderConfig = {
     codec: support.codec!,
     width: targetW,
     height: targetH,
     bitrate: vKbps * 1000,
     framerate: fps,
     hardwareAcceleration: support.hw,
-    // VBR + quality mode = arquivo menor mantendo qualidade visual
-    bitrateMode: "variable",
-    latencyMode: "quality",
     avc: { format: "avc" },
-  });
+  };
+  if (support.bitrateMode) configBase.bitrateMode = support.bitrateMode;
+  if (support.latencyMode) configBase.latencyMode = support.latencyMode;
+  vEnc.configure(configBase);
 
   // ====== CANVAS ======
   const canvas = new OffscreenCanvas(targetW, targetH);

@@ -1161,6 +1161,7 @@ function Editor() {
       }
       dragRef.current = null;
       lastTimelinePointer.current = null;
+      setDragExtraSec(0);
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);

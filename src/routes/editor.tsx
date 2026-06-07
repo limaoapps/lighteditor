@@ -575,6 +575,7 @@ function Editor() {
   const [exportFileName, setExportFileName] = useState("meu-video");
   const [exportFps, setExportFps] = useState<number>(30);
   const [exportCodec, setExportCodec] = useState<Codec>("h264");
+  const [speedMode, setSpeedMode] = useState<"turbo" | "rapido" | "qualidade">("rapido");
   const [bitrateMode, setBitrateMode] = useState<BitrateMode>("medium");
   const [customBitrate, setCustomBitrate] = useState<number>(8000);
   const [audioBitrate, setAudioBitrate] = useState<AudioBitrate>(192);
@@ -1483,8 +1484,26 @@ function Editor() {
     const fps = Math.max(1, Math.min(60, exportFps || 30));
     const vKbps = computedVBitrate;
     const aKbps = audioBitrate;
-    const vBitArgs = ["-b:v", `${vKbps}k`, "-maxrate", `${Math.round(vKbps * 1.5)}k`, "-bufsize", `${vKbps * 2}k`];
-    const vEncArgs = ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", String(fps), ...vBitArgs];
+    // Modo de velocidade — usa CRF + parâmetros x264 para acelerar drasticamente o WASM (single-thread).
+    let vEncArgs: string[];
+    if (speedMode === "qualidade") {
+      vEncArgs = [
+        "-c:v", "libx264", "-preset", "superfast", "-tune", "fastdecode",
+        "-pix_fmt", "yuv420p", "-r", String(fps), "-threads", "0",
+        "-b:v", `${vKbps}k`, "-maxrate", `${Math.round(vKbps * 1.5)}k`, "-bufsize", `${vKbps * 2}k`,
+      ];
+    } else {
+      const crf = speedMode === "turbo" ? "30" : "26";
+      const x264Params = speedMode === "turbo"
+        ? "rc-lookahead=0:ref=1:bframes=0:weightp=0:cabac=0:8x8dct=0:trellis=0:me=dia:subme=0:aq-mode=0:mixed-refs=0:fast-pskip=1:no-mbtree=1:no-scenecut=1"
+        : "rc-lookahead=0:ref=1:bframes=0:weightp=1:trellis=0:me=hex:subme=1:aq-mode=0:fast-pskip=1:no-mbtree=1";
+      vEncArgs = [
+        "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
+        "-pix_fmt", "yuv420p", "-r", String(fps), "-threads", "0",
+        "-crf", crf, "-x264-params", x264Params,
+        "-maxrate", `${vKbps * 2}k`, "-bufsize", `${vKbps * 3}k`,
+      ];
+    }
     const aEncArgs = ["-c:a", "aac", "-b:a", `${aKbps}k`, "-ar", "44100", "-ac", "2"];
 
     setExporting(true); setExportPct(0); setExportMsg(ffReady ? "Carregando engine..." : "Inicializando FFmpeg...");
@@ -2758,6 +2777,25 @@ function Editor() {
                   className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm">
                   {[24, 25, 30, 50, 60].map(f => <option key={f} value={f}>{f} fps</option>)}
                 </select>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Modo de velocidade</label>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  {([
+                    { k: "turbo", label: "Turbo", hint: "Máxima velocidade · qualidade menor" },
+                    { k: "rapido", label: "Rápido", hint: "Equilíbrio recomendado" },
+                    { k: "qualidade", label: "Qualidade", hint: "Mais lento, melhor imagem" },
+                  ] as const).map(o => (
+                    <button key={o.k} onClick={() => setSpeedMode(o.k)} title={o.hint}
+                      className={`rounded-md border px-3 py-1.5 text-xs ${speedMode === o.k ? "border-primary bg-primary/15 text-primary" : "border-border bg-background hover:border-ring/50"}`}>
+                      {o.label}
+                    </button>
+                  ))}
+                  <span className="ml-auto text-[11px] text-muted-foreground">
+                    {speedMode === "turbo" ? "~2-3× mais rápido" : speedMode === "rapido" ? "~1.5× mais rápido" : "Melhor qualidade"}
+                  </span>
+                </div>
               </div>
 
               <div>

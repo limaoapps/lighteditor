@@ -19,6 +19,7 @@
  */
 
 import { Muxer, ArrayBufferTarget } from "mp4-muxer";
+import { buildAudioFxGraph, type AudioFx } from "./audio-fx";
 
 export type WCItem = {
   id: string;

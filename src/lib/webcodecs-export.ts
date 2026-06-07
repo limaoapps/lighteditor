@@ -233,41 +233,54 @@ function drawClipFrame(
   blurPx: number = 0,
   opacity: number = 1,
   visualBlurPx: number = 0,
+  item?: WCItem,
+  localT: number = 0,
+  dur: number = 0,
 ) {
   ctx.save();
   ctx.globalAlpha = 1;
-  // background
+  // background (always full-frame, not transformed — matches preview's bg layer)
   if (fillMode === "color" || fillMode === "bars") {
     ctx.fillStyle = fillMode === "color" ? bgColor : "#000000";
     ctx.fillRect(0, 0, targetW, targetH);
   } else if (fillMode === "blur" || fillMode === "mirror") {
-    // cover background
     const cover = Math.max(targetW / srcW, targetH / srcH) * 1.06;
     const w = srcW * cover, h = srcH * cover;
     const x = (targetW - w) / 2, y = (targetH - h) / 2;
     if (fillMode === "blur") {
       drawSoftCover(ctx, source, srcW, srcH, targetW, targetH, blurPx);
     } else {
-      // mirror
       ctx.save();
       ctx.translate(targetW, 0);
       ctx.scale(-1, 1);
       ctx.drawImage(source, targetW - x - w, y, w, h);
       ctx.restore();
     }
-  } else if (fillMode === "stretch") {
-    // no bg, drawn full
   }
-  // foreground
+  ctx.restore();
+
+  // foreground — applies the same transform (xPct/yPct/scale/rotation/zoom) used in preview,
+  // so the exported frame matches exactly what the user enquadrou.
+  ctx.save();
   ctx.globalAlpha = Math.max(0, Math.min(1, opacity));
+  const xPct = item?.transform?.xPct ?? 50;
+  const yPct = item?.transform?.yPct ?? 50;
+  const baseScale = item?.transform?.scale ?? 1;
+  const zScale = item ? computeZoomScale(item.fx, localT, dur) : 1;
+  const sc = baseScale * zScale;
+  const rot = ((item?.transform?.rotation ?? 0) * Math.PI) / 180;
+  const cx = (xPct / 100) * targetW;
+  const cy = (yPct / 100) * targetH;
+  ctx.translate(cx, cy);
+  if (rot) ctx.rotate(rot);
+  ctx.scale(sc, sc);
   try { (ctx as unknown as { filter: string }).filter = visualBlurPx > 0 ? `blur(${visualBlurPx}px)` : "none"; } catch { /* ignore */ }
   if (fillMode === "stretch") {
-    ctx.drawImage(source, 0, 0, targetW, targetH);
+    ctx.drawImage(source, -targetW / 2, -targetH / 2, targetW, targetH);
   } else {
     const contain = Math.min(targetW / srcW, targetH / srcH);
     const w = srcW * contain, h = srcH * contain;
-    const x = (targetW - w) / 2, y = (targetH - h) / 2;
-    ctx.drawImage(source, x, y, w, h);
+    ctx.drawImage(source, -w / 2, -h / 2, w, h);
   }
   try { (ctx as unknown as { filter: string }).filter = "none"; } catch { /* ignore */ }
   ctx.restore();

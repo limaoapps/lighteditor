@@ -194,19 +194,34 @@ function drawClipFrame(
     const cover = Math.max(targetW / srcW, targetH / srcH) * 1.06;
     const w = srcW * cover, h = srcH * cover;
     const x = (targetW - w) / 2, y = (targetH - h) / 2;
-    ctx.save();
-    if (fillMode === "blur" && blurPx > 0) {
-      ctx.filter = `blur(${blurPx}px)`;
-    }
-    if (fillMode === "mirror") {
+    if (fillMode === "blur") {
+      // Blur robusto sem depender de ctx.filter: downscale agressivo + upscale suavizado.
+      // Quanto maior o blurPx, menor o canvas intermediário (mais borrão).
+      const baseW = 64;
+      const small = Math.max(16, Math.round(baseW - Math.min(48, blurPx)));
+      const ratio = srcH / Math.max(1, srcW);
+      const tmpW = small;
+      const tmpH = Math.max(8, Math.round(small * ratio));
+      const tmp = new OffscreenCanvas(tmpW, tmpH);
+      const tctx = tmp.getContext("2d")!;
+      tctx.imageSmoothingEnabled = true;
+      tctx.imageSmoothingQuality = "high";
+      // Tenta usar ctx.filter no auxiliar quando suportado para suavizar ainda mais
+      try { (tctx as unknown as { filter: string }).filter = `blur(${Math.max(1, Math.min(8, Math.round(blurPx / 4)))}px)`; } catch { /* ignore */ }
+      tctx.drawImage(source, 0, 0, tmpW, tmpH);
+      ctx.save();
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(tmp, x, y, w, h);
+      ctx.restore();
+    } else {
+      // mirror
+      ctx.save();
       ctx.translate(targetW, 0);
       ctx.scale(-1, 1);
       ctx.drawImage(source, targetW - x - w, y, w, h);
-    } else {
-      ctx.drawImage(source, x, y, w, h);
+      ctx.restore();
     }
-    ctx.restore();
-    ctx.filter = "none";
   } else if (fillMode === "stretch") {
     // no bg, drawn full
   }

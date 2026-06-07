@@ -198,6 +198,7 @@ type TLItem = {
   fadeIn?: number;
   fadeOut?: number;
   gainDb?: number;
+  audioFx?: import("@/lib/audio-fx").AudioFx;
   fx?: Fx;
 };
 

@@ -2169,16 +2169,14 @@ function Editor() {
     // "Cola" no início: se o usuário soltar próximo de 0 (até 1.5s) e a faixa estiver livre nesse intervalo, encaixa em 0.
     const trackIsEmptyNear0 = !items.some(i => i.trackId === trackId && i.start < Math.max(start, 1.5));
     if (start < 1.5 && trackIsEmptyNear0) start = 0;
-    let cursor = start;
+    const cursors: Record<TrackKind, number> = { video: start, audio: start };
     for (const mid of ids) {
       const asset = media.find(m => m.id === mid);
       if (!asset) continue;
-      addAssetToTimeline(asset, { trackId, start: cursor });
-      // se múltiplos: encadeia
+      const laneKind: TrackKind = asset.kind === "audio" ? "audio" : "video";
+      addAssetToTimeline(asset, { trackId, start: cursors[laneKind] });
       const dur = asset.kind === "image" ? Math.min(asset.duration || 5, 5) : (asset.duration || 5);
-      cursor += dur;
-
-
+      cursors[laneKind] += dur;
     }
   };
 
@@ -3752,7 +3750,7 @@ function Editor() {
 
       {/* Export progress / result / error */}
       {(exporting || exportUrl || error) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-background/95 p-4">
           <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl">
             <div className="flex items-center justify-between">
               <h3 className="font-display text-lg font-semibold">{exportUrl ? "Exportação concluída" : exporting ? "Exportando..." : "Atenção"}</h3>

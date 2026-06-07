@@ -1628,6 +1628,11 @@ function Editor() {
       const tail = logs.slice(-6).join("\n");
       console.error("[export] FFmpeg falhou:", e, "\nÚltimos logs:\n", tail);
       const baseMsg = e instanceof Error ? e.message : "Falha na exportação";
+      setFfLoading(false);
+      if (/ffmpeg/i.test(baseMsg)) {
+        setFfReady(false);
+        setFfLoadError(baseMsg);
+      }
       setError(`${baseMsg}${tail ? `\n\nDetalhes:\n${tail}` : ""}`);
       setExportMsg("Erro");
     } finally {

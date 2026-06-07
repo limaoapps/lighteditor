@@ -2801,6 +2801,9 @@ function Editor() {
                 <button
                   onClick={async () => {
                     try { const ff = await getFFmpeg(); ff.terminate(); } catch {}
+                    resetFFmpeg();
+                    setFfReady(false);
+                    void getFFmpeg().then(() => setFfReady(true)).catch((err) => console.error("FFmpeg não recarregou após cancelar.", err));
                     setExporting(false); setExportPct(0); setExportMsg("");
                     setExportLog(prev => [...prev, "Processo encerrado."]);
                     console.warn("[EXPORT] Processo encerrado pelo usuário.");

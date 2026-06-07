@@ -1872,11 +1872,52 @@ function Editor() {
 
   // ---- Drag from Media to Timeline ----
   const onTrackDragOver = (e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes("application/x-vle-media") || e.dataTransfer.types.includes(EFFECT_DND_TYPE)) {
+    if (
+      e.dataTransfer.types.includes("application/x-vle-media") ||
+      e.dataTransfer.types.includes(EFFECT_DND_TYPE) ||
+      e.dataTransfer.types.includes("application/x-lle-transition")
+    ) {
       e.preventDefault(); e.dataTransfer.dropEffect = "copy";
     }
   };
   const onTrackDrop = (e: React.DragEvent, trackId: string) => {
+    const transitionId = e.dataTransfer.getData("application/x-lle-transition");
+    if (transitionId) {
+      e.preventDefault();
+      const preset = TRANSITION_GROUPS.flatMap(g => g.items).find(t => t.id === transitionId);
+      const dur = preset?.dur ?? 0.6;
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const xPx = e.clientX - rect.left;
+      const t = Math.max(0, xPx / zoom);
+      const trackItems = items.filter(i => i.trackId === trackId).sort((a, b) => a.start - b.start);
+      // procura par adjacente cujo ponto de junção esteja perto do drop
+      let left: typeof trackItems[number] | undefined;
+      let right: typeof trackItems[number] | undefined;
+      let bestDist = Infinity;
+      for (let k = 0; k < trackItems.length - 1; k++) {
+        const a = trackItems[k];
+        const b = trackItems[k + 1];
+        const aEnd = a.start + (a.outPoint - a.inPoint);
+        // considera junção quando clipes estão encostados (gap pequeno) e drop próximo da borda
+        const gap = b.start - aEnd;
+        const junction = (aEnd + b.start) / 2;
+        const d = Math.abs(t - junction);
+        if (Math.abs(gap) < 0.25 && d < bestDist) { bestDist = d; left = a; right = b; }
+      }
+      if (left && right) {
+        setItems(p => p.map(i =>
+          i.id === left!.id ? { ...i, fadeOut: dur, transition: transitionId } :
+          i.id === right!.id ? { ...i, fadeIn: dur, transition: transitionId } : i
+        ));
+        return;
+      }
+      // fallback: aplica no clipe sob o cursor
+      const hit = trackItems.find(i => t >= i.start && t <= i.start + (i.outPoint - i.inPoint));
+      if (hit) {
+        setItems(p => p.map(i => i.id === hit.id ? { ...i, fadeIn: dur, fadeOut: dur, transition: transitionId } : i));
+      }
+      return;
+    }
     const effectId = e.dataTransfer.getData(EFFECT_DND_TYPE) as TimelineEffectId;
     if (effectId) {
       e.preventDefault();
@@ -2781,33 +2822,8 @@ function Editor() {
                   </div>
                 </details>
 
-                <details className="rounded border border-border/60 bg-background/40">
-                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Zoom Cinematográfico</summary>
-                  <div className="space-y-1.5 px-2 pb-2 pt-1">
-                    <div className="grid grid-cols-3 gap-1">
-                      <button onClick={() => patchFx({ zoom: null })}
-                        className={`rounded border px-1.5 py-1 text-[10px] ${!fx.zoom ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>Off</button>
-                      <button onClick={() => patchFx({ zoom: { dir: "in", speed: fx.zoom?.speed ?? "med" } })}
-                        className={`rounded border px-1.5 py-1 text-[10px] ${fx.zoom?.dir === "in" ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>Aproximar</button>
-                      <button onClick={() => patchFx({ zoom: { dir: "out", speed: fx.zoom?.speed ?? "med" } })}
-                        className={`rounded border px-1.5 py-1 text-[10px] ${fx.zoom?.dir === "out" ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>Afastar</button>
-                    </div>
-                    {(() => {
-                      const zoomFx = fx.zoom;
-                      if (!zoomFx) return null;
-                      return (
-                        <div className="grid grid-cols-3 gap-1">
-                          {(["slow","med","fast"] as const).map(s => (
-                            <button key={s} onClick={() => patchFx({ zoom: { dir: zoomFx.dir, speed: s } })}
-                              className={`rounded border px-1.5 py-1 text-[10px] ${zoomFx.speed === s ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
-                              {s === "slow" ? "Lenta" : s === "med" ? "Média" : "Rápida"}
-                            </button>
-                          ))}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </details>
+
+
 
                 <details className="rounded border border-border/60 bg-background/40">
                   <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Presets</summary>

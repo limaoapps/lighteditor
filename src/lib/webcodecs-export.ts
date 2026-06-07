@@ -683,9 +683,38 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
   // pré-carrega todos sequencialmente (curto)
   for (const c of [...v1clips, ...imageItems]) { try { await loadFor(c); } catch (e) { log(`[wc] load falhou ${c.name}: ${String(e)}`); } }
 
-  const findActive = (t: number) => v1clips.find(c => t >= c.start && t < c.start + (c.outPoint - c.inPoint));
   const visualItems = [...imageItems].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
   const sortedTextItems = [...textItems].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+  const scene: Scene = {
+    aspect: { w: targetW, h: targetH },
+    v1Items: v1clips as Scene["v1Items"],
+    visualItems: visualItems as Scene["visualItems"],
+    textItems: sortedTextItems as Scene["textItems"],
+  };
+  const mediaResolver: MediaResolver = {
+    resolve: (item) => {
+      if (item.kind === "video") return (videoEls.get(item.id) as unknown as CanvasImageSource) ?? null;
+      if (item.kind === "image") return (imageEls.get(item.id) as unknown as CanvasImageSource) ?? null;
+      return null;
+    },
+  };
+  const seekActiveVideos = async (t: number) => {
+    const activeVideos = [...v1clips, ...visualItems].filter(c => {
+      const dur = c.outPoint - c.inPoint;
+      return c.kind === "video" && t >= c.start && t < c.start + dur;
+    });
+    for (const c of activeVideos) {
+      const el = await loadFor(c);
+      if (!el) continue;
+      const v = el as HTMLVideoElement;
+      const srcT = c.inPoint + (t - c.start);
+      if (c.id !== lastSeekClipId || Math.abs(v.currentTime - srcT) > (0.5 / fps)) {
+        await seekVideo(v, srcT);
+        lastSeekClipId = c.id;
+        lastSeekClipTime = srcT;
+      }
+    }
+  };
 
   let lastSeekClipId: string | null = null;
   let lastSeekClipTime = -1;

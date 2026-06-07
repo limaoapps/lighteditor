@@ -2118,7 +2118,15 @@ function Editor() {
             </div>
           )}
           <div className="mx-2 h-6 w-px bg-border" />
-          <select value={quality} onChange={(e) => setQuality(e.target.value as Quality)}
+          <select value={quality} onChange={(e) => {
+            const nextQuality = e.target.value as Quality;
+            setQuality(nextQuality);
+            const matching = (Object.keys(EXPORT_PRESETS) as ExportPresetKey[]).find(k => {
+              const p = EXPORT_PRESETS[k];
+              return k !== "custom" && p.aspect === aspectKey && p.quality === nextQuality;
+            });
+            setExportPreset(matching ?? "custom");
+          }}
             className="rounded-md border border-border bg-card px-2 py-1.5 text-xs">
             <option value="720">720p</option><option value="1080">1080p</option><option value="2160">4K</option>
           </select>

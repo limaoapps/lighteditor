@@ -33,6 +33,7 @@ export type WCItem = {
   fadeIn?: number;
   fadeOut?: number;
   gainDb?: number;
+  audioFx?: AudioFx;
   fx?: {
     fillMode: "bars" | "blur" | "mirror" | "stretch" | "color";
     bgColor?: string;

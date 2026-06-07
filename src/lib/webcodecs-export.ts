@@ -463,6 +463,11 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
 
   await vEnc.flush();
   vEnc.close();
+  if (vEncError) throw new Error(`Encoder de vídeo falhou: ${String(vEncError)}`);
+  if (videoChunksOut === 0) {
+    throw new Error("WebCodecs não emitiu chunks de vídeo (provável incompatibilidade do navegador)");
+  }
+  log(`[wc] vídeo: ${videoChunksOut} chunks emitidos`);
 
   // libera elementos de vídeo
   for (const v of videoEls.values()) { try { v.pause(); v.src = ""; v.load(); } catch { /* ignore */ } }

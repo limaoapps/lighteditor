@@ -331,6 +331,9 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
     bitrate: vKbps * 1000,
     framerate: fps,
     hardwareAcceleration: support.hw,
+    // VBR + quality mode = arquivo menor mantendo qualidade visual
+    bitrateMode: "variable",
+    latencyMode: "quality",
     avc: { format: "avc" },
   });
 

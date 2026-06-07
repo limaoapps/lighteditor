@@ -1032,9 +1032,12 @@ function Editor() {
     let v = 1;
     if (i.fadeIn && local < i.fadeIn) v *= Math.max(0, local / i.fadeIn);
     if (i.fadeOut && local > dur - i.fadeOut) v *= Math.max(0, (dur - local) / i.fadeOut);
-    v *= dbToGain(i.gainDb ?? 0);
-    return Math.max(0, Math.min(1, v));
+    // SEM clamp em 1 — o ganho até +30dB precisa estourar quando o usuário pedir.
+    // Multiplicador de fade (0..1) é aplicado depois pelo grafo WebAudio junto ao gainDb.
+    return Math.max(0, v);
   };
+  const fxGainFor = (i: TLItem, t: number) => computeVol(i, t) * Math.pow(10, (i.gainDb ?? 0) / 20);
+
 
   useEffect(() => {
     const v = videoElRef.current;

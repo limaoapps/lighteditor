@@ -1082,9 +1082,23 @@ function Editor() {
     const target = activeV1Video.inPoint + (playhead - activeV1Video.start);
     if (Math.abs(v.currentTime - target) > 0.25) v.currentTime = target;
     v.muted = !!trackMuted[activeV1Video.trackId];
-    v.volume = computeVol(activeV1Video, playhead);
+    // Encaminha pelo grafo WebAudio para permitir ganho >0dB e FX.
+    const g = attachGraph(activeV1Video.id, v, activeV1Video);
+    if (g) {
+      v.volume = 1;
+      g.nodes.setMuted(!!trackMuted[activeV1Video.trackId]);
+      g.nodes.setGain(activeV1Video.gainDb ?? 0);
+      if (activeV1Video.audioFx) g.nodes.setFx(activeV1Video.audioFx);
+      // multiplica fade do envelope no gain final via post-gain (recomputado a cada frame)
+      const fade = computeVol(activeV1Video, playhead);
+      g.nodes.setGain(((activeV1Video.gainDb ?? 0) + (fade < 0.999 ? 20 * Math.log10(Math.max(0.0001, fade)) : 0)));
+    } else {
+      // fallback se WebAudio falhou
+      v.volume = Math.min(1, computeVol(activeV1Video, playhead));
+    }
     if (playing) v.play().catch(() => {}); else v.pause();
-  }, [activeV1Video, playing, playhead, trackMuted]);
+  }, [activeV1Video, playing, playhead, trackMuted, attachGraph]);
+
 
   useEffect(() => {
     const bg = videoBgElRef.current;

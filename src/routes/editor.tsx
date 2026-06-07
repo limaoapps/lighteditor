@@ -953,7 +953,8 @@ function Editor() {
     const v = videoElRef.current;
     if (!v) return;
     if (!activeV1Video) { v.pause(); v.removeAttribute("src"); v.load(); return; }
-    const wanted = activeV1Video.url!;
+    const wanted = activeV1Video.url;
+    if (!wanted) { v.pause(); v.removeAttribute("src"); v.load(); return; }
     if (v.src !== wanted) v.src = wanted;
     const target = activeV1Video.inPoint + (playhead - activeV1Video.start);
     if (Math.abs(v.currentTime - target) > 0.25) v.currentTime = target;
@@ -967,7 +968,8 @@ function Editor() {
     if (!bg) return;
     const needsBg = hasBackgroundFill(activeV1Video?.fx);
     if (!activeV1Video || !needsBg) { bg.pause(); bg.removeAttribute("src"); bg.load(); return; }
-    const wanted = activeV1Video.url!;
+    const wanted = activeV1Video.url;
+    if (!wanted) { bg.pause(); bg.removeAttribute("src"); bg.load(); return; }
     if (bg.src !== wanted) bg.src = wanted;
     const target = activeV1Video.inPoint + (playhead - activeV1Video.start);
     if (Math.abs(bg.currentTime - target) > 0.25) bg.currentTime = target;
@@ -976,15 +978,17 @@ function Editor() {
   }, [activeV1Video, playing, playhead]);
 
   useEffect(() => {
-    const audios = items.filter(i => i.kind === "audio");
+    const audios = items.filter(i => i.kind === "audio" && i.url);
     for (const a of audios) {
-      if (!audioRefs.current[a.id]) audioRefs.current[a.id] = new Audio(a.url!);
+      if (!a.url) continue;
+      if (!audioRefs.current[a.id]) audioRefs.current[a.id] = new Audio(a.url);
     }
     for (const id of Object.keys(audioRefs.current)) {
       if (!audios.find(a => a.id === id)) { audioRefs.current[id].pause(); delete audioRefs.current[id]; }
     }
     for (const a of audios) {
       const el = audioRefs.current[a.id];
+      if (!el) continue;
       const inRange = playhead >= a.start && playhead < a.start + (a.outPoint - a.inPoint);
       el.muted = !!trackMuted[a.trackId];
       el.volume = computeVol(a, playhead);

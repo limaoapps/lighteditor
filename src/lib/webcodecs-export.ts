@@ -70,7 +70,7 @@ const AVC_CODECS = [
   "avc1.42e01f",
 ];
 
-export async function isWebCodecsExportSupported(targetW: number, targetH: number, fps: number, vKbps: number): Promise<{ ok: boolean; codec?: string; hw?: string; reason?: string }> {
+export async function isWebCodecsExportSupported(targetW: number, targetH: number, fps: number, vKbps: number): Promise<{ ok: boolean; codec?: string; hw?: HardwareAcceleration; reason?: string }> {
   if (typeof window === "undefined") return { ok: false, reason: "SSR" };
   if (typeof VideoEncoder === "undefined" || typeof AudioEncoder === "undefined") {
     return { ok: false, reason: "WebCodecs indisponível neste navegador" };

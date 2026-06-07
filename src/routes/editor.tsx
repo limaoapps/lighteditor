@@ -1223,6 +1223,12 @@ function Editor() {
   }, [minZoom]);
 
   // ---- Export ----
+  const computedVBitrate = bitrateFromMode(quality, bitrateMode, customBitrate);
+  const estimatedMB = useMemo(
+    () => estimateSizeMB(Math.max(1, totalDuration), computedVBitrate, audioBitrate),
+    [totalDuration, computedVBitrate, audioBitrate],
+  );
+
   const doExport = async () => {
     const v1trackId = tracks.find(t => t.kind === "video")?.id;
     const v1clips = items
@@ -1233,25 +1239,69 @@ function Editor() {
       setError("Adicione pelo menos um vídeo, imagem ou áudio na timeline.");
       return;
     }
-    setExporting(true); setExportPct(0); setExportMsg("Carregando engine..."); setExportUrl(null); setError(null);
+    // Save retry handle (same settings)
+    lastExportSettingsRef.current = () => { void doExport(); };
+
+    // Codec mapping — only libx264 ships in @ffmpeg/core WASM; fallback w/ note.
+    const codecRequested = exportCodec;
+    if (exportCodec === "h265" || exportCodec === "vp9") {
+      // we silently fallback but record in log
+    }
+    const fps = Math.max(1, Math.min(60, exportFps || 30));
+    const vKbps = computedVBitrate;
+    const aKbps = audioBitrate;
+    const vBitArgs = ["-b:v", `${vKbps}k`, "-maxrate", `${Math.round(vKbps * 1.5)}k`, "-bufsize", `${vKbps * 2}k`];
+    const vEncArgs = ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", String(fps), ...vBitArgs];
+    const aEncArgs = ["-c:a", "aac", "-b:a", `${aKbps}k`, "-ar", "44100", "-ac", "2"];
+
+    setExporting(true); setExportPct(0); setExportMsg("Carregando engine...");
+    setExportUrl(null); setError(null);
+    setExportLog([]); setExportFfCmd("");
+    setExportElapsed(0); setExportFpsLive(null); setExportSpeed(null);
+    exportStartRef.current = performance.now();
+    if (exportElapsedTimerRef.current) window.clearInterval(exportElapsedTimerRef.current);
+    exportElapsedTimerRef.current = window.setInterval(() => {
+      setExportElapsed((performance.now() - exportStartRef.current) / 1000);
+    }, 250) as unknown as number;
+
     const logs: string[] = [];
+    const onLog = ({ message }: { message: string }) => {
+      logs.push(message); if (logs.length > 500) logs.shift();
+      // Parse "fps= 48" and "speed=2.10x"
+      const m1 = /fps=\s*([\d.]+)/.exec(message);
+      if (m1) setExportFpsLive(parseFloat(m1[1]));
+      const m2 = /speed=\s*([\d.]+)x/.exec(message);
+      if (m2) setExportSpeed(parseFloat(m2[1]));
+      setExportLog(prev => {
+        const next = [...prev, message];
+        return next.length > 500 ? next.slice(-500) : next;
+      });
+    };
+    const onProg = ({ progress: p }: { progress: number }) =>
+      setExportPct(Math.max(0, Math.min(1, p)));
+
     try {
       const ff = await getFFmpeg();
-      ff.on("log", ({ message }) => { logs.push(message); if (logs.length > 200) logs.shift(); });
-      ff.on("progress", ({ progress: p }) => setExportPct(Math.max(0, Math.min(1, p))));
+      ff.on("log", onLog);
+      ff.on("progress", onProg);
       const targetH = QUALITY_HEIGHT[quality];
       const targetW = Math.round((targetH * aspect.w) / aspect.h / 2) * 2;
       const inputs: string[] = [];
 
+      if (codecRequested !== "h264") {
+        logs.push(`[warn] Codec ${codecRequested.toUpperCase()} indisponível no engine WASM — usando H.264.`);
+      }
+      if (useGpu) {
+        logs.push(`[warn] Aceleração por GPU não é suportada no FFmpeg WASM — usando CPU.`);
+      }
+
       if (!v1clips.length) {
-        // Sem V1: gera fundo preto do tamanho do áudio total
         const dur = Math.max(1, totalDuration).toFixed(3);
         setExportMsg("Gerando vídeo base (áudio)...");
         await ff.exec([
-          "-f", "lavfi", "-t", dur, "-i", `color=c=black:s=${targetW}x${targetH}:r=30`,
+          "-f", "lavfi", "-t", dur, "-i", `color=c=black:s=${targetW}x${targetH}:r=${fps}`,
           "-f", "lavfi", "-t", dur, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
-          "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-          "-c:a", "aac", "-ar", "44100", "-ac", "2", "-shortest", "joined.mp4",
+          ...vEncArgs, ...aEncArgs, "-shortest", "joined.mp4",
         ]);
       } else {
         for (let i = 0; i < v1clips.length; i++) {
@@ -1273,41 +1323,29 @@ function Editor() {
 
           const args: string[] = [];
           if (isImg) {
-            args.push("-loop", "1", "-framerate", "30", "-t", to, "-i", inName);
+            args.push("-loop", "1", "-framerate", String(fps), "-t", to, "-i", inName);
             args.push("-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
             if (filter.type === "vf") args.push("-vf", filter.value, "-map", "0:v", "-map", "1:a");
             else args.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "1:a");
-            args.push(
-              "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", "30",
-              "-c:a", "aac", "-ar", "44100", "-ac", "2", "-shortest", outName,
-            );
+            args.push(...vEncArgs, ...aEncArgs, "-shortest", outName);
           } else {
-            // Vídeo: sempre incluir trilha de áudio silenciosa de fallback
-            // e mixar com a original (se existir) garante stream de áudio consistente para o concat.
             args.push("-ss", c.inPoint.toFixed(3), "-i", inName, "-t", to);
             args.push("-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
-            const vPart = filter.type === "vf"
-              ? `[0:v]${filter.value}[vout]`
-              : filter.value;
+            const vPart = filter.type === "vf" ? `[0:v]${filter.value}[vout]` : filter.value;
             const aPart = afilters.length
               ? `[0:a]${afilters.join(",")}[a0src];[a0src][1:a]amix=inputs=2:duration=first:dropout_transition=0:weights=1 0[aout]`
               : `[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=0:weights=1 0[aout]`;
-            // Use ?-fallback by detecting absence via a different filtergraph if needed:
-            args.push("-filter_complex", `${vPart};${aPart}`,
-              "-map", "[vout]", "-map", "[aout]");
-            args.push("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", "30",
-              "-c:a", "aac", "-ar", "44100", "-ac", "2", "-shortest", outName);
+            args.push("-filter_complex", `${vPart};${aPart}`, "-map", "[vout]", "-map", "[aout]");
+            args.push(...vEncArgs, ...aEncArgs, "-shortest", outName);
           }
           try {
             await ff.exec(args);
           } catch (err) {
-            // Fallback: fonte sem áudio — refazer descartando trilha original
             const fbArgs: string[] = ["-ss", c.inPoint.toFixed(3), "-i", inName, "-t", to,
               "-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"];
             if (filter.type === "vf") fbArgs.push("-vf", filter.value, "-map", "0:v", "-map", "1:a");
             else fbArgs.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "1:a");
-            fbArgs.push("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", "30",
-              "-c:a", "aac", "-ar", "44100", "-ac", "2", "-shortest", outName);
+            fbArgs.push(...vEncArgs, ...aEncArgs, "-shortest", outName);
             await ff.exec(fbArgs);
           }
           await ff.deleteFile(inName);
@@ -1316,10 +1354,8 @@ function Editor() {
         setExportMsg("Juntando clipes...");
         const list = inputs.map(n => `file '${n}'`).join("\n");
         await ff.writeFile("list.txt", new TextEncoder().encode(list));
-        // Re-encode no concat para tolerar pequenas variações entre clipes
         await ff.exec(["-f", "concat", "-safe", "0", "-i", "list.txt",
-          "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-          "-c:a", "aac", "-ar", "44100", "-ac", "2", "joined.mp4"]);
+          ...vEncArgs, ...aEncArgs, "joined.mp4"]);
       }
 
       const vf: string[] = [];
@@ -1344,28 +1380,75 @@ function Editor() {
           "-map", "0:v", "-map", "[aout]",
         );
       }
-      finalArgs.push("-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "output.mp4");
+      finalArgs.push(...vEncArgs, ...aEncArgs, "-movflags", "+faststart", "-shortest", "output.mp4");
+      setExportFfCmd("ffmpeg " + finalArgs.map(a => a.includes(" ") ? `"${a}"` : a).join(" "));
       await ff.exec(finalArgs);
 
       const data = (await ff.readFile("output.mp4")) as Uint8Array;
       const buf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
       const blob = new Blob([buf], { type: "video/mp4" });
-      setExportUrl(URL.createObjectURL(blob));
+      const url = URL.createObjectURL(blob);
+      const sizeMB = blob.size / (1024 * 1024);
+      const fileName = `${exportFileName || "video"}.mp4`;
+      setExportUrl(url);
       setExportMsg("Pronto!"); setExportPct(1);
+      setExportHistory(h => [{ url, name: fileName, at: Date.now(), sizeMB }, ...h].slice(0, 8));
 
       for (const n of inputs) await ff.deleteFile(n).catch(() => {});
       await ff.deleteFile("list.txt").catch(() => {});
       await ff.deleteFile("joined.mp4").catch(() => {});
       await ff.deleteFile("output.mp4").catch(() => {});
       if (music) await ff.deleteFile("bgm.bin").catch(() => {});
+
+      // Post-export actions
+      if (postBeep) {
+        try {
+          const Ctx = (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
+          const ctx = new Ctx();
+          const o = ctx.createOscillator(); const g2 = ctx.createGain();
+          o.frequency.value = 880; g2.gain.value = 0.08;
+          o.connect(g2).connect(ctx.destination); o.start();
+          setTimeout(() => { o.stop(); ctx.close(); }, 220);
+        } catch {}
+      }
+      if (postAutoDownload) {
+        const a = document.createElement("a");
+        a.href = url; a.download = fileName;
+        document.body.appendChild(a); a.click(); a.remove();
+      }
+      if (postPlay) {
+        setTimeout(() => {
+          const v = document.querySelector<HTMLVideoElement>(`video[src="${url}"]`);
+          if (v) void v.play().catch(() => {});
+        }, 200);
+      }
     } catch (e) {
       const tail = logs.slice(-6).join("\n");
       console.error("[export] FFmpeg falhou:", e, "\nÚltimos logs:\n", tail);
       const baseMsg = e instanceof Error ? e.message : "Falha na exportação";
       setError(`${baseMsg}${tail ? `\n\nDetalhes:\n${tail}` : ""}`);
       setExportMsg("Erro");
-    } finally { setExporting(false); }
+    } finally {
+      setExporting(false);
+      if (exportElapsedTimerRef.current) {
+        window.clearInterval(exportElapsedTimerRef.current);
+        exportElapsedTimerRef.current = null;
+      }
+    }
   };
+
+  const applyExportPreset = (key: ExportPresetKey) => {
+    setExportPreset(key);
+    if (key === "custom") return;
+    const p = EXPORT_PRESETS[key];
+    setAspectKey(p.aspect);
+    setQuality(p.quality);
+    setExportFps(p.fps);
+    setBitrateMode("custom");
+    setCustomBitrate(p.vBitrate);
+    setAudioBitrate(p.aBitrate);
+  };
+
 
   // ---- Drag from Media to Timeline ----
   const onTrackDragOver = (e: React.DragEvent) => {

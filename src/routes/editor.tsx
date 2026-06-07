@@ -9,6 +9,17 @@ import {
   Settings as SettingsIcon, FileText, RefreshCw, Cpu, Info, Magnet,
 } from "lucide-react";
 import { getFFmpeg, fetchFile, resetFFmpeg } from "@/lib/ffmpeg-client";
+import {
+  DEFAULT_AUDIO_FX as DEFAULT_AUDIO_FX_REF,
+  EQ_BANDS,
+  buildAudioFxGraph,
+  buildAudioFilterChain,
+  type AudioFx,
+  type AudioFxNodes,
+  type ReverbPreset,
+  type Ambience,
+  type ChannelMode,
+} from "@/lib/audio-fx";
 
 export const Route = createFileRoute("/editor")({
   head: () => ({
@@ -198,6 +209,7 @@ type TLItem = {
   fadeIn?: number;
   fadeOut?: number;
   gainDb?: number;
+  audioFx?: AudioFx;
   fx?: Fx;
 };
 
@@ -674,6 +686,39 @@ function Editor() {
   const videoElRef = useRef<HTMLVideoElement>(null);
   const videoBgElRef = useRef<HTMLVideoElement>(null);
   const audioRefs = useRef<Record<string, HTMLAudioElement>>({});
+  // WebAudio: contexto + grafo por elemento (permite ganho > 0dB e FX)
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const mediaGraphRef = useRef<Record<string, { src: MediaElementAudioSourceNode; nodes: AudioFxNodes }>>({});
+  const ensureAudioCtx = useCallback(() => {
+    if (typeof window === "undefined") return null;
+    if (!audioCtxRef.current) {
+      try {
+        const Ctx = (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
+        audioCtxRef.current = new Ctx();
+      } catch { return null; }
+    }
+    if (audioCtxRef.current?.state === "suspended") {
+      audioCtxRef.current.resume().catch(() => {});
+    }
+    return audioCtxRef.current;
+  }, []);
+  const attachGraph = useCallback((id: string, el: HTMLMediaElement, item: TLItem) => {
+    const ctx = ensureAudioCtx();
+    if (!ctx) return null;
+    let entry = mediaGraphRef.current[id];
+    if (!entry) {
+      try {
+        const src = ctx.createMediaElementSource(el);
+        const nodes = buildAudioFxGraph(ctx, { initialFx: item.audioFx, initialGainDb: item.gainDb ?? 0 });
+        src.connect(nodes.input);
+        nodes.output.connect(ctx.destination);
+        entry = { src, nodes };
+        mediaGraphRef.current[id] = entry;
+      } catch { return null; }
+    }
+    return entry;
+  }, [ensureAudioCtx]);
+
   const previewBoxRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const tracksAreaRef = useRef<HTMLDivElement>(null);
@@ -861,6 +906,7 @@ function Editor() {
       transform: asset.kind === "image" || asset.kind === "video" ? { xPct: 50, yPct: 50, scale: 1, rotation: 0 } : undefined,
       fadeIn: 0, fadeOut: 0,
       gainDb: asset.kind === "audio" || asset.kind === "video" ? 0 : undefined,
+      audioFx: asset.kind === "audio" || asset.kind === "video" ? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] } : undefined,
       fx: asset.kind === "image" || asset.kind === "video" ? { ...DEFAULT_FX } : undefined,
     };
   }, []);
@@ -1019,9 +1065,12 @@ function Editor() {
     let v = 1;
     if (i.fadeIn && local < i.fadeIn) v *= Math.max(0, local / i.fadeIn);
     if (i.fadeOut && local > dur - i.fadeOut) v *= Math.max(0, (dur - local) / i.fadeOut);
-    v *= dbToGain(i.gainDb ?? 0);
-    return Math.max(0, Math.min(1, v));
+    // SEM clamp em 1 — o ganho até +30dB precisa estourar quando o usuário pedir.
+    // Multiplicador de fade (0..1) é aplicado depois pelo grafo WebAudio junto ao gainDb.
+    return Math.max(0, v);
   };
+  const fxGainFor = (i: TLItem, t: number) => computeVol(i, t) * Math.pow(10, (i.gainDb ?? 0) / 20);
+
 
   useEffect(() => {
     const v = videoElRef.current;
@@ -1033,9 +1082,23 @@ function Editor() {
     const target = activeV1Video.inPoint + (playhead - activeV1Video.start);
     if (Math.abs(v.currentTime - target) > 0.25) v.currentTime = target;
     v.muted = !!trackMuted[activeV1Video.trackId];
-    v.volume = computeVol(activeV1Video, playhead);
+    // Encaminha pelo grafo WebAudio para permitir ganho >0dB e FX.
+    const g = attachGraph(activeV1Video.id, v, activeV1Video);
+    if (g) {
+      v.volume = 1;
+      g.nodes.setMuted(!!trackMuted[activeV1Video.trackId]);
+      g.nodes.setGain(activeV1Video.gainDb ?? 0);
+      if (activeV1Video.audioFx) g.nodes.setFx(activeV1Video.audioFx);
+      // multiplica fade do envelope no gain final via post-gain (recomputado a cada frame)
+      const fade = computeVol(activeV1Video, playhead);
+      g.nodes.setGain(((activeV1Video.gainDb ?? 0) + (fade < 0.999 ? 20 * Math.log10(Math.max(0.0001, fade)) : 0)));
+    } else {
+      // fallback se WebAudio falhou
+      v.volume = Math.min(1, computeVol(activeV1Video, playhead));
+    }
     if (playing) v.play().catch(() => {}); else v.pause();
-  }, [activeV1Video, playing, playhead, trackMuted]);
+  }, [activeV1Video, playing, playhead, trackMuted, attachGraph]);
+
 
   useEffect(() => {
     const bg = videoBgElRef.current;
@@ -1064,8 +1127,17 @@ function Editor() {
       const el = audioRefs.current[a.id];
       if (!el) continue;
       const inRange = playhead >= a.start && playhead < a.start + (a.outPoint - a.inPoint);
-      el.muted = !!trackMuted[a.trackId];
-      el.volume = computeVol(a, playhead);
+      const g = attachGraph(a.id, el, a);
+      if (g) {
+        el.volume = 1;
+        g.nodes.setMuted(!!trackMuted[a.trackId]);
+        if (a.audioFx) g.nodes.setFx(a.audioFx);
+        const fade = computeVol(a, playhead);
+        g.nodes.setGain(((a.gainDb ?? 0) + (fade < 0.999 ? 20 * Math.log10(Math.max(0.0001, fade)) : 0)));
+      } else {
+        el.muted = !!trackMuted[a.trackId];
+        el.volume = Math.min(1, computeVol(a, playhead));
+      }
       if (inRange) {
         const target = a.inPoint + (playhead - a.start);
         if (Math.abs(el.currentTime - target) > 0.25) el.currentTime = target;
@@ -1073,7 +1145,8 @@ function Editor() {
         if (!playing && !el.paused) el.pause();
       } else if (!el.paused) el.pause();
     }
-  }, [items, playing, playhead, trackMuted]);
+  }, [items, playing, playhead, trackMuted, attachGraph]);
+
 
   const overlays = items.filter(i =>
     (i.kind === "image" || i.kind === "text") &&
@@ -1199,7 +1272,7 @@ function Editor() {
         }), false);
       } else if (d.type === "gain") {
         const dyPx = clientY - d.baseY;
-        const db = Math.max(-30, Math.min(12, d.baseDb - dyPx * 0.25));
+        const db = Math.max(-30, Math.min(30, d.baseDb - dyPx * 0.25));
         setItems(prev => prev.map(i => i.id === d.id ? { ...i, gainDb: db } : i), false);
       }
     };
@@ -1680,8 +1753,7 @@ function Editor() {
           const dur = (c.outPoint - c.inPoint);
           const to = dur.toFixed(3);
           const afilters: string[] = [];
-          const g = dbToGain(c.gainDb ?? 0);
-          if (g !== 1) afilters.push(`volume=${g.toFixed(3)}`);
+          afilters.push(...buildAudioFilterChain(c.audioFx, c.gainDb ?? 0, dur));
           if (c.fadeIn && c.fadeIn > 0.01) afilters.push(`afade=t=in:st=0:d=${c.fadeIn.toFixed(3)}`);
           if (c.fadeOut && c.fadeOut > 0.01) afilters.push(`afade=t=out:st=${(dur - c.fadeOut).toFixed(3)}:d=${c.fadeOut.toFixed(3)}`);
           const filter = exportVideoFilter(c, targetW, targetH);
@@ -1699,8 +1771,8 @@ function Editor() {
             args.push("-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
             const vPart = filter.type === "vf" ? `[0:v]${filter.value}[vout]` : filter.value;
             const aPart = afilters.length
-              ? `[0:a]${afilters.join(",")}[a0src];[a0src][1:a]amix=inputs=2:duration=first:dropout_transition=0:weights=1 0[aout]`
-              : `[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=0:weights=1 0[aout]`;
+              ? `[0:a]${afilters.join(",")}[a0src];[a0src][1:a]amix=inputs=2:duration=first:dropout_transition=0:normalize=0:weights=1 0[aout]`
+              : `[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=0:normalize=0:weights=1 0[aout]`;
             args.push("-filter_complex", `${vPart};${aPart}`, "-map", "[vout]", "-map", "[aout]");
             args.push(...vEncArgs, ...aEncArgs, "-shortest", outName);
           }
@@ -1759,13 +1831,17 @@ function Editor() {
       }
       if (vf.length) finalArgs.push("-vf", vf.join(","));
       if (music) {
-        const mg = dbToGain(music.gainDb ?? 0) * (v1clips.length ? 0.4 : 1.0);
+        const ducker = v1clips.length ? 0.4 : 1.0;
+        const musicChain = buildAudioFilterChain(music.audioFx, music.gainDb ?? 0);
+        // ducker aplicado depois (não somar dB), aloop infinito
+        const musicFilters = [...musicChain, `volume=${ducker.toFixed(3)}`, "aloop=loop=-1:size=2e9"].join(",");
         finalArgs.push(
           "-filter_complex",
-          `[0:a]volume=1[a0];[1:a]volume=${mg.toFixed(3)},aloop=loop=-1:size=2e9[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=0[aout]`,
+          `[0:a]volume=1[a0];[1:a]${musicFilters}[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`,
           "-map", "0:v", "-map", "[aout]",
         );
       }
+
       if (needsReencode) {
         finalArgs.push(...vEncArgs, ...aEncArgs);
       } else {
@@ -2540,12 +2616,20 @@ function Editor() {
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Áudio</div>
               <label className="flex items-center gap-2" title="Duplo clique para restaurar">
                 <span className="w-14 text-muted-foreground">Ganho</span>
-                <input type="range" min={-30} max={12} step={0.5} value={selected.gainDb ?? 0}
+                <input type="range" min={-30} max={30} step={0.5} value={selected.gainDb ?? 0}
                   onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, gainDb: Number(e.target.value) } : i))}
                   onDoubleClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, gainDb: 0 } : i))}
                   className="flex-1 accent-[color:var(--primary)]" />
-                <span className="w-10 text-right font-mono tabular-nums">{(selected.gainDb ?? 0).toFixed(1)}dB</span>
+                <span className={`w-12 text-right font-mono tabular-nums ${(selected.gainDb ?? 0) > 6 ? "text-amber-400" : (selected.gainDb ?? 0) > 18 ? "text-red-400" : ""}`}>
+                  {(selected.gainDb ?? 0) > 0 ? "+" : ""}{(selected.gainDb ?? 0).toFixed(1)}dB
+                </span>
               </label>
+              {(selected.gainDb ?? 0) > 12 && (
+                <div className="rounded bg-amber-500/10 px-2 py-1 text-[10px] text-amber-400">
+                  ⚠ Ganho alto — risco de distorção/clipping (intencional).
+                </div>
+              )}
+
               <label className="flex items-center gap-2" title="Duplo clique para restaurar">
                 <span className="w-14 text-muted-foreground">Fade In</span>
                 <input type="range" min={0} max={Math.min(5, selected.outPoint - selected.inPoint)} step={0.05} value={selected.fadeIn ?? 0}
@@ -2564,6 +2648,115 @@ function Editor() {
               </label>
             </div>
           )}
+
+          {selected && (selected.kind === "audio" || selected.kind === "video") && (() => {
+            const afx: AudioFx = selected.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] };
+            const patchAfx = (patch: Partial<AudioFx>) =>
+              setItems(p => p.map(i => i.id === selected.id
+                ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), ...patch } }
+                : i));
+            const patchEq = (idx: number, val: number) => {
+              const next = [...afx.eq]; next[idx] = val;
+              patchAfx({ eq: next });
+            };
+            const resetEq = () => patchAfx({ eq: new Array(EQ_BANDS.length).fill(0) });
+            return (
+              <div className="space-y-3 rounded-md border border-border bg-card p-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Equalizador · 12 bandas</div>
+                  <button onClick={resetEq} className="text-[10px] text-muted-foreground hover:text-primary">reset</button>
+                </div>
+                <div className="grid grid-cols-12 gap-1">
+                  {EQ_BANDS.map((f, idx) => (
+                    <div key={f} className="flex flex-col items-center gap-1">
+                      <input
+                        type="range" min={-18} max={18} step={0.5}
+                        value={afx.eq[idx] ?? 0}
+                        onChange={(e) => patchEq(idx, Number(e.target.value))}
+                        onDoubleClick={() => patchEq(idx, 0)}
+                        className="h-20 accent-[color:var(--primary)]"
+                        style={{ writingMode: "vertical-lr", direction: "rtl", WebkitAppearance: "slider-vertical" } as React.CSSProperties}
+                        title={`${f}Hz · ${(afx.eq[idx] ?? 0).toFixed(1)}dB`}
+                      />
+                      <span className="font-mono text-[9px] text-muted-foreground">
+                        {f >= 1000 ? `${(f/1000).toFixed(f%1000===0?0:1)}k` : f}
+                      </span>
+                      <span className="font-mono text-[9px] tabular-nums">{(afx.eq[idx] ?? 0) > 0 ? "+" : ""}{(afx.eq[idx] ?? 0).toFixed(0)}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="border-t border-border pt-2">
+                  <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Reverb</div>
+                  <div className="grid grid-cols-5 gap-1">
+                    {(["none","room","hall","plate","cathedral"] as ReverbPreset[]).map(p => (
+                      <button key={p} onClick={() => patchAfx({ reverbPreset: p, reverbMix: p === "none" ? 0 : Math.max(20, afx.reverbMix) })}
+                        className={`rounded-md border px-1.5 py-1 text-[10px] capitalize ${afx.reverbPreset === p ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                        {p === "none" ? "off" : p}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="mt-2 flex items-center gap-2">
+                    <span className="w-12 text-muted-foreground">Mix</span>
+                    <input type="range" min={0} max={100} step={1} value={afx.reverbMix}
+                      onChange={(e) => patchAfx({ reverbMix: Number(e.target.value) })}
+                      className="flex-1 accent-[color:var(--primary)]" />
+                    <span className="w-9 text-right font-mono tabular-nums">{afx.reverbMix}%</span>
+                  </label>
+                </div>
+
+                <div className="border-t border-border pt-2">
+                  <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Echo / Delay</div>
+                  <label className="flex items-center gap-2">
+                    <span className="w-12 text-muted-foreground">Mix</span>
+                    <input type="range" min={0} max={100} step={1} value={afx.echoMix}
+                      onChange={(e) => patchAfx({ echoMix: Number(e.target.value) })}
+                      className="flex-1 accent-[color:var(--primary)]" />
+                    <span className="w-9 text-right font-mono tabular-nums">{afx.echoMix}%</span>
+                  </label>
+                  <label className="mt-1 flex items-center gap-2">
+                    <span className="w-12 text-muted-foreground">Delay</span>
+                    <input type="range" min={10} max={2000} step={5} value={afx.echoDelay}
+                      onChange={(e) => patchAfx({ echoDelay: Number(e.target.value) })}
+                      className="flex-1 accent-[color:var(--primary)]" />
+                    <span className="w-12 text-right font-mono tabular-nums">{afx.echoDelay}ms</span>
+                  </label>
+                  <label className="mt-1 flex items-center gap-2">
+                    <span className="w-12 text-muted-foreground">Feedback</span>
+                    <input type="range" min={0} max={95} step={1} value={afx.echoFeedback}
+                      onChange={(e) => patchAfx({ echoFeedback: Number(e.target.value) })}
+                      className="flex-1 accent-[color:var(--primary)]" />
+                    <span className="w-9 text-right font-mono tabular-nums">{afx.echoFeedback}%</span>
+                  </label>
+                </div>
+
+                <div className="border-t border-border pt-2">
+                  <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Ambiente</div>
+                  <div className="grid grid-cols-3 gap-1">
+                    {(["none","room","hall","cave","outdoor","underwater"] as Ambience[]).map(a => (
+                      <button key={a} onClick={() => patchAfx({ ambience: a })}
+                        className={`rounded-md border px-1.5 py-1 text-[10px] capitalize ${afx.ambience === a ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                        {a === "none" ? "off" : a === "underwater" ? "submerso" : a === "outdoor" ? "ext." : a === "room" ? "sala" : a === "hall" ? "salão" : a === "cave" ? "caverna" : a}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-border pt-2">
+                  <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Canais</div>
+                  <div className="grid grid-cols-5 gap-1">
+                    {(["stereo","mono","left","right","swap"] as ChannelMode[]).map(m => (
+                      <button key={m} onClick={() => patchAfx({ channelMode: m })}
+                        className={`rounded-md border px-1.5 py-1 text-[10px] capitalize ${afx.channelMode === m ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                        {m === "left" ? "L" : m === "right" ? "R" : m === "swap" ? "L↔R" : m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
 
           {selected && selected.fx && (selected.kind === "image" || selected.kind === "video") && (() => {
             const fx = selected.fx;

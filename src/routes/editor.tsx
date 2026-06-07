@@ -2522,16 +2522,20 @@ function Editor() {
                       <button onClick={() => patchFx({ zoom: { dir: "out", speed: fx.zoom?.speed ?? "med" } })}
                         className={`rounded border px-1.5 py-1 text-[10px] ${fx.zoom?.dir === "out" ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>Afastar</button>
                     </div>
-                    {fx.zoom && (
-                      <div className="grid grid-cols-3 gap-1">
-                        {(["slow","med","fast"] as const).map(s => (
-                          <button key={s} onClick={() => fx.zoom && patchFx({ zoom: { dir: fx.zoom.dir, speed: s } })}
-                            className={`rounded border px-1.5 py-1 text-[10px] ${fx.zoom.speed === s ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
-                            {s === "slow" ? "Lenta" : s === "med" ? "Média" : "Rápida"}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                    {(() => {
+                      const zoomFx = fx.zoom;
+                      if (!zoomFx) return null;
+                      return (
+                        <div className="grid grid-cols-3 gap-1">
+                          {(["slow","med","fast"] as const).map(s => (
+                            <button key={s} onClick={() => patchFx({ zoom: { dir: zoomFx.dir, speed: s } })}
+                              className={`rounded border px-1.5 py-1 text-[10px] ${zoomFx.speed === s ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                              {s === "slow" ? "Lenta" : s === "med" ? "Média" : "Rápida"}
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </details>
 

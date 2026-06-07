@@ -715,6 +715,7 @@ function Editor() {
 
   // Resizable side panels
   const [leftW, setLeftW] = useState(256);
+  const [leftPanel, setLeftPanel] = useState<LeftPanel>("media");
   const [rightW, setRightW] = useState(304);
   const sideDragRef = useRef<{ side: "L" | "R"; startX: number; startW: number } | null>(null);
   useEffect(() => {

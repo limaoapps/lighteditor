@@ -576,7 +576,10 @@ function Editor() {
   const [exportFps, setExportFps] = useState<number>(30);
   const [exportCodec, setExportCodec] = useState<Codec>("h264");
   const [speedMode, setSpeedMode] = useState<"turbo" | "rapido" | "qualidade">("rapido");
-  const [useHardwareAccel, setUseHardwareAccel] = useState<boolean>(true);
+  const [exportEngine, setExportEngine] = useState<"auto" | "webcodecs" | "wasm">("auto");
+  const [webcodecsAvailable, setWebcodecsAvailable] = useState<boolean | null>(null);
+  const [webcodecsProbeInfo, setWebcodecsProbeInfo] = useState<string>("");
+  const useHardwareAccel = exportEngine !== "wasm";
   const [bitrateMode, setBitrateMode] = useState<BitrateMode>("medium");
   const [customBitrate, setCustomBitrate] = useState<number>(8000);
   const [audioBitrate, setAudioBitrate] = useState<AudioBitrate>(192);
@@ -597,6 +600,30 @@ function Editor() {
   const [exportHistory, setExportHistory] = useState<Array<{ url: string; name: string; at: number; sizeMB: number }>>([]);
   const [diagRunning, setDiagRunning] = useState<null | "version" | "simple">(null);
   const [diagResult, setDiagResult] = useState<string>("");
+
+  // Detecta suporte a WebCodecs para o seletor de motor
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const targetH = QUALITY_HEIGHT[quality];
+        const targetW = Math.round((targetH * aspect.w) / aspect.h / 2) * 2;
+        const bitrateGuess = bitrateMode === "custom" ? customBitrate : (targetH >= 2160 ? 35000 : targetH >= 1080 ? 8000 : 5000);
+        const { isWebCodecsExportSupported } = await import("@/lib/webcodecs-export");
+        const sup = await isWebCodecsExportSupported(targetW, targetH, exportFps, bitrateGuess);
+        if (cancelled) return;
+        setWebcodecsAvailable(sup.ok);
+        setWebcodecsProbeInfo(sup.ok ? `${sup.hw === "prefer-hardware" ? "GPU" : "CPU"} · ${sup.codec}` : (sup.reason ?? ""));
+        if (!sup.ok && exportEngine === "webcodecs") setExportEngine("auto");
+      } catch (e) {
+        if (cancelled) return;
+        setWebcodecsAvailable(false);
+        setWebcodecsProbeInfo(e instanceof Error ? e.message : String(e));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [quality, aspect.w, aspect.h, exportFps, bitrateMode, customBitrate, exportEngine]);
+
 
   useEffect(() => {
     let mounted = true;
@@ -2806,8 +2833,9 @@ function Editor() {
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Nome do arquivo</label>
                 <div className="mt-1 flex items-center rounded-md border border-border bg-background">
-                  <input value={exportFileName} onChange={(e) => setExportFileName(e.target.value.replace(/[^\w\-]+/g, "-").slice(0, 64))}
-                    className="w-full bg-transparent px-2 py-1.5 text-sm outline-none" placeholder="meu-video" />
+                  <input value={exportFileName} onChange={(e) => setExportFileName(e.target.value.replace(/[\\/:*?"<>|\r\n\t]+/g, "").slice(0, 64))}
+                    className="w-full bg-transparent px-2 py-1.5 text-sm outline-none" placeholder="meu video" />
+
                   <span className="px-2 text-xs text-muted-foreground">.mp4</span>
                 </div>
               </div>
@@ -2847,21 +2875,29 @@ function Editor() {
               </div>
 
               <div className="md:col-span-2">
-                <label className="flex items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={useHardwareAccel}
-                    onChange={(e) => setUseHardwareAccel(e.target.checked)}
-                    className="h-3.5 w-3.5"
-                  />
-                  <span className="font-semibold uppercase tracking-wider text-muted-foreground">
-                    Aceleração por hardware (WebCodecs)
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Motor de exportação</label>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  {([
+                    { k: "auto", label: "Automático", hint: "Usa hardware quando disponível, senão WASM" },
+                    { k: "webcodecs", label: "WebCodecs (Hardware)", hint: "NVENC/QuickSync/VideoToolbox · até 20× mais rápido" },
+                    { k: "wasm", label: "FFmpeg WASM (Software)", hint: "Compatível com todos os navegadores" },
+                  ] as const).map(o => {
+                    const disabled = o.k === "webcodecs" && webcodecsAvailable === false;
+                    return (
+                      <button key={o.k} onClick={() => setExportEngine(o.k)} title={o.hint} disabled={disabled}
+                        className={`rounded-md border px-3 py-1.5 text-xs ${exportEngine === o.k ? "border-primary bg-primary/15 text-primary" : "border-border bg-background hover:border-ring/50"} ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}>
+                        {o.label}
+                      </button>
+                    );
+                  })}
+                  <span className="ml-auto text-[11px] text-muted-foreground">
+                    {webcodecsAvailable === null ? "Detectando suporte..." :
+                      webcodecsAvailable ? `WebCodecs disponível${webcodecsProbeInfo ? ` · ${webcodecsProbeInfo}` : ""}` :
+                      `WebCodecs indisponível${webcodecsProbeInfo ? ` · ${webcodecsProbeInfo}` : ""}`}
                   </span>
-                  <span className="text-[11px] text-muted-foreground">
-                    Usa NVENC/QuickSync/VideoToolbox quando disponível · fallback automático para WASM
-                  </span>
-                </label>
+                </div>
               </div>
+
 
 
               <div>

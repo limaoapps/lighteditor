@@ -1601,12 +1601,15 @@ function Editor() {
     const v1clips = items
       .filter(i => i.trackId === v1trackId && (i.kind === "video" || i.kind === "image"))
       .sort((a, b) => a.start - b.start);
+    const imageOverlayItems = items
+      .filter(i => i.kind === "image" && i.trackId !== v1trackId)
+      .sort((a, b) => a.start - b.start);
     const audioClips = items.filter(i => i.kind === "audio");
-    if (!v1clips.length && !audioClips.length) {
+    if (!v1clips.length && !imageOverlayItems.length && !audioClips.length) {
       setError("Adicione pelo menos um vídeo, imagem ou áudio na timeline.");
       return;
     }
-    const missingFiles = [...v1clips, ...audioClips].filter(c => !c.file);
+    const missingFiles = [...v1clips, ...imageOverlayItems, ...audioClips].filter(c => !c.file);
     if (missingFiles.length) {
       const names = missingFiles.map(c => c.name).join(", ");
       console.error("Clipes sem arquivo original:", names);
@@ -1678,6 +1681,7 @@ function Editor() {
             v1clips: v1clips as unknown as import("@/lib/webcodecs-export").WCItem[],
             audioClips: audioClips as unknown as import("@/lib/webcodecs-export").WCItem[],
             music: music as unknown as import("@/lib/webcodecs-export").WCItem | undefined,
+            imageItems: imageOverlayItems as unknown as import("@/lib/webcodecs-export").WCItem[],
             textItems: textItems as unknown as import("@/lib/webcodecs-export").WCItem[],
             targetW: targetWwc, targetH: targetHwc,
             fps, vKbps, aKbps, totalDuration: Math.max(0.1, totalDuration),

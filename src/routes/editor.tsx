@@ -2006,14 +2006,27 @@ function Editor() {
       return;
     }
     const id = e.dataTransfer.getData("application/x-vle-media");
-    if (!id) return;
+    const idsMulti = e.dataTransfer.getData("application/x-vle-media-multi");
+    const ids = idsMulti ? idsMulti.split(",").filter(Boolean) : (id ? [id] : []);
+    if (!ids.length) return;
     e.preventDefault();
-    const asset = media.find(m => m.id === id); if (!asset) return;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const xPx = e.clientX - rect.left;
-    const start = snapTime(Math.max(0, xPx / zoom));
-    addAssetToTimeline(asset, { trackId, start });
-  };
+    let start = snapTime(Math.max(0, xPx / zoom));
+    // "Cola" no início: se o usuário soltar próximo de 0 (até 1.5s) e a faixa estiver livre nesse intervalo, encaixa em 0.
+    const trackIsEmptyNear0 = !items.some(i => i.trackId === trackId && i.start < Math.max(start, 1.5));
+    if (start < 1.5 && trackIsEmptyNear0) start = 0;
+    let cursor = start;
+    for (const mid of ids) {
+      const asset = media.find(m => m.id === mid);
+      if (!asset) continue;
+      addAssetToTimeline(asset, { trackId, start: cursor });
+      // se múltiplos: encadeia
+      const a = asset;
+      const dur = a.duration ?? (a.kind === "image" ? 5 : 5);
+      cursor += dur;
+    }
+
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground select-none" style={{ WebkitUserSelect: "none", userSelect: "none" }}>

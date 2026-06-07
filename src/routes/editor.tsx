@@ -2613,12 +2613,20 @@ function Editor() {
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Áudio</div>
               <label className="flex items-center gap-2" title="Duplo clique para restaurar">
                 <span className="w-14 text-muted-foreground">Ganho</span>
-                <input type="range" min={-30} max={12} step={0.5} value={selected.gainDb ?? 0}
+                <input type="range" min={-30} max={30} step={0.5} value={selected.gainDb ?? 0}
                   onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, gainDb: Number(e.target.value) } : i))}
                   onDoubleClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, gainDb: 0 } : i))}
                   className="flex-1 accent-[color:var(--primary)]" />
-                <span className="w-10 text-right font-mono tabular-nums">{(selected.gainDb ?? 0).toFixed(1)}dB</span>
+                <span className={`w-12 text-right font-mono tabular-nums ${(selected.gainDb ?? 0) > 6 ? "text-amber-400" : (selected.gainDb ?? 0) > 18 ? "text-red-400" : ""}`}>
+                  {(selected.gainDb ?? 0) > 0 ? "+" : ""}{(selected.gainDb ?? 0).toFixed(1)}dB
+                </span>
               </label>
+              {(selected.gainDb ?? 0) > 12 && (
+                <div className="rounded bg-amber-500/10 px-2 py-1 text-[10px] text-amber-400">
+                  ⚠ Ganho alto — risco de distorção/clipping (intencional).
+                </div>
+              )}
+
               <label className="flex items-center gap-2" title="Duplo clique para restaurar">
                 <span className="w-14 text-muted-foreground">Fade In</span>
                 <input type="range" min={0} max={Math.min(5, selected.outPoint - selected.inPoint)} step={0.05} value={selected.fadeIn ?? 0}

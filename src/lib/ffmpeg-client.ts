@@ -5,7 +5,7 @@ let instance: FFmpeg | null = null;
 let loading: Promise<FFmpeg> | null = null;
 
 const CORE_BASE = "/ffmpeg";
-const LOAD_TIMEOUT_MS = 45_000;
+const LOAD_TIMEOUT_MS = 120_000;
 
 function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
   let timer: number | null = null;

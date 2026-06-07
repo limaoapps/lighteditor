@@ -317,6 +317,82 @@ function fmt(s: number) {
 
 function dbToGain(db: number) { return Math.pow(10, db / 20); }
 
+function MasterFader({ label, db, setDb, peak, clip, onClearClip }: {
+  label: string; db: number; setDb: (v: number) => void;
+  peak: number; clip: boolean; onClearClip: () => void;
+}) {
+  const minDb = -60, maxDb = 12;
+  const trackRef = useRef<HTMLDivElement>(null);
+  const onPointer = (e: React.PointerEvent) => {
+    const el = trackRef.current; if (!el) return;
+    el.setPointerCapture(e.pointerId);
+    const update = (clientY: number) => {
+      const r = el.getBoundingClientRect();
+      const pct = 1 - Math.max(0, Math.min(1, (clientY - r.top) / r.height));
+      const val = minDb + pct * (maxDb - minDb);
+      const snapped = Math.abs(val) < 0.6 ? 0 : Math.round(val * 2) / 2;
+      setDb(snapped);
+    };
+    update(e.clientY);
+    const move = (ev: PointerEvent) => update(ev.clientY);
+    const up = (ev: PointerEvent) => {
+      el.releasePointerCapture(ev.pointerId);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  const knobPct = 1 - (db - minDb) / (maxDb - minDb);
+  const peakDb = peak > 0.00001 ? 20 * Math.log10(peak) : -80;
+  const meterPct = Math.max(0, Math.min(1, (peakDb - minDb) / (maxDb - minDb)));
+  const labelColor = db > 6 ? "text-red-400" : db > 0 ? "text-yellow-300" : "text-emerald-400";
+  // Zero-dB tick position (in %)
+  const zeroPct = 1 - (0 - minDb) / (maxDb - minDb);
+  return (
+    <div className="flex flex-col items-center gap-1 select-none">
+      <button
+        onClick={onClearClip}
+        title={clip ? "Clipping detectado — clique para limpar" : "Sem clipping"}
+        className={`h-2.5 w-5 rounded-sm transition ${clip ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.9)] animate-pulse" : "bg-zinc-700"}`}
+      />
+      <div className="flex items-stretch gap-1">
+        {/* Meter */}
+        <div className="relative h-32 w-2.5 overflow-hidden rounded bg-zinc-900 ring-1 ring-zinc-800">
+          <div
+            className="absolute inset-x-0 bottom-0 transition-[height] duration-75"
+            style={{
+              height: `${meterPct * 100}%`,
+              background: "linear-gradient(to top, #22c55e 0%, #22c55e 55%, #eab308 75%, #ef4444 92%)",
+            }}
+          />
+          {/* 0dB tick */}
+          <div className="pointer-events-none absolute inset-x-0 h-px bg-white/40" style={{ top: `${zeroPct * 100}%` }} />
+        </div>
+        {/* Fader */}
+        <div
+          ref={trackRef}
+          onPointerDown={onPointer}
+          onDoubleClick={() => setDb(0)}
+          title={`${label}: ${db > 0 ? "+" : ""}${db.toFixed(1)} dB (duplo clique = 0)`}
+          className="relative h-32 w-5 cursor-ns-resize rounded bg-zinc-900 ring-1 ring-zinc-800"
+        >
+          <div className="absolute inset-x-1 top-0 bottom-0 rounded bg-gradient-to-b from-red-500/40 via-yellow-400/20 to-emerald-500/10" />
+          <div className="pointer-events-none absolute inset-x-0 h-px bg-white/30" style={{ top: `${zeroPct * 100}%` }} />
+          <div
+            className={`absolute left-1/2 h-2.5 w-5 -translate-x-1/2 rounded-sm shadow ring-1 ring-black/50 ${db > 6 ? "bg-red-500" : db > 0 ? "bg-yellow-400" : "bg-zinc-200"}`}
+            style={{ top: `calc(${knobPct * 100}% - 5px)` }}
+          />
+        </div>
+      </div>
+      <div className={`font-mono text-[9px] tabular-nums ${labelColor}`}>
+        {db > 0 ? "+" : ""}{db.toFixed(1)}
+      </div>
+      <div className="text-[9px] font-bold text-muted-foreground">{label}</div>
+    </div>
+  );
+}
+
 const DEFAULT_FX: Fx = {
   brightness: 0, contrast: 0, saturation: 0, temperature: 0,
   sharpness: 0, exposure: 0, shadows: 0, highlights: 0, blur: 0,

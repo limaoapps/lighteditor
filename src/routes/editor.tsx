@@ -1026,8 +1026,8 @@ function Editor() {
   // ---- Timeline drags ----
   type Drag =
     | { type: "move"; id: string; offsetSec: number; origTrackId: string }
-    | { type: "resizeL"; id: string; origStart: number; origIn: number; origEnd: number; isImage: boolean }
-    | { type: "resizeR"; id: string; origOut: number }
+    | { type: "resizeL"; id: string; origStart: number; origIn: number; origEnd: number; isImage: boolean; pointerOffsetPx: number }
+    | { type: "resizeR"; id: string; origOut: number; pointerOffsetPx: number }
     | { type: "fadeIn"; id: string }
     | { type: "fadeOut"; id: string }
     | { type: "gain"; id: string; baseDb: number; baseY: number }
@@ -1037,6 +1037,29 @@ function Editor() {
   const labelColW = 140;
   const trackHeight = 60;
   const rulerH = 28;
+  const getTimelineTimeFromClientX = useCallback((clientX: number, pointerOffsetPx = 0) => {
+    const tl = timelineRef.current;
+    const rect = tl?.getBoundingClientRect();
+    if (!tl || !rect) return null;
+    const xPx = clientX - rect.left + tl.scrollLeft - labelColW - pointerOffsetPx;
+    return Math.max(0, xPx / zoom);
+  }, [zoom]);
+
+  const extendTimelineForDrag = useCallback((clientX: number) => {
+    const tl = timelineRef.current;
+    const rect = tl?.getBoundingClientRect();
+    if (!tl || !rect) return;
+    const edge = 64;
+    const overRight = clientX - (rect.right - edge);
+    const overLeft = (rect.left + edge) - clientX;
+    if (overRight > 0) {
+      const next = tl.scrollLeft + Math.min(56, 8 + overRight * 0.75);
+      if (next + tl.clientWidth >= tl.scrollWidth - 24) setDragExtraSec(s => Math.min(24 * 3600, s + 10));
+      tl.scrollLeft = next;
+    } else if (overLeft > 0) {
+      tl.scrollLeft = Math.max(0, tl.scrollLeft - Math.min(56, 8 + overLeft * 0.75));
+    }
+  }, []);
 
   const onTimelineMouseDown = (e: React.MouseEvent) => {
     const rect = timelineRef.current?.getBoundingClientRect();

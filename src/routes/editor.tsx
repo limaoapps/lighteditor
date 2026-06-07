@@ -2115,18 +2115,58 @@ function Editor() {
                   <span>Mídia</span>
                   <span className="text-[10px] normal-case text-muted-foreground/70">{media.length} item(ns)</span>
                 </div>
-                <div className="flex-1 space-y-1 overflow-y-auto pr-1">
+                <div
+                  ref={mediaListRef}
+                  className="relative flex-1 space-y-1 overflow-y-auto pr-1"
+                  onMouseDown={(e) => {
+                    // só inicia box-select quando clica em área vazia (não em item / botão)
+                    if ((e.target as HTMLElement).closest("[data-media-item]")) return;
+                    if (e.button !== 0) return;
+                    const container = mediaListRef.current;
+                    if (!container) return;
+                    const rect = container.getBoundingClientRect();
+                    const x = e.clientX - rect.left + container.scrollTop * 0; // x não afeta scroll
+                    const y = e.clientY - rect.top + container.scrollTop;
+                    const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+                    setMediaBoxSel({ x1: x, y1: y, x2: x, y2: y, additive, baseline: new Set(additive ? selectedMediaIds : []) });
+                    if (!additive) setSelectedMediaIds(new Set());
+                    e.preventDefault();
+                  }}
+                >
                   {media.map(a => {
                     const Icon = a.kind === "audio" ? Music2 : a.kind === "image" ? ImageIcon : VideoIcon;
                     const used = usedMediaIds.has(a.id);
+                    const isSel = selectedMediaIds.has(a.id);
                     return (
                       <div key={a.id}
+                        data-media-item
+                        ref={(el) => { mediaItemRefs.current[a.id] = el; }}
                         draggable
-                        onDragStart={(e) => { e.dataTransfer.setData("application/x-vle-media", a.id); e.dataTransfer.effectAllowed = "copy"; }}
+                        onMouseDown={(e) => {
+                          if ((e.target as HTMLElement).closest("button")) return;
+                          if (e.shiftKey || e.metaKey || e.ctrlKey) {
+                            e.preventDefault();
+                            setSelectedMediaIds(prev => {
+                              const n = new Set(prev);
+                              if (n.has(a.id)) n.delete(a.id); else n.add(a.id);
+                              return n;
+                            });
+                          } else if (!selectedMediaIds.has(a.id)) {
+                            setSelectedMediaIds(new Set([a.id]));
+                          }
+                        }}
+                        onDragStart={(e) => {
+                          const ids = selectedMediaIds.has(a.id) && selectedMediaIds.size > 1
+                            ? Array.from(selectedMediaIds)
+                            : [a.id];
+                          e.dataTransfer.setData("application/x-vle-media", a.id);
+                          if (ids.length > 1) e.dataTransfer.setData("application/x-vle-media-multi", ids.join(","));
+                          e.dataTransfer.effectAllowed = "copy";
+                        }}
                         onDoubleClick={() => addAssetToTimeline(a)}
                         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setMediaCtx({ x: e.clientX, y: e.clientY, mediaId: a.id }); }}
-                        title="Arraste até a timeline, clique duas vezes ou clique direito para opções"
-                        className={`group flex w-full cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs active:cursor-grabbing ${used ? "border-primary/40 bg-primary/5" : "border-border bg-card hover:border-ring/50"}`}>
+                        title="Arraste para a timeline. Shift/Ctrl+clique ou arraste no fundo para selecionar várias."
+                        className={`group flex w-full cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs active:cursor-grabbing ${isSel ? "border-primary bg-primary/15 ring-1 ring-primary/40" : used ? "border-primary/40 bg-primary/5" : "border-border bg-card hover:border-ring/50"}`}>
                         <Icon className="h-3.5 w-3.5 text-primary" />
                         <span className="min-w-0 flex-1 truncate">{a.name}</span>
                         {used && <Check className="h-3 w-3 text-primary" />}
@@ -2140,7 +2180,19 @@ function Editor() {
                     );
                   })}
                   {!media.length && <div className="rounded-md border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">Clique em "Adicionar Arquivo" para importar mídia. Depois arraste para a timeline.</div>}
+                  {mediaBoxSel && (
+                    <div
+                      className="pointer-events-none absolute z-10 rounded-sm border border-primary bg-primary/10"
+                      style={{
+                        left: Math.min(mediaBoxSel.x1, mediaBoxSel.x2),
+                        top: Math.min(mediaBoxSel.y1, mediaBoxSel.y2),
+                        width: Math.abs(mediaBoxSel.x2 - mediaBoxSel.x1),
+                        height: Math.abs(mediaBoxSel.y2 - mediaBoxSel.y1),
+                      }}
+                    />
+                  )}
                 </div>
+
               </>
             )}
 

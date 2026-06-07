@@ -989,6 +989,20 @@ function Editor() {
     setSelectedId(it.id);
   }, [tracks, ensureTrack, setItems, playhead]);
 
+  const addCredits = useCallback(() => {
+    const videoTracks = tracks.filter(t => t.kind === "video");
+    const trackId = videoTracks[0]?.id ?? ensureTrack("video");
+    const it: TLItem = {
+      id: crypto.randomUUID(), kind: "text", trackId, name: "Créditos",
+      start: playhead, inPoint: 0, outPoint: 5, sourceDuration: 9999,
+      text: { ...defaultText(), content: "Créditos", size: 48, bold: false },
+      fx: { ...DEFAULT_FX },
+      transform: { xPct: 50, yPct: 82, scale: 1, rotation: 0 },
+    };
+    setItems(prev => [...prev, it]);
+    setSelectedId(it.id);
+  }, [tracks, ensureTrack, setItems, playhead]);
+
   const deleteItem = (id: string) => {
     setItems(prev => prev.filter(i => i.id !== id));
     if (selectedId === id) setSelectedId(null);

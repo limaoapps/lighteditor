@@ -1945,11 +1945,14 @@ function Editor() {
       const offsetClips = <T extends { start: number }>(arr: T[]): T[] =>
         arr.map(c => ({ ...c, start: Math.max(0, c.start - shift) }));
 
-      const withPreviewGeometry = <T extends TLItem>(arr: T[]) => arr.map(c => ({
-        ...c,
-        zIndex: trackZ(c.trackId),
-        previewBox: (c.kind === "video" || c.kind === "image") ? getItemBounds(c) : undefined,
-      }));
+      const withPreviewGeometry = <T extends TLItem>(arr: T[]) => arr.map(c => {
+        const bounds = (c.kind === "video" || c.kind === "image") ? getItemBounds(c) : null;
+        return {
+          ...c,
+          zIndex: trackZ(c.trackId),
+          previewBox: bounds ? { wPct: bounds.w, hPct: bounds.h } : undefined,
+        };
+      });
 
       const blob = await exportWithWebCodecs({
         v1clips: withPreviewGeometry(offsetClips(v1clips)) as unknown as import("@/lib/webcodecs-export").WCItem[],

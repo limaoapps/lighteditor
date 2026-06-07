@@ -766,6 +766,8 @@ function Editor() {
     if (hitEdge !== null) flashSnap(hitEdge);
     return v;
   }, [items, zoom, flashSnap]);
+  const snapTimeRef = useRef(snapTime);
+  useEffect(() => { snapTimeRef.current = snapTime; }, [snapTime]);
 
   // ---- Add files → media library only ----
   const addFiles = useCallback(async (files: FileList | null) => {

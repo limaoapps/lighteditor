@@ -1563,10 +1563,15 @@ function Editor() {
           inputs.push(outName);
         }
         setExportMsg("Juntando clipes...");
-        const list = inputs.map(n => `file '${n}'`).join("\n");
-        await ff.writeFile("list.txt", new TextEncoder().encode(list));
-        await ff.exec(["-f", "concat", "-safe", "0", "-i", "list.txt",
-          ...vEncArgs, ...aEncArgs, "joined.mp4"]);
+        if (inputs.length === 1) {
+          await ff.exec(["-i", inputs[0], "-c", "copy", "joined.mp4"]);
+        } else {
+          const list = inputs.map(n => `file '${n}'`).join("\n");
+          await ff.writeFile("list.txt", new TextEncoder().encode(list));
+          // -c copy: streams já em H.264/AAC com mesmos params → concat sem re-encode
+          await ff.exec(["-f", "concat", "-safe", "0", "-i", "list.txt",
+            "-c", "copy", "joined.mp4"]);
+        }
       }
 
       const vf: string[] = [];
@@ -1580,6 +1585,7 @@ function Editor() {
 
       const music = audioClips[0];
       setExportMsg("Renderizando saída...");
+      const needsReencode = vf.length > 0 || !!music;
       const finalArgs: string[] = ["-i", "joined.mp4"];
       if (music) {
         if (!music.file) throw new Error(`Áudio sem arquivo original: ${music.name}`);
@@ -1594,7 +1600,13 @@ function Editor() {
           "-map", "0:v", "-map", "[aout]",
         );
       }
-      finalArgs.push(...vEncArgs, ...aEncArgs, "-movflags", "+faststart", "-shortest", "output.mp4");
+      if (needsReencode) {
+        finalArgs.push(...vEncArgs, ...aEncArgs);
+      } else {
+        // sem texto/música → remux puro (quase instantâneo)
+        finalArgs.push("-c", "copy");
+      }
+      finalArgs.push("-movflags", "+faststart", "-shortest", "output.mp4");
       setExportFfCmd("ffmpeg " + finalArgs.map(a => a.includes(" ") ? `"${a}"` : a).join(" "));
       await ff.exec(finalArgs);
 

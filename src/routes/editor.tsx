@@ -453,16 +453,23 @@ function blurSigma(fx: Fx | undefined) {
   return Math.max(0.3, Math.min(64, +(n * n * 56 + n * 8).toFixed(2)));
 }
 
+function visualBlurSigma(fx: Fx | undefined) {
+  const v = Math.max(0, Math.min(100, fx?.blur ?? 0));
+  return v <= 0 ? 0 : Math.max(0.2, Math.min(28, +(v * 0.25).toFixed(2)));
+}
+
 function exportVideoFilter(c: TLItem, targetW: number, targetH: number) {
   const fx = c.fx;
+  const visualBlur = visualBlurSigma(fx);
+  const fgFx = visualBlur > 0 ? `,gblur=sigma=${visualBlur.toFixed(1)}:steps=1` : "";
   if (!fx || fx.fillMode === "bars") {
-    return { type: "vf" as const, value: `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:color=black,fps=30,setsar=1` };
+    return { type: "vf" as const, value: `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:color=black${fgFx},fps=30,setsar=1` };
   }
   if (fx.fillMode === "color") {
-    return { type: "vf" as const, value: `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:color=${ffmpegColor(fx.bgColor)},fps=30,setsar=1` };
+    return { type: "vf" as const, value: `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:color=${ffmpegColor(fx.bgColor)}${fgFx},fps=30,setsar=1` };
   }
   if (fx.fillMode === "stretch") {
-    return { type: "vf" as const, value: `scale=${targetW}:${targetH},fps=30,setsar=1` };
+    return { type: "vf" as const, value: `scale=${targetW}:${targetH}${fgFx},fps=30,setsar=1` };
   }
   const bgCore = `scale=${targetW}:${targetH}:force_original_aspect_ratio=increase,crop=${targetW}:${targetH}`;
   const bgFx = fx.fillMode === "blur"
@@ -470,7 +477,7 @@ function exportVideoFilter(c: TLItem, targetW: number, targetH: number) {
     : `${bgCore},hflip`;
   return {
     type: "filter_complex" as const,
-    value: `[0:v]split=2[sharp][blur];[blur]${bgFx}[blurred];[sharp]scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease[sharpfit];[blurred][sharpfit]overlay=(W-w)/2:(H-h)/2,fps=30,setsar=1[vout]`,
+    value: `[0:v]split=2[sharp][blur];[blur]${bgFx}[blurred];[sharp]scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease${fgFx}[sharpfit];[blurred][sharpfit]overlay=(W-w)/2:(H-h)/2,fps=30,setsar=1[vout]`,
   };
 }
 

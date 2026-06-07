@@ -2809,8 +2809,9 @@ function Editor() {
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Nome do arquivo</label>
                 <div className="mt-1 flex items-center rounded-md border border-border bg-background">
-                  <input value={exportFileName} onChange={(e) => setExportFileName(e.target.value.replace(/[^\w\-]+/g, "-").slice(0, 64))}
-                    className="w-full bg-transparent px-2 py-1.5 text-sm outline-none" placeholder="meu-video" />
+                  <input value={exportFileName} onChange={(e) => setExportFileName(e.target.value.replace(/[\\/:*?"<>|\r\n\t]+/g, "").slice(0, 64))}
+                    className="w-full bg-transparent px-2 py-1.5 text-sm outline-none" placeholder="meu video" />
+
                   <span className="px-2 text-xs text-muted-foreground">.mp4</span>
                 </div>
               </div>

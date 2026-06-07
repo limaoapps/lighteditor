@@ -564,6 +564,31 @@ function Editor() {
   const [exportUrl, setExportUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // ---- Export Settings ----
+  const [showExportSettings, setShowExportSettings] = useState(false);
+  const [exportPreset, setExportPreset] = useState<ExportPresetKey>("youtube_1080");
+  const [exportFileName, setExportFileName] = useState("meu-video");
+  const [exportFps, setExportFps] = useState<number>(30);
+  const [exportCodec, setExportCodec] = useState<Codec>("h264");
+  const [bitrateMode, setBitrateMode] = useState<BitrateMode>("medium");
+  const [customBitrate, setCustomBitrate] = useState<number>(8000);
+  const [audioBitrate, setAudioBitrate] = useState<AudioBitrate>(192);
+  const [useGpu, setUseGpu] = useState(false);
+  const [postAutoDownload, setPostAutoDownload] = useState(true);
+  const [postPlay, setPostPlay] = useState(false);
+  const [postBeep, setPostBeep] = useState(true);
+  const [showExportLog, setShowExportLog] = useState(false);
+  const [exportLog, setExportLog] = useState<string[]>([]);
+  const [exportFfCmd, setExportFfCmd] = useState<string>("");
+  const [exportElapsed, setExportElapsed] = useState(0);
+  const [exportFpsLive, setExportFpsLive] = useState<number | null>(null);
+  const [exportSpeed, setExportSpeed] = useState<number | null>(null);
+  const exportStartRef = useRef<number>(0);
+  const exportElapsedTimerRef = useRef<number | null>(null);
+  const lastExportSettingsRef = useRef<null | (() => void)>(null);
+  const gpuInfoRef = useRef<{ available: boolean; vendor: string } | null>(null);
+  const [exportHistory, setExportHistory] = useState<Array<{ url: string; name: string; at: number; sizeMB: number }>>([]);
+
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; clipId: string | null } | null>(null);
   const [mediaCtx, setMediaCtx] = useState<{ x: number; y: number; mediaId: string } | null>(null);
   const clipboardRef = useRef<TLItem | null>(null);

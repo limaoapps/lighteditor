@@ -317,6 +317,82 @@ function fmt(s: number) {
 
 function dbToGain(db: number) { return Math.pow(10, db / 20); }
 
+function MasterFader({ label, db, setDb, peak, clip, onClearClip }: {
+  label: string; db: number; setDb: (v: number) => void;
+  peak: number; clip: boolean; onClearClip: () => void;
+}) {
+  const minDb = -60, maxDb = 12;
+  const trackRef = useRef<HTMLDivElement>(null);
+  const onPointer = (e: React.PointerEvent) => {
+    const el = trackRef.current; if (!el) return;
+    el.setPointerCapture(e.pointerId);
+    const update = (clientY: number) => {
+      const r = el.getBoundingClientRect();
+      const pct = 1 - Math.max(0, Math.min(1, (clientY - r.top) / r.height));
+      const val = minDb + pct * (maxDb - minDb);
+      const snapped = Math.abs(val) < 0.6 ? 0 : Math.round(val * 2) / 2;
+      setDb(snapped);
+    };
+    update(e.clientY);
+    const move = (ev: PointerEvent) => update(ev.clientY);
+    const up = (ev: PointerEvent) => {
+      el.releasePointerCapture(ev.pointerId);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  const knobPct = 1 - (db - minDb) / (maxDb - minDb);
+  const peakDb = peak > 0.00001 ? 20 * Math.log10(peak) : -80;
+  const meterPct = Math.max(0, Math.min(1, (peakDb - minDb) / (maxDb - minDb)));
+  const labelColor = db > 6 ? "text-red-400" : db > 0 ? "text-yellow-300" : "text-emerald-400";
+  // Zero-dB tick position (in %)
+  const zeroPct = 1 - (0 - minDb) / (maxDb - minDb);
+  return (
+    <div className="flex flex-col items-center gap-1 select-none">
+      <button
+        onClick={onClearClip}
+        title={clip ? "Clipping detectado — clique para limpar" : "Sem clipping"}
+        className={`h-2.5 w-5 rounded-sm transition ${clip ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.9)] animate-pulse" : "bg-zinc-700"}`}
+      />
+      <div className="flex items-stretch gap-1">
+        {/* Meter */}
+        <div className="relative h-32 w-2.5 overflow-hidden rounded bg-zinc-900 ring-1 ring-zinc-800">
+          <div
+            className="absolute inset-x-0 bottom-0 transition-[height] duration-75"
+            style={{
+              height: `${meterPct * 100}%`,
+              background: "linear-gradient(to top, #22c55e 0%, #22c55e 55%, #eab308 75%, #ef4444 92%)",
+            }}
+          />
+          {/* 0dB tick */}
+          <div className="pointer-events-none absolute inset-x-0 h-px bg-white/40" style={{ top: `${zeroPct * 100}%` }} />
+        </div>
+        {/* Fader */}
+        <div
+          ref={trackRef}
+          onPointerDown={onPointer}
+          onDoubleClick={() => setDb(0)}
+          title={`${label}: ${db > 0 ? "+" : ""}${db.toFixed(1)} dB (duplo clique = 0)`}
+          className="relative h-32 w-5 cursor-ns-resize rounded bg-zinc-900 ring-1 ring-zinc-800"
+        >
+          <div className="absolute inset-x-1 top-0 bottom-0 rounded bg-gradient-to-b from-red-500/40 via-yellow-400/20 to-emerald-500/10" />
+          <div className="pointer-events-none absolute inset-x-0 h-px bg-white/30" style={{ top: `${zeroPct * 100}%` }} />
+          <div
+            className={`absolute left-1/2 h-2.5 w-5 -translate-x-1/2 rounded-sm shadow ring-1 ring-black/50 ${db > 6 ? "bg-red-500" : db > 0 ? "bg-yellow-400" : "bg-zinc-200"}`}
+            style={{ top: `calc(${knobPct * 100}% - 5px)` }}
+          />
+        </div>
+      </div>
+      <div className={`font-mono text-[9px] tabular-nums ${labelColor}`}>
+        {db > 0 ? "+" : ""}{db.toFixed(1)}
+      </div>
+      <div className="text-[9px] font-bold text-muted-foreground">{label}</div>
+    </div>
+  );
+}
+
 const DEFAULT_FX: Fx = {
   brightness: 0, contrast: 0, saturation: 0, temperature: 0,
   sharpness: 0, exposure: 0, shadows: 0, highlights: 0, blur: 0,
@@ -728,6 +804,12 @@ function Editor() {
   const [leftW, setLeftW] = useState(256);
   const [leftPanel, setLeftPanel] = useState<LeftPanel>("media");
   const [rightW, setRightW] = useState(304);
+  const [masterDbL, setMasterDbL] = useState(0);
+  const [masterDbR, setMasterDbR] = useState(0);
+  const [masterPeakL, setMasterPeakL] = useState(0);
+  const [masterPeakR, setMasterPeakR] = useState(0);
+  const [masterClipL, setMasterClipL] = useState(false);
+  const [masterClipR, setMasterClipR] = useState(false);
   const sideDragRef = useRef<{ side: "L" | "R"; startX: number; startW: number } | null>(null);
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -762,6 +844,28 @@ function Editor() {
     }
     return audioCtxRef.current;
   }, []);
+  const masterRef = useRef<{
+    input: GainNode; splitter: ChannelSplitterNode; merger: ChannelMergerNode;
+    gainL: GainNode; gainR: GainNode; analyserL: AnalyserNode; analyserR: AnalyserNode;
+  } | null>(null);
+  const ensureMaster = useCallback((ctx: AudioContext) => {
+    if (masterRef.current) return masterRef.current;
+    const input = ctx.createGain();
+    const splitter = ctx.createChannelSplitter(2);
+    const merger = ctx.createChannelMerger(2);
+    const gainL = ctx.createGain();
+    const gainR = ctx.createGain();
+    const analyserL = ctx.createAnalyser();
+    const analyserR = ctx.createAnalyser();
+    analyserL.fftSize = 1024; analyserR.fftSize = 1024;
+    input.connect(splitter);
+    splitter.connect(gainL, 0); splitter.connect(gainR, 1);
+    gainL.connect(analyserL); gainR.connect(analyserR);
+    analyserL.connect(merger, 0, 0); analyserR.connect(merger, 0, 1);
+    merger.connect(ctx.destination);
+    masterRef.current = { input, splitter, merger, gainL, gainR, analyserL, analyserR };
+    return masterRef.current;
+  }, []);
   const attachGraph = useCallback((id: string, el: HTMLMediaElement, item: TLItem) => {
     const ctx = ensureAudioCtx();
     if (!ctx) return null;
@@ -770,14 +874,48 @@ function Editor() {
       try {
         const src = ctx.createMediaElementSource(el);
         const nodes = buildAudioFxGraph(ctx, { initialFx: item.audioFx, initialGainDb: item.gainDb ?? 0 });
+        const master = ensureMaster(ctx);
         src.connect(nodes.input);
-        nodes.output.connect(ctx.destination);
+        nodes.output.connect(master.input);
         entry = { src, nodes };
         mediaGraphRef.current[id] = entry;
       } catch { return null; }
     }
     return entry;
-  }, [ensureAudioCtx]);
+  }, [ensureAudioCtx, ensureMaster]);
+
+  // Apply master L/R gains
+  useEffect(() => {
+    const m = masterRef.current; const ctx = audioCtxRef.current;
+    if (!m || !ctx) return;
+    const t = ctx.currentTime;
+    m.gainL.gain.setTargetAtTime(dbToGain(masterDbL), t, 0.01);
+    m.gainR.gain.setTargetAtTime(dbToGain(masterDbR), t, 0.01);
+  }, [masterDbL, masterDbR]);
+
+  // Peak meters (rAF)
+  useEffect(() => {
+    let raf = 0;
+    let pl = 0, pr = 0;
+    const buf = new Float32Array(1024);
+    const tick = () => {
+      const m = masterRef.current;
+      if (m) {
+        m.analyserL.getFloatTimeDomainData(buf);
+        let mL = 0; for (let i = 0; i < buf.length; i++) { const v = Math.abs(buf[i]); if (v > mL) mL = v; }
+        m.analyserR.getFloatTimeDomainData(buf);
+        let mR = 0; for (let i = 0; i < buf.length; i++) { const v = Math.abs(buf[i]); if (v > mR) mR = v; }
+        pl = Math.max(mL, pl * 0.9);
+        pr = Math.max(mR, pr * 0.9);
+        setMasterPeakL(pl); setMasterPeakR(pr);
+        if (mL >= 0.99) setMasterClipL(true);
+        if (mR >= 0.99) setMasterClipR(true);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   const previewBoxRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -3036,8 +3174,9 @@ function Editor() {
             </button>
           </div>
 
+          <div className="flex border-t border-border">
           <div ref={timelineRef} onMouseDown={onTimelineMouseDown}
-            className="relative h-[280px] shrink-0 overflow-x-auto border-t border-border bg-track">
+            className="relative h-[280px] min-w-0 flex-1 overflow-x-auto bg-track">
             <div className="relative" style={{ width: labelColW + rulerSpan * zoom, minWidth: "100%" }}>
               <div data-role="ruler" className="sticky top-0 z-20 flex cursor-ew-resize select-none border-b border-border bg-panel" style={{ height: rulerH }}>
                 <div className="shrink-0 border-r border-border bg-panel" style={{ width: labelColW }} />
@@ -3201,6 +3340,11 @@ function Editor() {
                 </div>
               </div>
             </div>
+          </div>
+          <div className="flex shrink-0 items-stretch gap-2 bg-panel px-3 py-2">
+            <MasterFader label="L" db={masterDbL} setDb={setMasterDbL} peak={masterPeakL} clip={masterClipL} onClearClip={() => setMasterClipL(false)} />
+            <MasterFader label="R" db={masterDbR} setDb={setMasterDbR} peak={masterPeakR} clip={masterClipR} onClearClip={() => setMasterClipR(false)} />
+          </div>
           </div>
         </div>
       </div>

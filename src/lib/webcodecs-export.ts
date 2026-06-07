@@ -242,7 +242,6 @@ function drawImageOverlay(
   const srcW = img.naturalWidth || item.width || targetW;
   const srcH = img.naturalHeight || item.height || targetH;
   if (srcW <= 0 || srcH <= 0) return;
-  const previewAR = targetW / targetH;
   const ar = srcW / srcH;
   let boxH = targetH * 0.6;
   let boxW = boxH * ar;

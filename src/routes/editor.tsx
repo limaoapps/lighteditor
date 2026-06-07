@@ -222,6 +222,66 @@ const IMAGE_MAX_DUR = 3600;
 type Quality = "720" | "1080" | "2160";
 const QUALITY_HEIGHT: Record<Quality, number> = { "720": 720, "1080": 1080, "2160": 2160 };
 
+type Codec = "h264" | "h265" | "vp9";
+type BitrateMode = "low" | "medium" | "high" | "custom";
+type AudioBitrate = 128 | 192 | 256 | 320;
+
+type ExportPresetKey =
+  | "youtube_1080" | "youtube_4k" | "tiktok" | "reels"
+  | "ig_feed" | "facebook" | "whatsapp" | "custom";
+
+type ExportPreset = {
+  label: string;
+  aspect: AspectKey;
+  quality: Quality;
+  fps: number;
+  vBitrate: number; // kbps
+  aBitrate: AudioBitrate;
+};
+
+const EXPORT_PRESETS: Record<ExportPresetKey, ExportPreset> = {
+  youtube_1080: { label: "YouTube 1080p",    aspect: "16:9", quality: "1080", fps: 30, vBitrate: 8000,  aBitrate: 192 },
+  youtube_4k:   { label: "YouTube 4K",       aspect: "16:9", quality: "2160", fps: 30, vBitrate: 35000, aBitrate: 256 },
+  tiktok:       { label: "TikTok 1080×1920", aspect: "9:16", quality: "1080", fps: 30, vBitrate: 6000,  aBitrate: 192 },
+  reels:        { label: "Instagram Reels",  aspect: "9:16", quality: "1080", fps: 30, vBitrate: 6000,  aBitrate: 192 },
+  ig_feed:      { label: "Instagram 1:1",    aspect: "1:1",  quality: "1080", fps: 30, vBitrate: 5000,  aBitrate: 192 },
+  facebook:     { label: "Facebook",         aspect: "16:9", quality: "1080", fps: 30, vBitrate: 6000,  aBitrate: 192 },
+  whatsapp:     { label: "WhatsApp",         aspect: "16:9", quality: "720",  fps: 30, vBitrate: 2500,  aBitrate: 128 },
+  custom:       { label: "Personalizado",    aspect: "16:9", quality: "1080", fps: 30, vBitrate: 8000,  aBitrate: 192 },
+};
+
+function defaultVBitrate(q: Quality): number {
+  if (q === "720") return 5000;
+  if (q === "1080") return 8000;
+  return 35000;
+}
+function bitrateFromMode(q: Quality, mode: BitrateMode, custom: number): number {
+  if (mode === "custom") return Math.max(200, custom);
+  const base = defaultVBitrate(q);
+  if (mode === "low")    return Math.round(base * 0.55);
+  if (mode === "high")   return Math.round(base * 1.5);
+  return base; // medium
+}
+function estimateSizeMB(durationSec: number, vKbps: number, aKbps: number): number {
+  const bits = (vKbps + aKbps) * 1000 * Math.max(0.1, durationSec);
+  return bits / 8 / (1024 * 1024);
+}
+function detectGpu(): { available: boolean; vendor: string } {
+  try {
+    const c = document.createElement("canvas");
+    const gl = (c.getContext("webgl2") || c.getContext("webgl")) as WebGLRenderingContext | null;
+    if (!gl) return { available: false, vendor: "—" };
+    const ext = gl.getExtension("WEBGL_debug_renderer_info");
+    const r = (ext && gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) || "GPU";
+    return { available: true, vendor: String(r) };
+  } catch { return { available: false, vendor: "—" }; }
+}
+function fmtClock(s: number): string {
+  if (!isFinite(s) || s < 0) s = 0;
+  const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+  return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+}
+
 const CENTER_SNAP = 1.5;
 const TIME_SNAP_PX = 8;
 

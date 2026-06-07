@@ -1179,7 +1179,7 @@ function Editor() {
     e.preventDefault();
     const delta = -e.deltaY * 0.0015;
     setItems(prev => prev.map(i => i.id === target.id && i.transform
-      ? { ...i, transform: { ...i.transform, scale: Math.max(0.1, Math.min(5, i.transform.scale + delta)) } } : i));
+      ? { ...i, transform: { ...i.transform, scale: Math.max(0.05, Math.min(50, i.transform.scale + delta)) } } : i));
   };
 
   // selected preview target (image/text/active V1 video)

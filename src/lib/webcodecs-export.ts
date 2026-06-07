@@ -44,14 +44,35 @@ export type WCItem = {
     content: string;
     color: string;
     size: number;
+    fontFamily?: string;
+    bold?: boolean;
+    italic?: boolean;
+    underline?: boolean;
+    align?: "left" | "center" | "right";
+    letterSpacing?: number;
+    lineHeight?: number;
+    opacity?: number;
+    bgColor?: string;
+    bgOpacity?: number;
+    paddingX?: number;
+    paddingY?: number;
+    radius?: number;
+    shadowColor?: string;
+    shadowBlur?: number;
+    shadowOffsetX?: number;
+    shadowOffsetY?: number;
+    strokeColor?: string;
+    strokeWidth?: number;
   };
-  transform?: { yPct?: number };
+  transform?: { xPct?: number; yPct?: number; scale?: number; rotation?: number };
 };
 
 export type WCExportOptions = {
   v1clips: WCItem[];
   audioClips: WCItem[];
   music?: WCItem;
+  textItems?: WCItem[];
+  /** @deprecated use textItems */
   textItem?: WCItem;
   targetW: number;
   targetH: number;

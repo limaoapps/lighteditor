@@ -2233,6 +2233,15 @@ function Editor() {
                 <div className="h-full bg-primary transition-all" style={{ width: `${Math.round(exportPct * 100)}%` }} />
               </div>
               <div className="mt-2 text-right text-xs text-muted-foreground">{Math.round(exportPct * 100)}%</div>
+              <button
+                onClick={async () => {
+                  try { const ff = await getFFmpeg(); ff.terminate(); } catch {}
+                  setExporting(false); setExportPct(0); setExportMsg(""); setError("Exportação cancelada.");
+                }}
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md border border-border bg-muted px-4 py-2 text-sm font-medium hover:bg-muted/70"
+              >
+                Cancelar
+              </button>
             </>)}
             {exportUrl && (<>
               <video src={exportUrl} controls className="mt-4 w-full rounded-md" />

@@ -601,6 +601,30 @@ function Editor() {
   const [diagRunning, setDiagRunning] = useState<null | "version" | "simple">(null);
   const [diagResult, setDiagResult] = useState<string>("");
 
+  // Detecta suporte a WebCodecs para o seletor de motor
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const targetH = QUALITY_HEIGHT[quality];
+        const targetW = Math.round((targetH * aspect.w) / aspect.h / 2) * 2;
+        const bitrateGuess = bitrateMode === "custom" ? customBitrate : (targetH >= 2160 ? 35000 : targetH >= 1080 ? 8000 : 5000);
+        const { isWebCodecsExportSupported } = await import("@/lib/webcodecs-export");
+        const sup = await isWebCodecsExportSupported(targetW, targetH, exportFps, bitrateGuess);
+        if (cancelled) return;
+        setWebcodecsAvailable(sup.ok);
+        setWebcodecsProbeInfo(sup.ok ? `${sup.hw === "prefer-hardware" ? "GPU" : "CPU"} · ${sup.codec}` : (sup.reason ?? ""));
+        if (!sup.ok && exportEngine === "webcodecs") setExportEngine("auto");
+      } catch (e) {
+        if (cancelled) return;
+        setWebcodecsAvailable(false);
+        setWebcodecsProbeInfo(e instanceof Error ? e.message : String(e));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [quality, aspect.w, aspect.h, exportFps, bitrateMode, customBitrate, exportEngine]);
+
+
   useEffect(() => {
     let mounted = true;
     setFfLoading(true);

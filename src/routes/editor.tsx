@@ -3158,7 +3158,102 @@ function Editor() {
         </div>
       </div>
 
+      {/* Transition quick-edit popover */}
+      {transitionPopover && (() => {
+        const left = items.find(i => i.id === transitionPopover.leftId);
+        const right = items.find(i => i.id === transitionPopover.rightId);
+        if (!left || !right) return null;
+        const curDur = Math.max(left.fadeOut ?? 0, right.fadeIn ?? 0);
+        const transId = left.transition || right.transition;
+        const preset = getTransitionById(transId);
+        const maxDur = Math.min(
+          5,
+          left.outPoint - left.inPoint,
+          right.outPoint - right.inPoint,
+        );
+        const updateDur = (v: number) => {
+          const d = Math.max(0, Math.min(maxDur, v));
+          setItems(p => p.map(i =>
+            i.id === left.id ? { ...i, fadeOut: d } :
+            i.id === right.id ? { ...i, fadeIn: d } : i
+          ));
+        };
+        const setPreset = (id: string, dur: number) => {
+          const d = Math.max(0, Math.min(maxDur, dur));
+          setItems(p => p.map(i =>
+            i.id === left.id ? { ...i, fadeOut: d, transition: id } :
+            i.id === right.id ? { ...i, fadeIn: d, transition: id } : i
+          ));
+        };
+        const remove = () => {
+          setItems(p => p.map(i =>
+            i.id === left.id ? { ...i, fadeOut: 0, transition: undefined } :
+            i.id === right.id ? { ...i, fadeIn: 0, transition: undefined } : i
+          ));
+          setTransitionPopover(null);
+          setSelectedTransition(null);
+        };
+        return (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="fixed z-50 w-72 rounded-md border border-border bg-popover p-3 text-xs text-popover-foreground shadow-2xl"
+            style={{ left: Math.min(window.innerWidth - 300, transitionPopover.x - 140), top: Math.max(8, transitionPopover.y - 160) }}
+          >
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 font-semibold">
+                <span aria-hidden>{preset?.icon ?? "◐"}</span>
+                <span>{preset?.label ?? "Transição"}</span>
+              </div>
+              <button onClick={() => setTransitionPopover(null)} className="rounded p-1 text-muted-foreground hover:bg-accent">
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+            <label className="flex items-center gap-2">
+              <span className="w-14 text-muted-foreground">Duração</span>
+              <input
+                type="range" min={0.05} max={Math.max(0.1, maxDur)} step={0.05} value={curDur}
+                onChange={(e) => updateDur(Number(e.target.value))}
+                className="flex-1 accent-[color:var(--primary)]"
+              />
+              <span className="w-12 text-right font-mono tabular-nums">{curDur.toFixed(2)}s</span>
+            </label>
+            <div className="mt-2 grid grid-cols-4 gap-1">
+              {[0.2, 0.5, 1.0, 2.0].filter(v => v <= maxDur).map(v => (
+                <button key={v} onClick={() => updateDur(v)}
+                  className="rounded border border-border px-1 py-1 text-[10px] hover:border-primary hover:text-primary">
+                  {v}s
+                </button>
+              ))}
+            </div>
+            <div className="mt-3">
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Trocar transição</div>
+              <select
+                value={transId ?? ""}
+                onChange={(e) => {
+                  const p = getTransitionById(e.target.value);
+                  if (p) setPreset(p.id, curDur > 0 ? curDur : p.dur);
+                }}
+                className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
+              >
+                {TRANSITION_GROUPS.map(g => (
+                  <optgroup key={g.label} label={g.label}>
+                    {g.items.map(t => (
+                      <option key={t.id} value={t.id}>{t.icon} {t.label}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+            <button onClick={remove}
+              className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded border border-border bg-background py-1.5 text-[11px] hover:border-destructive hover:text-destructive">
+              <Trash2 className="h-3 w-3" /> Remover transição
+            </button>
+          </div>
+        );
+      })()}
+
       {/* Context menu */}
+
       {ctxMenu && (
         <div
           onClick={(e) => e.stopPropagation()}

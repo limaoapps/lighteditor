@@ -2646,6 +2646,115 @@ function Editor() {
             </div>
           )}
 
+          {selected && (selected.kind === "audio" || selected.kind === "video") && (() => {
+            const afx: AudioFx = selected.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] };
+            const patchAfx = (patch: Partial<AudioFx>) =>
+              setItems(p => p.map(i => i.id === selected.id
+                ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), ...patch } }
+                : i));
+            const patchEq = (idx: number, val: number) => {
+              const next = [...afx.eq]; next[idx] = val;
+              patchAfx({ eq: next });
+            };
+            const resetEq = () => patchAfx({ eq: new Array(EQ_BANDS.length).fill(0) });
+            return (
+              <div className="space-y-3 rounded-md border border-border bg-card p-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Equalizador · 12 bandas</div>
+                  <button onClick={resetEq} className="text-[10px] text-muted-foreground hover:text-primary">reset</button>
+                </div>
+                <div className="grid grid-cols-12 gap-1">
+                  {EQ_BANDS.map((f, idx) => (
+                    <div key={f} className="flex flex-col items-center gap-1">
+                      <input
+                        type="range" min={-18} max={18} step={0.5}
+                        value={afx.eq[idx] ?? 0}
+                        onChange={(e) => patchEq(idx, Number(e.target.value))}
+                        onDoubleClick={() => patchEq(idx, 0)}
+                        className="h-20 accent-[color:var(--primary)]"
+                        style={{ writingMode: "vertical-lr", direction: "rtl", WebkitAppearance: "slider-vertical" } as React.CSSProperties}
+                        title={`${f}Hz · ${(afx.eq[idx] ?? 0).toFixed(1)}dB`}
+                      />
+                      <span className="font-mono text-[9px] text-muted-foreground">
+                        {f >= 1000 ? `${(f/1000).toFixed(f%1000===0?0:1)}k` : f}
+                      </span>
+                      <span className="font-mono text-[9px] tabular-nums">{(afx.eq[idx] ?? 0) > 0 ? "+" : ""}{(afx.eq[idx] ?? 0).toFixed(0)}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="border-t border-border pt-2">
+                  <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Reverb</div>
+                  <div className="grid grid-cols-5 gap-1">
+                    {(["none","room","hall","plate","cathedral"] as ReverbPreset[]).map(p => (
+                      <button key={p} onClick={() => patchAfx({ reverbPreset: p, reverbMix: p === "none" ? 0 : Math.max(20, afx.reverbMix) })}
+                        className={`rounded-md border px-1.5 py-1 text-[10px] capitalize ${afx.reverbPreset === p ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                        {p === "none" ? "off" : p}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="mt-2 flex items-center gap-2">
+                    <span className="w-12 text-muted-foreground">Mix</span>
+                    <input type="range" min={0} max={100} step={1} value={afx.reverbMix}
+                      onChange={(e) => patchAfx({ reverbMix: Number(e.target.value) })}
+                      className="flex-1 accent-[color:var(--primary)]" />
+                    <span className="w-9 text-right font-mono tabular-nums">{afx.reverbMix}%</span>
+                  </label>
+                </div>
+
+                <div className="border-t border-border pt-2">
+                  <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Echo / Delay</div>
+                  <label className="flex items-center gap-2">
+                    <span className="w-12 text-muted-foreground">Mix</span>
+                    <input type="range" min={0} max={100} step={1} value={afx.echoMix}
+                      onChange={(e) => patchAfx({ echoMix: Number(e.target.value) })}
+                      className="flex-1 accent-[color:var(--primary)]" />
+                    <span className="w-9 text-right font-mono tabular-nums">{afx.echoMix}%</span>
+                  </label>
+                  <label className="mt-1 flex items-center gap-2">
+                    <span className="w-12 text-muted-foreground">Delay</span>
+                    <input type="range" min={10} max={2000} step={5} value={afx.echoDelay}
+                      onChange={(e) => patchAfx({ echoDelay: Number(e.target.value) })}
+                      className="flex-1 accent-[color:var(--primary)]" />
+                    <span className="w-12 text-right font-mono tabular-nums">{afx.echoDelay}ms</span>
+                  </label>
+                  <label className="mt-1 flex items-center gap-2">
+                    <span className="w-12 text-muted-foreground">Feedback</span>
+                    <input type="range" min={0} max={95} step={1} value={afx.echoFeedback}
+                      onChange={(e) => patchAfx({ echoFeedback: Number(e.target.value) })}
+                      className="flex-1 accent-[color:var(--primary)]" />
+                    <span className="w-9 text-right font-mono tabular-nums">{afx.echoFeedback}%</span>
+                  </label>
+                </div>
+
+                <div className="border-t border-border pt-2">
+                  <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Ambiente</div>
+                  <div className="grid grid-cols-3 gap-1">
+                    {(["none","room","hall","cave","outdoor","underwater"] as Ambience[]).map(a => (
+                      <button key={a} onClick={() => patchAfx({ ambience: a })}
+                        className={`rounded-md border px-1.5 py-1 text-[10px] capitalize ${afx.ambience === a ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                        {a === "none" ? "off" : a === "underwater" ? "submerso" : a === "outdoor" ? "ext." : a === "room" ? "sala" : a === "hall" ? "salão" : a === "cave" ? "caverna" : a}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-border pt-2">
+                  <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Canais</div>
+                  <div className="grid grid-cols-5 gap-1">
+                    {(["stereo","mono","left","right","swap"] as ChannelMode[]).map(m => (
+                      <button key={m} onClick={() => patchAfx({ channelMode: m })}
+                        className={`rounded-md border px-1.5 py-1 text-[10px] capitalize ${afx.channelMode === m ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                        {m === "left" ? "L" : m === "right" ? "R" : m === "swap" ? "L↔R" : m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+
           {selected && selected.fx && (selected.kind === "image" || selected.kind === "video") && (() => {
             const fx = selected.fx;
             const patchFx = (patch: Partial<Fx>) =>

@@ -1394,6 +1394,7 @@ function Editor() {
       else if (ctrl && k === "b") { e.preventDefault(); splitAt(playhead); }
       else if (ctrl && k === "c" && selectedId) { e.preventDefault(); copyClip(selectedId); }
       else if (ctrl && k === "v") { e.preventDefault(); pasteClip(); }
+      else if (k === "f" && !ctrl) { e.preventDefault(); togglePreviewFullscreen(); }
       else if (k === "s" && !ctrl) { e.preventDefault(); splitAt(playhead); }
       else if (k === "d" && !ctrl) { e.preventDefault(); splitAt(playhead); }
       else if ((k === "delete" || k === "backspace") && selectedId) { e.preventDefault(); deleteItem(selectedId); }
@@ -1410,7 +1411,7 @@ function Editor() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [splitAt, playhead, undo, redo, selectedId, totalDuration]);
+  }, [splitAt, playhead, undo, redo, selectedId, totalDuration, togglePreviewFullscreen]);
 
   // close context menu on click outside
   useEffect(() => {

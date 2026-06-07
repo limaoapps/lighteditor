@@ -1018,7 +1018,7 @@ function Editor() {
   const removeMedia = (mediaId: string) => {
     setMedia(prev => {
       const target = prev.find(m => m.id === mediaId);
-      if (target?.url) { try { URL.revokeObjectURL(target.url); } catch {} }
+      if (target?.url) { try { URL.revokeObjectURL(target.url); } catch { /* ignore */ } }
       return prev.filter(m => m.id !== mediaId);
     });
     setItems(prev => prev.filter(i => i.mediaId !== mediaId));
@@ -2007,7 +2007,7 @@ function Editor() {
           o.frequency.value = 880; g2.gain.value = 0.08;
           o.connect(g2).connect(ctx.destination); o.start();
           setTimeout(() => { o.stop(); ctx.close(); }, 220);
-        } catch {}
+        } catch { /* ignore */ }
       }
       if (postAutoDownload) {
         const a = document.createElement("a");
@@ -3463,7 +3463,7 @@ function Editor() {
               <div className="mt-3 flex gap-2">
                 <button
                   onClick={async () => {
-                    try { const ff = await getFFmpeg(); ff.terminate(); } catch {}
+                    try { const ff = await getFFmpeg(); ff.terminate(); } catch { /* ignore */ }
                     resetFFmpeg();
                     setFfReady(false);
                     void getFFmpeg().then(() => setFfReady(true)).catch((err) => console.error("FFmpeg não recarregou após cancelar.", err));

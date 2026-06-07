@@ -3218,15 +3218,11 @@ function Editor() {
               </div>
               <div className="mt-3 flex gap-2">
                 <button
-                  onClick={async () => {
-                    try { const ff = await getFFmpeg(); ff.terminate(); } catch { /* ignore */ }
-                    resetFFmpeg();
-                    setFfReady(false);
-                    void getFFmpeg().then(() => setFfReady(true)).catch((err) => console.error("FFmpeg não recarregou após cancelar.", err));
+                  onClick={() => {
                     setExporting(false); setExportPct(0); setExportMsg("");
                     setExportLog(prev => [...prev, "Processo encerrado."]);
                     console.warn("[EXPORT] Processo encerrado pelo usuário.");
-                    setError("Exportação cancelada — processo FFmpeg encerrado.");
+                    setError("Exportação cancelada.");
                     if (exportElapsedTimerRef.current) { window.clearInterval(exportElapsedTimerRef.current); exportElapsedTimerRef.current = null; }
                   }}
                   className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-border bg-muted px-4 py-2 text-sm font-medium hover:bg-muted/70"

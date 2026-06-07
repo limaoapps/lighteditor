@@ -2963,6 +2963,14 @@ function Editor() {
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs hover:border-primary hover:text-primary">
               <Scissors className="h-3.5 w-3.5" /> Dividir
             </button>
+            <button
+              onClick={() => setSnapResize(s => !s)}
+              title={snapResize ? "Snap ativo — clipes encaixam nas bordas. Clique para desativar." : "Snap desativado — movimentação livre. Clique para ativar."}
+              className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors ${snapResize ? "border-primary/60 bg-primary/15 text-primary" : "border-border bg-card text-muted-foreground hover:border-primary hover:text-primary"}`}
+            >
+              <Magnet className="h-3.5 w-3.5" /> {snapResize ? "Snap" : "Snap off"}
+            </button>
+
             <button onClick={() => selected && deleteItem(selected.id)} disabled={!selected} title="Excluir (Del)"
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs hover:border-destructive hover:text-destructive disabled:opacity-40">
               <Trash2 className="h-3.5 w-3.5" /> Excluir

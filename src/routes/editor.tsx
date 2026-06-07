@@ -1043,6 +1043,21 @@ function Editor() {
     return 10 + (videoTrackOrder.count - idx) * 2;
   }, [videoTrackOrder]);
 
+  const syncExportPresetToAspect = useCallback((nextAspect: AspectKey) => {
+    const current = EXPORT_PRESETS[exportPreset];
+    if (current?.aspect === nextAspect) return;
+    const matching = (Object.keys(EXPORT_PRESETS) as ExportPresetKey[]).find(k => {
+      const p = EXPORT_PRESETS[k];
+      return k !== "custom" && p.aspect === nextAspect && p.quality === quality;
+    });
+    setExportPreset(matching ?? "custom");
+  }, [exportPreset, quality]);
+
+  const setProjectAspect = useCallback((nextAspect: AspectKey) => {
+    setAspectKey(nextAspect);
+    syncExportPresetToAspect(nextAspect);
+  }, [syncExportPresetToAspect]);
+
   // Box-select global listeners para a mídia
   useEffect(() => {
     if (!mediaBoxSel) return;

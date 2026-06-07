@@ -560,6 +560,8 @@ function Editor() {
 
   const [exporting, setExporting] = useState(false);
   const [ffReady, setFfReady] = useState(false);
+  const [ffLoading, setFfLoading] = useState(true);
+  const [ffLoadError, setFfLoadError] = useState<string | null>(null);
   const [exportPct, setExportPct] = useState(0);
   const [exportMsg, setExportMsg] = useState("");
   const [exportUrl, setExportUrl] = useState<string | null>(null);
@@ -594,16 +596,24 @@ function Editor() {
 
   useEffect(() => {
     let mounted = true;
+    setFfLoading(true);
     getFFmpeg()
       .then(() => {
         if (!mounted) return;
         setFfReady(true);
+        setFfLoadError(null);
         console.log("FFmpeg pronto para exportação.");
       })
       .catch((err) => {
         const msg = err instanceof Error ? err.message : String(err);
         console.error("FFmpeg não carregou.", err);
-        if (mounted) setError(`FFmpeg não carregou: ${msg}`);
+        if (mounted) {
+          setFfReady(false);
+          setFfLoadError(msg);
+        }
+      })
+      .finally(() => {
+        if (mounted) setFfLoading(false);
       });
     return () => { mounted = false; };
   }, []);
@@ -1358,11 +1368,6 @@ function Editor() {
   const doExport = async () => {
     try {
       console.log("Iniciando exportação...");
-      if (!ffReady) {
-        console.error("FFmpeg ainda não está pronto.");
-        setError("FFmpeg ainda está carregando. Aguarde alguns segundos e tente novamente.");
-        return;
-      }
       if (!items || items.length === 0) {
         console.error("Nenhum clipe carregado.");
         setError("Nenhum clipe carregado.");
@@ -1410,7 +1415,7 @@ function Editor() {
     const vEncArgs = ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-r", String(fps), ...vBitArgs];
     const aEncArgs = ["-c:a", "aac", "-b:a", `${aKbps}k`, "-ar", "44100", "-ac", "2"];
 
-    setExporting(true); setExportPct(0); setExportMsg("Carregando engine...");
+    setExporting(true); setExportPct(0); setExportMsg(ffReady ? "Carregando engine..." : "Inicializando FFmpeg...");
     setExportUrl(null); setError(null);
     setExportLog([]); setExportFfCmd("");
     setExportElapsed(0); setExportFpsLive(null); setExportSpeed(null);
@@ -1437,7 +1442,7 @@ function Editor() {
         `Clipes vídeo/imagem na V1: ${items.filter(i => (i.kind === "video" || i.kind === "image")).length}`,
         `Clipes áudio: ${items.filter(i => i.kind === "audio").length}`,
         `Duração total: ${totalDuration.toFixed(2)}s`,
-        `FFmpeg core URL: https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.js`,
+        `FFmpeg core URL: /ffmpeg/ffmpeg-core.js`,
         `User-Agent: ${navigator.userAgent}`,
         `=================================`,
         `Iniciando processo FFmpeg...`,
@@ -1462,7 +1467,11 @@ function Editor() {
         setExportPct(Math.max(0, Math.min(1, p)));
 
 
+      setFfLoading(true);
       const ff = await getFFmpeg();
+      setFfReady(true);
+      setFfLoadError(null);
+      setFfLoading(false);
       if (!ff) {
         console.error("FFmpeg não carregou.");
         setError("FFmpeg não carregou.");
@@ -1619,6 +1628,11 @@ function Editor() {
       const tail = logs.slice(-6).join("\n");
       console.error("[export] FFmpeg falhou:", e, "\nÚltimos logs:\n", tail);
       const baseMsg = e instanceof Error ? e.message : "Falha na exportação";
+      setFfLoading(false);
+      if (/ffmpeg/i.test(baseMsg)) {
+        setFfReady(false);
+        setFfLoadError(baseMsg);
+      }
       setError(`${baseMsg}${tail ? `\n\nDetalhes:\n${tail}` : ""}`);
       setExportMsg("Erro");
     } finally {
@@ -1700,10 +1714,10 @@ function Editor() {
               if (!gpuInfoRef.current) gpuInfoRef.current = detectGpu();
               setShowExportSettings(true);
             }}
-            disabled={exporting || !items.length || !ffReady}
+            disabled={exporting || !items.length}
             className="glow-primary inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50">
-            {exporting || !ffReady ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-            {ffReady ? "Exportar" : "Carregando"}
+            {exporting || ffLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            {exporting ? "Exportando" : ffLoading ? "Carregando" : ffLoadError ? "Tentar exportar" : "Exportar"}
           </button>
         </div>
       </header>
@@ -2757,9 +2771,9 @@ function Editor() {
                 className="rounded-md border border-border bg-background px-4 py-2 text-sm hover:bg-muted">Cancelar</button>
               <button
                 onClick={() => { setShowExportSettings(false); void doExport(); }}
-                disabled={!items.length || !ffReady || exporting}
+                disabled={!items.length || exporting}
                 className="glow-primary inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
-                {!ffReady ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} {ffReady ? "Iniciar exportação" : "Carregando FFmpeg"}
+                {ffLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} {ffLoading ? "Carregando FFmpeg" : ffLoadError ? "Tentar novamente" : "Iniciar exportação"}
               </button>
             </div>
           </div>

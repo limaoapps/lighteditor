@@ -40,6 +40,7 @@ export type WCItem = {
     fillMode: "bars" | "blur" | "mirror" | "stretch" | "color";
     bgColor?: string;
     blurBg?: number;
+    blur?: number;
     opacity?: number;
     zoom?: { dir: "in" | "out"; speed: "slow" | "med" | "fast" } | null;
   };
@@ -175,6 +176,11 @@ function blurCanvasPx(fx?: WCItem["fx"]): number {
   if (fx?.fillMode !== "blur") return 0;
   const n = Math.max(0, Math.min(100, fx.blurBg ?? 30)) / 100;
   return n <= 0 ? 0 : n * n * 56 + n * 8;
+}
+
+function itemBlurPx(fx?: WCItem["fx"]): number {
+  const n = Math.max(0, Math.min(100, fx?.blur ?? 0));
+  return n <= 0 ? 0 : Math.max(0.2, n * 0.45);
 }
 
 function drawSoftCover(

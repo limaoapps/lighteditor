@@ -1,5 +1,3 @@
-// Lazy singleton wrapper around ffmpeg.wasm (single-threaded, no SharedArrayBuffer required).
-// Loaded only in the browser, only when the user runs an export/cut operation.
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { toBlobURL, fetchFile } from "@ffmpeg/util";
 
@@ -9,22 +7,34 @@ let loading: Promise<FFmpeg> | null = null;
 const CORE_BASE = "https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd";
 
 export async function getFFmpeg(onLog?: (msg: string) => void): Promise<FFmpeg> {
-  if (instance) return instance;
+  if (instance) {
+    if (onLog) instance.on("log", ({ message }) => onLog(message));
+    return instance;
+  }
   if (!loading) {
     loading = (async () => {
-      const ff = new FFmpeg();
-      if (onLog) ff.on("log", ({ message }) => onLog(message));
-      await ff.load({
-        coreURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.js`, "text/javascript"),
-        wasmURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.wasm`, "application/wasm"),
-      });
-      instance = ff;
-      return ff;
-    })().catch((err) => {
-      loading = null;
-      instance = null;
-      throw err;
-    });
+      try {
+        console.log("Carregando FFmpeg WASM de:", CORE_BASE);
+        const ff = new FFmpeg();
+        ff.on("log", ({ message }) => {
+          console.log("[FFmpeg]", message);
+          if (onLog) onLog(message);
+        });
+        const [coreURL, wasmURL] = await Promise.all([
+          toBlobURL(`${CORE_BASE}/ffmpeg-core.js`, "text/javascript"),
+          toBlobURL(`${CORE_BASE}/ffmpeg-core.wasm`, "application/wasm"),
+        ]);
+        await ff.load({ coreURL, wasmURL });
+        instance = ff;
+        console.log("FFmpeg carregado com sucesso.");
+        return ff;
+      } catch (err) {
+        loading = null;
+        instance = null;
+        console.error("Falha ao carregar FFmpeg:", err);
+        throw err;
+      }
+    })();
   }
   return loading;
 }

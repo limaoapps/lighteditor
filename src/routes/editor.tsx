@@ -2779,6 +2779,25 @@ function Editor() {
                 </select>
               </div>
 
+              <div className="md:col-span-2">
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Modo de velocidade</label>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  {([
+                    { k: "turbo", label: "Turbo", hint: "Máxima velocidade · qualidade menor" },
+                    { k: "rapido", label: "Rápido", hint: "Equilíbrio recomendado" },
+                    { k: "qualidade", label: "Qualidade", hint: "Mais lento, melhor imagem" },
+                  ] as const).map(o => (
+                    <button key={o.k} onClick={() => setSpeedMode(o.k)} title={o.hint}
+                      className={`rounded-md border px-3 py-1.5 text-xs ${speedMode === o.k ? "border-primary bg-primary/15 text-primary" : "border-border bg-background hover:border-ring/50"}`}>
+                      {o.label}
+                    </button>
+                  ))}
+                  <span className="ml-auto text-[11px] text-muted-foreground">
+                    {speedMode === "turbo" ? "~2-3× mais rápido" : speedMode === "rapido" ? "~1.5× mais rápido" : "Melhor qualidade"}
+                  </span>
+                </div>
+              </div>
+
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Codec de vídeo</label>
                 <select value={exportCodec} onChange={(e) => setExportCodec(e.target.value as Codec)}

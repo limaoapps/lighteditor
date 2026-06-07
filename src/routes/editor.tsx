@@ -771,6 +771,8 @@ function Editor() {
   useEffect(() => { snapTimeRef.current = snapTime; }, [snapTime]);
   const zoomRef = useRef(zoom);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  // Limite máximo do projeto para evitar durações inconsistentes
+  const MAX_PROJECT_SEC = 3600; // 1 hora
   const snapResizeTime = useCallback((t: number, excludeId?: string) => {
     const thr = TIME_SNAP_PX / zoomRef.current;
     let best = t, bestD = thr;
@@ -792,8 +794,6 @@ function Editor() {
   useEffect(() => { snapResizeTimeRef.current = snapResizeTime; }, [snapResizeTime]);
   const snapResizeRef = useRef(snapResize);
   useEffect(() => { snapResizeRef.current = snapResize; }, [snapResize]);
-  // Limite máximo do projeto para evitar durações inconsistentes
-  const MAX_PROJECT_SEC = 3600; // 1 hora
 
   // ---- Add files → media library only ----
   const addFiles = useCallback(async (files: FileList | null) => {

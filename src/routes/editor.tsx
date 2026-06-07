@@ -765,6 +765,17 @@ function Editor() {
   const [tracks, setTracks] = useState<Track[]>(INITIAL_TRACKS);
   const [items, setItemsRaw] = useState<TLItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const draggedTransitionRef = useRef<TransitionPreset | null>(null);
+  const [transitionDragHover, setTransitionDragHover] = useState<
+    | { trackId: string; junctionT: number; leftId: string; rightId: string; dur: number; transitionId: string }
+    | null
+  >(null);
+  const [selectedTransition, setSelectedTransition] = useState<
+    { leftId: string; rightId: string } | null
+  >(null);
+  const [transitionPopover, setTransitionPopover] = useState<
+    { leftId: string; rightId: string; x: number; y: number } | null
+  >(null);
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [zoom, setZoom] = useState(40);

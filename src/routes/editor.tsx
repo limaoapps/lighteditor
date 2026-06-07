@@ -1154,7 +1154,7 @@ function Editor() {
       if (s) {
         const dist = Math.hypot(e.clientX - s.cx, e.clientY - s.cy);
         const ratio = dist / Math.max(1, s.baseDist);
-        const newScale = Math.max(0.1, Math.min(5, s.baseScale * ratio));
+        const newScale = Math.max(0.05, Math.min(50, s.baseScale * ratio));
         setItemsRaw(prev => prev.map(i => i.id === s.id && i.transform
           ? { ...i, transform: { ...i.transform, scale: newScale } } : i));
       }
@@ -1179,7 +1179,7 @@ function Editor() {
     e.preventDefault();
     const delta = -e.deltaY * 0.0015;
     setItems(prev => prev.map(i => i.id === target.id && i.transform
-      ? { ...i, transform: { ...i.transform, scale: Math.max(0.1, Math.min(5, i.transform.scale + delta)) } } : i));
+      ? { ...i, transform: { ...i.transform, scale: Math.max(0.05, Math.min(50, i.transform.scale + delta)) } } : i));
   };
 
   // selected preview target (image/text/active V1 video)

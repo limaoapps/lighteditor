@@ -1231,6 +1231,99 @@ function Editor() {
     [totalDuration, computedVBitrate, audioBitrate],
   );
 
+  // ---- DIAGNÓSTICO ----
+  const runFfmpegVersionTest = async () => {
+    setDiagRunning("version"); setDiagResult("");
+    const lines: string[] = [`[diag] Carregando FFmpeg WASM...`];
+    try {
+      const ff = await getFFmpeg();
+      const onL = ({ message }: { message: string }) => { lines.push(message); };
+      ff.on("log", onL);
+      try {
+        // Force engine to print banner/version by invoking with no args (exits 1, mas imprime versão)
+        await ff.exec(["-version"]).catch(() => {});
+      } finally {
+        ff.off("log", onL);
+      }
+      lines.push(`[diag] OK — engine carregado.`);
+      console.log("%c[FFMPEG VERSION TEST]", "color:#22d3ee", lines.join("\n"));
+      setDiagResult(lines.join("\n"));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const out = `FFmpeg não encontrado / falha ao carregar.\n${msg}\n${lines.join("\n")}`;
+      console.error("[FFMPEG VERSION TEST]", out);
+      setDiagResult(out);
+    } finally {
+      setDiagRunning(null);
+    }
+  };
+
+  const runSimpleExportTest = async () => {
+    setDiagRunning("simple"); setDiagResult("");
+    const v1trackId = tracks.find(t => t.kind === "video")?.id;
+    const firstClip = items
+      .filter(i => i.trackId === v1trackId && (i.kind === "video" || i.kind === "image"))
+      .sort((a, b) => a.start - b.start)[0];
+    if (!firstClip || !firstClip.file) {
+      setDiagResult("Nenhum vídeo/imagem na timeline para testar.");
+      setDiagRunning(null); return;
+    }
+    const lines: string[] = [
+      `[teste] Clipe: ${firstClip.file.name} (${firstClip.kind})`,
+      `[teste] Saída: teste.mp4 · 640x360 @ 30fps · libx264`,
+    ];
+    try {
+      const ff = await getFFmpeg();
+      const onL = ({ message }: { message: string }) => { lines.push(message); };
+      ff.on("log", onL);
+      const isImg = firstClip.kind === "image";
+      const ext = isImg ? (firstClip.file.name.split(".").pop() || "png").toLowerCase() : "bin";
+      await ff.writeFile(`tin.${ext}`, await fetchFile(firstClip.file));
+      const dur = Math.max(1, Math.min(3, firstClip.outPoint - firstClip.inPoint)).toFixed(2);
+      const args = isImg
+        ? ["-loop", "1", "-framerate", "30", "-t", dur, "-i", `tin.${ext}`,
+           "-vf", "scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2",
+           "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-t", dur, "teste.mp4"]
+        : ["-t", dur, "-i", `tin.${ext}`,
+           "-vf", "scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2",
+           "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-an", "teste.mp4"];
+      lines.push(`$ ffmpeg ${args.join(" ")}`);
+      await ff.exec(args);
+      const data = (await ff.readFile("teste.mp4")) as Uint8Array;
+      lines.push(`[teste] OK — arquivo gerado: ${(data.byteLength / 1024).toFixed(1)} KB`);
+      const buf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+      const url = URL.createObjectURL(new Blob([buf], { type: "video/mp4" }));
+      const a = document.createElement("a"); a.href = url; a.download = "teste.mp4";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      ff.off("log", onL);
+      await ff.deleteFile(`tin.${ext}`).catch(() => {});
+      await ff.deleteFile("teste.mp4").catch(() => {});
+      console.log("%c[SIMPLE EXPORT TEST]", "color:#22d3ee", lines.join("\n"));
+      setDiagResult(lines.join("\n"));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const out = `FALHA no teste de exportação.\n${msg}\n\n${lines.join("\n")}`;
+      console.error("[SIMPLE EXPORT TEST]", out);
+      setDiagResult(out);
+    } finally {
+      setDiagRunning(null);
+    }
+  };
+
+  const downloadExportLog = () => {
+    const content = [
+      `# export.log — ${new Date().toISOString()}`,
+      exportFfCmd ? `\n$ ${exportFfCmd}\n` : "",
+      ...exportLog,
+    ].join("\n");
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "export.log";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  };
+
   const doExport = async () => {
     const v1trackId = tracks.find(t => t.kind === "video")?.id;
     const v1clips = items

@@ -1,5 +1,5 @@
 import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { fetchFile } from "@ffmpeg/util";
+import { toBlobURL, fetchFile } from "@ffmpeg/util";
 
 let instance: FFmpeg | null = null;
 let loading: Promise<FFmpeg> | null = null;
@@ -31,8 +31,10 @@ export async function getFFmpeg(onLog?: (msg: string) => void): Promise<FFmpeg> 
           console.log("[FFmpeg]", message);
           if (onLog) onLog(message);
         });
-        const coreURL = `${CORE_BASE}/ffmpeg-core.js`;
-        const wasmURL = `${CORE_BASE}/ffmpeg-core.wasm`;
+        const [coreURL, wasmURL] = await Promise.all([
+          toBlobURL(`${CORE_BASE}/ffmpeg-core.js`, "text/javascript"),
+          toBlobURL(`${CORE_BASE}/ffmpeg-core.wasm`, "application/wasm"),
+        ]);
         console.log("FFmpeg core:", coreURL);
         console.log("FFmpeg wasm:", wasmURL);
         await withTimeout(ff.load({ coreURL, wasmURL }), "FFmpeg");

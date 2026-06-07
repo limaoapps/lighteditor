@@ -1564,6 +1564,50 @@ function Editor() {
     !trackMuted[i.trackId]
   );
 
+  // ============================================================
+  // SCENE para o motor único de render (preview + export).
+  // Esta projeção é a MESMA usada pelo exportador (withPreviewGeometry).
+  // ============================================================
+  const previewScene = useMemo(() => {
+    const v1trackId = tracks.find(t => t.kind === "video")?.id;
+    const toScene = <T extends TLItem>(c: T): CachedMediaItem & SceneItem => {
+      const bounds = (c.kind === "video" || c.kind === "image") ? computeItemBounds(
+        { kind: c.kind, width: c.width, height: c.height },
+        aspect,
+      ) : null;
+      return {
+        id: c.id,
+        kind: c.kind,
+        trackId: c.trackId,
+        name: c.name,
+        file: c.file,
+        url: c.url,
+        width: c.width,
+        height: c.height,
+        start: c.start,
+        inPoint: c.inPoint,
+        outPoint: c.outPoint,
+        fadeIn: c.fadeIn,
+        fadeOut: c.fadeOut,
+        fx: c.fx as SceneItem["fx"],
+        text: c.text as SceneItem["text"],
+        transform: c.transform,
+        previewBox: bounds ? { wPct: bounds.w, hPct: bounds.h } : undefined,
+        zIndex: trackZ(c.trackId),
+      };
+    };
+    const v1Items = items
+      .filter(i => i.trackId === v1trackId && i.kind === "video" && !trackMuted[i.trackId])
+      .map(toScene);
+    const visualItems = items
+      .filter(i => (i.kind === "image" || (i.kind === "video" && i.trackId !== v1trackId)) && !trackMuted[i.trackId])
+      .map(toScene);
+    const textItems = items
+      .filter(i => i.kind === "text" && i.text?.content && !trackMuted[i.trackId])
+      .map(toScene);
+    return { v1Items, visualItems, textItems };
+  }, [items, tracks, aspect, trackMuted, trackZ]);
+
   // ---- Timeline drags ----
   type Drag =
     | { type: "move"; id: string; offsetSec: number; origTrackId: string }
@@ -2146,6 +2190,13 @@ function Editor() {
           <button onClick={undo} title="Desfazer (Ctrl+Z)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Undo2 className="h-4 w-4" /></button>
           <button onClick={redo} title="Refazer (Ctrl+Y)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Redo2 className="h-4 w-4" /></button>
           <button onClick={togglePreviewFullscreen} title="Tela cheia do preview (F)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Maximize2 className="h-4 w-4" /></button>
+          <button
+            onClick={() => setUseCanvasPreview(v => !v)}
+            title={useCanvasPreview ? "WYSIWYG ligado — preview = export. Clique para usar preview clássico." : "WYSIWYG desligado — preview em DOM. Clique para usar o motor de render."}
+            className={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${useCanvasPreview ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-card hover:text-foreground"}`}
+          >
+            WYSIWYG
+          </button>
           <div className="mx-2 h-6 w-px bg-border" />
           <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Proporção</label>
           <select value={aspectKey} onChange={(e) => setProjectAspect(e.target.value as AspectKey)}

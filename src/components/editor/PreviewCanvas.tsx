@@ -27,7 +27,10 @@ type Props = {
 export function PreviewCanvas({ aspect, v1Items, visualItems, textItems, time, playing }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const cacheRef = useRef<MediaCache | null>(null);
-  if (!cacheRef.current) cacheRef.current = new MediaCache();
+  const getCache = () => {
+    if (!cacheRef.current) cacheRef.current = new MediaCache();
+    return cacheRef.current;
+  };
   const rafRef = useRef<number | null>(null);
   const lastDrawnRef = useRef<{ t: number; key: string } | null>(null);
 
@@ -40,7 +43,7 @@ export function PreviewCanvas({ aspect, v1Items, visualItems, textItems, time, p
 
   // Pré-carrega mídia quando lista de items muda.
   useEffect(() => {
-    const cache = cacheRef.current!;
+    const cache = getCache();
     const all = [...v1Items, ...visualItems];
     cache.preload(all).catch(() => { /* ignore individual failures */ });
   }, [v1Items, visualItems]);
@@ -50,10 +53,10 @@ export function PreviewCanvas({ aspect, v1Items, visualItems, textItems, time, p
 
   // Sincroniza play/pause dos vídeos com o playhead.
   useEffect(() => {
-    const cache = cacheRef.current;
-    if (!cache) return;
+    const cache = getCache();
     cache.setPlaying(playing, [...v1Items, ...visualItems], time);
   }, [playing, time, v1Items, visualItems]);
+
 
   // Loop de render.
   useEffect(() => {
@@ -77,7 +80,7 @@ export function PreviewCanvas({ aspect, v1Items, visualItems, textItems, time, p
       if (canvas.height !== h) canvas.height = h;
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "medium";
-      drawScene(ctx, scene, time, canvas.width, canvas.height, cacheRef.current!);
+      drawScene(ctx, scene, time, canvas.width, canvas.height, getCache());
       lastDrawnRef.current = { t: time, key: itemsKey };
     };
 

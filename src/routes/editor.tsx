@@ -1803,6 +1803,8 @@ function Editor() {
 
   // ---- Export ----
   const computedVBitrate = bitrateFromMode(quality, bitrateMode, customBitrate);
+  const exportTargetH = QUALITY_HEIGHT[quality];
+  const exportTargetW = Math.round((exportTargetH * aspect.w) / aspect.h / 2) * 2;
   const estimatedMB = useMemo(
     () => estimateSizeMB(Math.max(1, totalDuration), computedVBitrate, audioBitrate),
     [totalDuration, computedVBitrate, audioBitrate],
@@ -3489,7 +3491,7 @@ function Editor() {
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Resolução vinculada</label>
                 <div className="mt-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm">
-                  {targetW}×{targetH} · {quality === "2160" ? "4K" : `${quality}p`}
+                  {exportTargetW}×{exportTargetH} · {quality === "2160" ? "4K" : `${quality}p`}
                 </div>
               </div>
               <div>

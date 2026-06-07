@@ -785,6 +785,7 @@ function Editor() {
   >(null);
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [previewFullscreen, setPreviewFullscreen] = useState(false);
   const [zoom, setZoom] = useState(40);
   const [dragExtraSec, setDragExtraSec] = useState(0);
   const [snapResize, setSnapResize] = useState(true);

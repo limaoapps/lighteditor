@@ -40,6 +40,7 @@ export type WCItem = {
     fillMode: "bars" | "blur" | "mirror" | "stretch" | "color";
     bgColor?: string;
     blurBg?: number;
+    blur?: number;
     opacity?: number;
     zoom?: { dir: "in" | "out"; speed: "slow" | "med" | "fast" } | null;
   };
@@ -177,6 +178,11 @@ function blurCanvasPx(fx?: WCItem["fx"]): number {
   return n <= 0 ? 0 : n * n * 56 + n * 8;
 }
 
+function itemBlurPx(fx?: WCItem["fx"]): number {
+  const n = Math.max(0, Math.min(100, fx?.blur ?? 0));
+  return n <= 0 ? 0 : Math.max(0.2, n * 0.45);
+}
+
 function drawSoftCover(
   ctx: OffscreenCanvasRenderingContext2D,
   source: CanvasImageSource,
@@ -221,6 +227,7 @@ function drawClipFrame(
   bgColor: string = "#000000",
   blurPx: number = 0,
   opacity: number = 1,
+  visualBlurPx: number = 0,
 ) {
   ctx.save();
   ctx.globalAlpha = 1;
@@ -248,6 +255,7 @@ function drawClipFrame(
   }
   // foreground
   ctx.globalAlpha = Math.max(0, Math.min(1, opacity));
+  try { (ctx as unknown as { filter: string }).filter = visualBlurPx > 0 ? `blur(${visualBlurPx}px)` : "none"; } catch { /* ignore */ }
   if (fillMode === "stretch") {
     ctx.drawImage(source, 0, 0, targetW, targetH);
   } else {
@@ -256,6 +264,7 @@ function drawClipFrame(
     const x = (targetW - w) / 2, y = (targetH - h) / 2;
     ctx.drawImage(source, x, y, w, h);
   }
+  try { (ctx as unknown as { filter: string }).filter = "none"; } catch { /* ignore */ }
   ctx.restore();
 }
 
@@ -312,7 +321,9 @@ function drawImageOverlay(
   ctx.translate(x, y);
   if (rot) ctx.rotate(rot);
   ctx.scale(scale, scale);
+  try { (ctx as unknown as { filter: string }).filter = itemBlurPx(item.fx) > 0 ? `blur(${itemBlurPx(item.fx)}px)` : "none"; } catch { /* ignore */ }
   ctx.drawImage(img, -boxW / 2, -boxH / 2, boxW, boxH);
+  try { (ctx as unknown as { filter: string }).filter = "none"; } catch { /* ignore */ }
   ctx.restore();
 }
 
@@ -377,6 +388,7 @@ function drawTextOverlay(
   ctx.globalAlpha = alpha;
   ctx.translate(cx, cy);
   if (rot) ctx.rotate(rot);
+  try { (ctx as unknown as { filter: string }).filter = itemBlurPx(item.fx) > 0 ? `blur(${itemBlurPx(item.fx)}px)` : "none"; } catch { /* ignore */ }
   ctx.font = `${style} ${weight} ${size}px ${fontFamily}`;
   ctx.textBaseline = "middle";
   // letterSpacing (suportado em navegadores modernos)
@@ -643,10 +655,10 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
             }
             const sw = v.videoWidth || targetW;
             const sh = v.videoHeight || targetH;
-            drawClipFrame(ctx, v, sw, sh, targetW, targetH, fill, bg, blurPx, op);
+            drawClipFrame(ctx, v, sw, sh, targetW, targetH, fill, bg, blurPx, op, itemBlurPx(active.fx));
           } else {
             const img = el as HTMLImageElement;
-            drawClipFrame(ctx, img, img.naturalWidth, img.naturalHeight, targetW, targetH, fill, bg, blurPx, op);
+            drawClipFrame(ctx, img, img.naturalWidth, img.naturalHeight, targetW, targetH, fill, bg, blurPx, op, itemBlurPx(active.fx));
           }
         }
       } catch (e) {

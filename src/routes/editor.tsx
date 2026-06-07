@@ -179,6 +179,7 @@ type VignetteMode = "dark" | "light";
 type Fx = {
   brightness: number; contrast: number; saturation: number; temperature: number;
   sharpness: number; exposure: number; shadows: number; highlights: number;
+  blur: number;
   opacity: number;
   preset: string | null;
   blurBg: number;
@@ -318,7 +319,7 @@ function dbToGain(db: number) { return Math.pow(10, db / 20); }
 
 const DEFAULT_FX: Fx = {
   brightness: 0, contrast: 0, saturation: 0, temperature: 0,
-  sharpness: 0, exposure: 0, shadows: 0, highlights: 0,
+  sharpness: 0, exposure: 0, shadows: 0, highlights: 0, blur: 0,
   opacity: 100, preset: null, blurBg: 30, fillMode: "bars",
   bgColor: "#000000", zoom: null,
   vignette: 0, vignetteSize: 50, vignetteMode: "dark",
@@ -326,8 +327,16 @@ const DEFAULT_FX: Fx = {
 
 const FX_DEFAULT_VAL: Record<string, number> = {
   brightness: 0, contrast: 0, saturation: 0, temperature: 0,
-  sharpness: 0, exposure: 0, shadows: 0, highlights: 0, opacity: 100,
+  sharpness: 0, exposure: 0, shadows: 0, highlights: 0, blur: 0, opacity: 100,
 };
+
+type LeftPanel = "media" | "titles" | "transitions" | "effects";
+type TimelineEffectId = "blur" | "background-blur";
+const EFFECT_DND_TYPE = "application/x-vle-effect";
+const TIMELINE_EFFECTS: Array<{ id: TimelineEffectId; label: string; hint: string }> = [
+  { id: "blur", label: "Blur", hint: "Desfoque visual do clipe" },
+  { id: "background-blur", label: "Fundo desfocado", hint: "Preenche laterais com fundo borrado" },
+];
 
 const QUICK_EFFECTS: { id: string; label: string }[] = [
   { id: "bw", label: "Preto e Branco" },
@@ -379,6 +388,7 @@ function cssFilter(fx?: Fx): string {
   if (fx.highlights) parts.push(`contrast(${(1 + fx.highlights / 400).toFixed(3)})`);
   // sharpness: real unsharp-mask via SVG filter (no saturation/contrast bleed)
   if (fx.sharpness > 0) parts.push(`url(#lle-sharpen)`);
+  if (fx.blur > 0) parts.push(`blur(${Math.max(0.2, fx.blur * 0.45).toFixed(1)}px)`);
   // preset overlays — keep purely tonal; "sharp"/"vignette" handled outside cssFilter
   switch (fx.preset) {
     case "bw":       parts.push("grayscale(1)"); break;
@@ -443,16 +453,23 @@ function blurSigma(fx: Fx | undefined) {
   return Math.max(0.3, Math.min(64, +(n * n * 56 + n * 8).toFixed(2)));
 }
 
+function visualBlurSigma(fx: Fx | undefined) {
+  const v = Math.max(0, Math.min(100, fx?.blur ?? 0));
+  return v <= 0 ? 0 : Math.max(0.2, Math.min(28, +(v * 0.25).toFixed(2)));
+}
+
 function exportVideoFilter(c: TLItem, targetW: number, targetH: number) {
   const fx = c.fx;
+  const visualBlur = visualBlurSigma(fx);
+  const fgFx = visualBlur > 0 ? `,gblur=sigma=${visualBlur.toFixed(1)}:steps=1` : "";
   if (!fx || fx.fillMode === "bars") {
-    return { type: "vf" as const, value: `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:color=black,fps=30,setsar=1` };
+    return { type: "vf" as const, value: `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:color=black${fgFx},fps=30,setsar=1` };
   }
   if (fx.fillMode === "color") {
-    return { type: "vf" as const, value: `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:color=${ffmpegColor(fx.bgColor)},fps=30,setsar=1` };
+    return { type: "vf" as const, value: `scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease,pad=${targetW}:${targetH}:(ow-iw)/2:(oh-ih)/2:color=${ffmpegColor(fx.bgColor)}${fgFx},fps=30,setsar=1` };
   }
   if (fx.fillMode === "stretch") {
-    return { type: "vf" as const, value: `scale=${targetW}:${targetH},fps=30,setsar=1` };
+    return { type: "vf" as const, value: `scale=${targetW}:${targetH}${fgFx},fps=30,setsar=1` };
   }
   const bgCore = `scale=${targetW}:${targetH}:force_original_aspect_ratio=increase,crop=${targetW}:${targetH}`;
   const bgFx = fx.fillMode === "blur"
@@ -460,7 +477,7 @@ function exportVideoFilter(c: TLItem, targetW: number, targetH: number) {
     : `${bgCore},hflip`;
   return {
     type: "filter_complex" as const,
-    value: `[0:v]split=2[sharp][blur];[blur]${bgFx}[blurred];[sharp]scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease[sharpfit];[blurred][sharpfit]overlay=(W-w)/2:(H-h)/2,fps=30,setsar=1[vout]`,
+    value: `[0:v]split=2[sharp][blur];[blur]${bgFx}[blurred];[sharp]scale=${targetW}:${targetH}:force_original_aspect_ratio=decrease${fgFx}[sharpfit];[blurred][sharpfit]overlay=(W-w)/2:(H-h)/2,fps=30,setsar=1[vout]`,
   };
 }
 
@@ -705,6 +722,7 @@ function Editor() {
 
   // Resizable side panels
   const [leftW, setLeftW] = useState(256);
+  const [leftPanel, setLeftPanel] = useState<LeftPanel>("media");
   const [rightW, setRightW] = useState(304);
   const sideDragRef = useRef<{ side: "L" | "R"; startX: number; startW: number } | null>(null);
   useEffect(() => {
@@ -971,7 +989,22 @@ function Editor() {
       id: crypto.randomUUID(), kind: "text", trackId, name: "Texto",
       start, inPoint: 0, outPoint: 5, sourceDuration: 9999,
       text: defaultText(),
+      fx: { ...DEFAULT_FX },
       transform: { xPct: 50, yPct: 80, scale: 1, rotation: 0 },
+    };
+    setItems(prev => [...prev, it]);
+    setSelectedId(it.id);
+  }, [tracks, ensureTrack, setItems, playhead]);
+
+  const addCredits = useCallback(() => {
+    const videoTracks = tracks.filter(t => t.kind === "video");
+    const trackId = videoTracks[0]?.id ?? ensureTrack("video");
+    const it: TLItem = {
+      id: crypto.randomUUID(), kind: "text", trackId, name: "Créditos",
+      start: playhead, inPoint: 0, outPoint: 5, sourceDuration: 9999,
+      text: { ...defaultText(), content: "Créditos", size: 48, bold: false },
+      fx: { ...DEFAULT_FX },
+      transform: { xPct: 50, yPct: 82, scale: 1, rotation: 0 },
     };
     setItems(prev => [...prev, it]);
     setSelectedId(it.id);
@@ -985,11 +1018,23 @@ function Editor() {
   const removeMedia = (mediaId: string) => {
     setMedia(prev => {
       const target = prev.find(m => m.id === mediaId);
-      if (target?.url) { try { URL.revokeObjectURL(target.url); } catch {} }
+      if (target?.url) { try { URL.revokeObjectURL(target.url); } catch { /* ignore */ } }
       return prev.filter(m => m.id !== mediaId);
     });
     setItems(prev => prev.filter(i => i.mediaId !== mediaId));
   };
+
+  const applyTimelineEffect = useCallback((itemId: string, effectId: TimelineEffectId) => {
+    setItems(prev => prev.map(i => {
+      if (i.id !== itemId) return i;
+      const current = i.fx ?? { ...DEFAULT_FX };
+      if (effectId === "background-blur" && (i.kind === "image" || i.kind === "video")) {
+        return { ...i, fx: { ...current, fillMode: "blur", blurBg: Math.max(current.blurBg || 0, 70) } };
+      }
+      return { ...i, fx: { ...current, blur: Math.max(current.blur || 0, 35) } };
+    }));
+    setSelectedId(itemId);
+  }, [setItems]);
 
   const splitAt = useCallback((t: number, onlyClipId?: string) => {
     setItems(prev => {
@@ -1886,6 +1931,8 @@ function Editor() {
           it.fadeOut && it.fadeOut > 0.01 ? `fade=t=out:st=${Math.max(it.start, end - it.fadeOut).toFixed(3)}:d=${it.fadeOut.toFixed(3)}:alpha=1` : null,
         ].filter(Boolean).join(",");
         const inputLabel = it.fx?.fillMode === "blur" || it.fx?.fillMode === "mirror" ? `ovsrc${idx}` : `${ov.index}:v`;
+        const overlayBlur = visualBlurSigma(it.fx);
+        const overlayFx = overlayBlur > 0 ? `,gblur=sigma=${overlayBlur.toFixed(1)}:steps=1` : "";
         if (it.fx?.fillMode === "blur" || it.fx?.fillMode === "mirror") {
           filterParts.push(`[${ov.index}:v]split=2[ovbgsrc${idx}][ovsrc${idx}]`);
           const bgCore = `scale=${targetW}:${targetH}:force_original_aspect_ratio=increase,crop=${targetW}:${targetH}`;
@@ -1897,7 +1944,7 @@ function Editor() {
           videoLabel = bgOut;
         }
         const imgLabel = `img${idx}`;
-        filterParts.push(`[${inputLabel}]scale=${box.w}:${box.h},format=rgba,colorchannelmixer=aa=${alpha.toFixed(3)}${fades ? `,${fades}` : ""}[${imgLabel}]`);
+        filterParts.push(`[${inputLabel}]scale=${box.w}:${box.h}${overlayFx},format=rgba,colorchannelmixer=aa=${alpha.toFixed(3)}${fades ? `,${fades}` : ""}[${imgLabel}]`);
         const out = `vov${idx}`;
         filterParts.push(`[${videoLabel}][${imgLabel}]overlay=${box.x}:${box.y}:enable='between(t,${it.start.toFixed(3)},${end.toFixed(3)})'[${out}]`);
         videoLabel = out;
@@ -1960,7 +2007,7 @@ function Editor() {
           o.frequency.value = 880; g2.gain.value = 0.08;
           o.connect(g2).connect(ctx.destination); o.start();
           setTimeout(() => { o.stop(); ctx.close(); }, 220);
-        } catch {}
+        } catch { /* ignore */ }
       }
       if (postAutoDownload) {
         const a = document.createElement("a");
@@ -2008,11 +2055,21 @@ function Editor() {
 
   // ---- Drag from Media to Timeline ----
   const onTrackDragOver = (e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes("application/x-vle-media")) {
+    if (e.dataTransfer.types.includes("application/x-vle-media") || e.dataTransfer.types.includes(EFFECT_DND_TYPE)) {
       e.preventDefault(); e.dataTransfer.dropEffect = "copy";
     }
   };
   const onTrackDrop = (e: React.DragEvent, trackId: string) => {
+    const effectId = e.dataTransfer.getData(EFFECT_DND_TYPE) as TimelineEffectId;
+    if (effectId) {
+      e.preventDefault();
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const xPx = e.clientX - rect.left;
+      const t = Math.max(0, xPx / zoom);
+      const target = items.find(i => i.trackId === trackId && t >= i.start && t <= i.start + (i.outPoint - i.inPoint));
+      if (target) applyTimelineEffect(target.id, effectId);
+      return;
+    }
     const id = e.dataTransfer.getData("application/x-vle-media");
     if (!id) return;
     e.preventDefault();
@@ -2072,48 +2129,109 @@ function Editor() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="flex shrink-0 flex-col gap-2 border-r border-border bg-panel p-3 select-none" style={{ width: leftW }}>
-          <button onClick={() => fileInputRef.current?.click()}
-            className="glow-primary inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-3 py-2.5 text-sm font-semibold text-primary-foreground">
-            <Plus className="h-4 w-4" /> Adicionar Arquivo
-          </button>
-          <button onClick={addText}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs hover:border-ring/50">
-            <TypeIcon className="h-3.5 w-3.5" /> Adicionar Título
-          </button>
-          <input ref={fileInputRef} type="file" multiple hidden
-            accept="video/*,audio/*,image/*,.mp4,.mov,.avi,.mkv,.webm,.mp3,.wav,.ogg,.png,.jpg,.jpeg"
-            onChange={(e) => { addFiles(e.target.files); if (fileInputRef.current) fileInputRef.current.value = ""; }} />
-
-          <div className="mt-2 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            <span>Mídia</span>
-            <span className="text-[10px] normal-case text-muted-foreground/70">{media.length} item(ns)</span>
-          </div>
-          <div className="flex-1 space-y-1 overflow-y-auto pr-1">
-            {media.map(a => {
-              const Icon = a.kind === "audio" ? Music2 : a.kind === "image" ? ImageIcon : VideoIcon;
-              const used = usedMediaIds.has(a.id);
+        <aside className="flex shrink-0 border-r border-border bg-panel select-none" style={{ width: leftW }}>
+          <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-border bg-background/30 py-2">
+            {([
+              { id: "media" as LeftPanel, icon: Film, label: "Mídia" },
+              { id: "titles" as LeftPanel, icon: TypeIcon, label: "Títulos" },
+              { id: "transitions" as LeftPanel, icon: RefreshCw, label: "Transições" },
+              { id: "effects" as LeftPanel, icon: Wand2, label: "Efeitos" },
+            ]).map(tab => {
+              const Icon = tab.icon;
+              const active = leftPanel === tab.id;
               return (
-                <div key={a.id}
-                  draggable
-                  onDragStart={(e) => { e.dataTransfer.setData("application/x-vle-media", a.id); e.dataTransfer.effectAllowed = "copy"; }}
-                  onDoubleClick={() => addAssetToTimeline(a)}
-                  onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setMediaCtx({ x: e.clientX, y: e.clientY, mediaId: a.id }); }}
-                  title="Arraste até a timeline, clique duas vezes ou clique direito para opções"
-                  className={`group flex w-full cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs active:cursor-grabbing ${used ? "border-primary/40 bg-primary/5" : "border-border bg-card hover:border-ring/50"}`}>
-                  <Icon className="h-3.5 w-3.5 text-primary" />
-                  <span className="min-w-0 flex-1 truncate">{a.name}</span>
-                  {used && <Check className="h-3 w-3 text-primary" />}
-                  <button onClick={(e) => { e.stopPropagation(); addAssetToTimeline(a); }} className="rounded p-0.5 opacity-0 hover:bg-background group-hover:opacity-100" title="Adicionar à timeline">
-                    <Plus className="h-3 w-3" />
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); removeMedia(a.id); }} className="rounded p-0.5 opacity-0 text-destructive hover:bg-background group-hover:opacity-100" title="Excluir mídia">
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </div>
+                <button key={tab.id} onClick={() => setLeftPanel(tab.id)} title={tab.label}
+                  className={`grid h-9 w-9 place-items-center rounded-md transition ${active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-card hover:text-foreground"}`}>
+                  <Icon className="h-4 w-4" />
+                </button>
               );
             })}
-            {!media.length && <div className="rounded-md border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">Clique em "Adicionar Arquivo" para importar mídia. Depois arraste para a timeline.</div>}
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col gap-2 p-3">
+            <input ref={fileInputRef} type="file" multiple hidden
+              accept="video/*,audio/*,image/*,.mp4,.mov,.avi,.mkv,.webm,.mp3,.wav,.ogg,.png,.jpg,.jpeg"
+              onChange={(e) => { addFiles(e.target.files); if (fileInputRef.current) fileInputRef.current.value = ""; }} />
+
+            {leftPanel === "media" && (
+              <>
+                <button onClick={() => fileInputRef.current?.click()}
+                  className="glow-primary inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-3 py-2.5 text-sm font-semibold text-primary-foreground">
+                  <Plus className="h-4 w-4" /> Adicionar Arquivo
+                </button>
+                <div className="mt-2 flex items-center justify-between px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <span>Mídia</span>
+                  <span className="text-[10px] normal-case text-muted-foreground/70">{media.length} item(ns)</span>
+                </div>
+                <div className="flex-1 space-y-1 overflow-y-auto pr-1">
+                  {media.map(a => {
+                    const Icon = a.kind === "audio" ? Music2 : a.kind === "image" ? ImageIcon : VideoIcon;
+                    const used = usedMediaIds.has(a.id);
+                    return (
+                      <div key={a.id}
+                        draggable
+                        onDragStart={(e) => { e.dataTransfer.setData("application/x-vle-media", a.id); e.dataTransfer.effectAllowed = "copy"; }}
+                        onDoubleClick={() => addAssetToTimeline(a)}
+                        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setMediaCtx({ x: e.clientX, y: e.clientY, mediaId: a.id }); }}
+                        title="Arraste até a timeline, clique duas vezes ou clique direito para opções"
+                        className={`group flex w-full cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs active:cursor-grabbing ${used ? "border-primary/40 bg-primary/5" : "border-border bg-card hover:border-ring/50"}`}>
+                        <Icon className="h-3.5 w-3.5 text-primary" />
+                        <span className="min-w-0 flex-1 truncate">{a.name}</span>
+                        {used && <Check className="h-3 w-3 text-primary" />}
+                        <button onClick={(e) => { e.stopPropagation(); addAssetToTimeline(a); }} className="rounded p-0.5 opacity-0 hover:bg-background group-hover:opacity-100" title="Adicionar à timeline">
+                          <Plus className="h-3 w-3" />
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); removeMedia(a.id); }} className="rounded p-0.5 opacity-0 text-destructive hover:bg-background group-hover:opacity-100" title="Excluir mídia">
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {!media.length && <div className="rounded-md border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">Clique em "Adicionar Arquivo" para importar mídia. Depois arraste para a timeline.</div>}
+                </div>
+              </>
+            )}
+
+            {leftPanel === "titles" && (
+              <div className="space-y-2 text-xs">
+                <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Títulos e créditos</div>
+                <button onClick={addText} className="inline-flex w-full items-center gap-2 rounded-md border border-border bg-card px-3 py-2 hover:border-ring/50">
+                  <TypeIcon className="h-3.5 w-3.5 text-primary" /> Título
+                </button>
+                <button onClick={addCredits} className="inline-flex w-full items-center gap-2 rounded-md border border-border bg-card px-3 py-2 hover:border-ring/50">
+                  <FileText className="h-3.5 w-3.5 text-primary" /> Créditos
+                </button>
+              </div>
+            )}
+
+            {leftPanel === "transitions" && (
+              <div className="space-y-2 text-xs">
+                <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Transições</div>
+                <button disabled={!selected} onClick={() => selected && setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: 0.6, fadeOut: 0.6 } : i))}
+                  className="inline-flex w-full items-center gap-2 rounded-md border border-border bg-card px-3 py-2 hover:border-ring/50 disabled:opacity-40">
+                  <RefreshCw className="h-3.5 w-3.5 text-primary" /> Fade suave
+                </button>
+              </div>
+            )}
+
+            {leftPanel === "effects" && (
+              <div className="space-y-2 text-xs">
+                <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Efeitos</div>
+                {TIMELINE_EFFECTS.map(effect => (
+                  <button key={effect.id}
+                    draggable
+                    onDragStart={(e) => { e.dataTransfer.setData(EFFECT_DND_TYPE, effect.id); e.dataTransfer.effectAllowed = "copy"; }}
+                    onClick={() => selected && applyTimelineEffect(selected.id, effect.id)}
+                    title="Arraste para cima do clipe na timeline ou selecione um clipe e clique"
+                    className="flex w-full cursor-grab items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-left active:cursor-grabbing hover:border-ring/50">
+                    <Wand2 className="h-3.5 w-3.5 text-primary" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-medium">{effect.label}</span>
+                      <span className="block truncate text-[10px] text-muted-foreground">{effect.hint}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </aside>
         <div
@@ -2274,6 +2392,7 @@ function Editor() {
                     whiteSpace: "pre-wrap",
                     cursor: "move",
                     opacity: (computeVisualOpacity(ov, playhead)) * t.opacity,
+                    filter: cssFilter(ov.fx),
                     zIndex: 5,
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
                     maxWidth: "90%",
@@ -2863,7 +2982,7 @@ function Editor() {
           })()}
 
 
-          {selected && selected.fx && (selected.kind === "image" || selected.kind === "video") && (() => {
+          {selected && selected.fx && (selected.kind === "image" || selected.kind === "video" || selected.kind === "text") && (() => {
             const fx = selected.fx;
             const patchFx = (patch: Partial<Fx>) =>
               setItems(p => p.map(i => i.id === selected.id && i.fx ? { ...i, fx: { ...i.fx, ...patch } } : i));
@@ -2876,6 +2995,7 @@ function Editor() {
               { key: "exposure", label: "Exposição", min: -100, max: 100 },
               { key: "shadows", label: "Sombras", min: -100, max: 100 },
               { key: "highlights", label: "Realces", min: -100, max: 100 },
+              { key: "blur", label: "Blur", min: 0, max: 100 },
               { key: "opacity", label: "Opacidade", min: 0, max: 100, suffix: "%" },
             ];
             return (
@@ -2926,7 +3046,7 @@ function Editor() {
                   </div>
                 </details>
 
-                <details className="rounded border border-border/60 bg-background/40">
+                {(selected.kind === "image" || selected.kind === "video") && <details className="rounded border border-border/60 bg-background/40">
                   <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"><Palette className="h-3 w-3" /> Modo de Preenchimento</summary>
                   <div className="space-y-1.5 px-2 pb-2 pt-1">
                     <div className="grid grid-cols-2 gap-1">
@@ -2963,7 +3083,7 @@ function Editor() {
                       </label>
                     )}
                   </div>
-                </details>
+                </details>}
 
                 <details className="rounded border border-border/60 bg-background/40">
                   <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Vinheta</summary>
@@ -3343,7 +3463,7 @@ function Editor() {
               <div className="mt-3 flex gap-2">
                 <button
                   onClick={async () => {
-                    try { const ff = await getFFmpeg(); ff.terminate(); } catch {}
+                    try { const ff = await getFFmpeg(); ff.terminate(); } catch { /* ignore */ }
                     resetFFmpeg();
                     setFfReady(false);
                     void getFFmpeg().then(() => setFfReady(true)).catch((err) => console.error("FFmpeg não recarregou após cancelar.", err));

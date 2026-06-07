@@ -2754,11 +2754,17 @@ function Editor() {
             </>)}
 
             {showExportLog && (
-              <div className="mt-3 max-h-56 overflow-auto rounded-md border border-border bg-black/80 p-2 font-mono text-[10px] leading-snug text-green-300">
-                {exportFfCmd && <div className="mb-2 break-all text-amber-300">$ {exportFfCmd}</div>}
-                {exportLog.length === 0 ? <div className="text-muted-foreground">Sem entradas.</div> :
-                  exportLog.slice(-200).map((l, i) => <div key={i} className="break-all">{l}</div>)}
-              </div>
+              <>
+                <div className="mt-3 max-h-56 overflow-auto rounded-md border border-border bg-black/80 p-2 font-mono text-[10px] leading-snug text-green-300">
+                  {exportFfCmd && <div className="mb-2 break-all text-amber-300">$ {exportFfCmd}</div>}
+                  {exportLog.length === 0 ? <div className="text-muted-foreground">Sem entradas.</div> :
+                    exportLog.slice(-200).map((l, i) => <div key={i} className="break-all">{l}</div>)}
+                </div>
+                <button onClick={downloadExportLog}
+                  className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-md border border-border bg-muted px-3 py-1.5 text-[11px] hover:bg-muted/70">
+                  <Download className="h-3 w-3" /> Baixar export.log
+                </button>
+              </>
             )}
           </div>
         </div>

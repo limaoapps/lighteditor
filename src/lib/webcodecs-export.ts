@@ -315,9 +315,16 @@ function drawVisualOverlay(
   const srcH = sourceH || item.height || targetH;
   if (srcW <= 0 || srcH <= 0) return;
   const ar = srcW / srcH;
-  let boxH = targetH * 0.6;
-  let boxW = boxH * ar;
-  if (boxW > targetW * 0.9) { boxW = targetW * 0.9; boxH = boxW / ar; }
+  let boxW: number;
+  let boxH: number;
+  if (item.previewBox) {
+    boxW = (item.previewBox.wPct / 100) * targetW;
+    boxH = (item.previewBox.hPct / 100) * targetH;
+  } else {
+    boxH = targetH * 0.6;
+    boxW = boxH * ar;
+    if (boxW > targetW * 0.9) { boxW = targetW * 0.9; boxH = boxW / ar; }
+  }
   const x = ((item.transform?.xPct ?? 50) / 100) * targetW;
   const y = ((item.transform?.yPct ?? 50) / 100) * targetH;
   const scale = (item.transform?.scale ?? 1) * computeZoomScale(item.fx, localT, dur);

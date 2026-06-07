@@ -2851,21 +2851,29 @@ function Editor() {
               </div>
 
               <div className="md:col-span-2">
-                <label className="flex items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={useHardwareAccel}
-                    onChange={(e) => setUseHardwareAccel(e.target.checked)}
-                    className="h-3.5 w-3.5"
-                  />
-                  <span className="font-semibold uppercase tracking-wider text-muted-foreground">
-                    Aceleração por hardware (WebCodecs)
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Motor de exportação</label>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  {([
+                    { k: "auto", label: "Automático", hint: "Usa hardware quando disponível, senão WASM" },
+                    { k: "webcodecs", label: "WebCodecs (Hardware)", hint: "NVENC/QuickSync/VideoToolbox · até 20× mais rápido" },
+                    { k: "wasm", label: "FFmpeg WASM (Software)", hint: "Compatível com todos os navegadores" },
+                  ] as const).map(o => {
+                    const disabled = o.k === "webcodecs" && webcodecsAvailable === false;
+                    return (
+                      <button key={o.k} onClick={() => setExportEngine(o.k)} title={o.hint} disabled={disabled}
+                        className={`rounded-md border px-3 py-1.5 text-xs ${exportEngine === o.k ? "border-primary bg-primary/15 text-primary" : "border-border bg-background hover:border-ring/50"} ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}>
+                        {o.label}
+                      </button>
+                    );
+                  })}
+                  <span className="ml-auto text-[11px] text-muted-foreground">
+                    {webcodecsAvailable === null ? "Detectando suporte..." :
+                      webcodecsAvailable ? `WebCodecs disponível${webcodecsProbeInfo ? ` · ${webcodecsProbeInfo}` : ""}` :
+                      `WebCodecs indisponível${webcodecsProbeInfo ? ` · ${webcodecsProbeInfo}` : ""}`}
                   </span>
-                  <span className="text-[11px] text-muted-foreground">
-                    Usa NVENC/QuickSync/VideoToolbox quando disponível · fallback automático para WASM
-                  </span>
-                </label>
+                </div>
               </div>
+
 
 
               <div>

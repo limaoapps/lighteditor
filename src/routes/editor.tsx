@@ -359,6 +359,9 @@ function MasterFader({ label, db, setDb, peak, clip, onClearClip }: {
   const labelColor = db > 6 ? "text-red-400" : db > 0 ? "text-yellow-300" : "text-emerald-400";
   // Zero-dB tick position (in %)
   const zeroPct = 1 - (0 - minDb) / (maxDb - minDb);
+  const dbTicks = [12, 6, 0, -6, -12, -30, -60];
+  const tickTop = (tick: number) => `${(1 - (tick - minDb) / (maxDb - minDb)) * 100}%`;
+  const peakDbLabel = peak > 0.00001 ? `${peakDb >= 0 ? "+" : ""}${peakDb.toFixed(1)}` : "-∞";
   return (
     <div className="flex h-full flex-col items-center gap-1 select-none">
       <button
@@ -367,6 +370,13 @@ function MasterFader({ label, db, setDb, peak, clip, onClearClip }: {
         className={`h-2.5 w-5 shrink-0 rounded-sm transition ${clip ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.9)] animate-pulse" : "bg-zinc-700"}`}
       />
       <div className="flex min-h-0 flex-1 items-stretch gap-1">
+        <div className="relative w-7 shrink-0 font-mono text-[8px] tabular-nums text-muted-foreground">
+          {dbTicks.map(tick => (
+            <div key={tick} className="absolute right-0 -translate-y-1/2" style={{ top: tickTop(tick) }}>
+              {tick > 0 ? `+${tick}` : tick}
+            </div>
+          ))}
+        </div>
         {/* Meter */}
         <div className="relative w-2.5 overflow-hidden rounded bg-zinc-900 ring-1 ring-zinc-800">
           <div
@@ -398,6 +408,7 @@ function MasterFader({ label, db, setDb, peak, clip, onClearClip }: {
       <div className={`shrink-0 font-mono text-[9px] tabular-nums ${labelColor}`}>
         {db > 0 ? "+" : ""}{db.toFixed(1)}
       </div>
+      <div className="shrink-0 font-mono text-[8px] text-muted-foreground">pk {peakDbLabel}</div>
       <div className="shrink-0 text-[9px] font-bold text-muted-foreground">{label}</div>
     </div>
   );
@@ -1257,15 +1268,16 @@ function Editor() {
   }, []);
 
   // Create a TL item from a media asset
-  const createTLFromMedia = useCallback((asset: MediaAsset, trackId: string, start: number): TLItem => {
+  const createTLFromMedia = useCallback((asset: MediaAsset, trackId: string, start: number, durationOverride?: number): TLItem => {
     const isImg = asset.kind === "image";
+    const imageDur = Math.max(0.1, Math.min(IMAGE_MAX_DUR, durationOverride ?? 5));
     return {
       id: crypto.randomUUID(),
       mediaId: asset.id,
       kind: asset.kind, trackId, name: asset.name, file: asset.file, url: asset.url,
       start,
       inPoint: 0,
-      outPoint: isImg ? 5 : asset.duration,
+      outPoint: isImg ? imageDur : asset.duration,
       sourceDuration: isImg ? IMAGE_MAX_DUR : asset.duration,
       width: asset.width, height: asset.height,
       transform: asset.kind === "image" || asset.kind === "video" ? { xPct: 50, yPct: 50, scale: 1, rotation: 0 } : undefined,
@@ -1276,7 +1288,7 @@ function Editor() {
     };
   }, []);
 
-  const addAssetToTimeline = useCallback((asset: MediaAsset, opts?: { trackId?: string; start?: number }) => {
+  const addAssetToTimeline = useCallback((asset: MediaAsset, opts?: { trackId?: string; start?: number; duration?: number }) => {
     const wantKind: TrackKind = asset.kind === "audio" ? "audio" : "video";
     const targetTrack = opts?.trackId && tracks.find(t => t.id === opts.trackId)?.kind === wantKind
       ? opts.trackId
@@ -1284,7 +1296,7 @@ function Editor() {
     const defaultStart = items.filter(i => i.trackId === targetTrack)
       .reduce((m, i) => Math.max(m, i.start + (i.outPoint - i.inPoint)), 0);
     const start = opts?.start != null ? Math.max(0, opts.start) : defaultStart;
-    const it = createTLFromMedia(asset, targetTrack, start);
+    const it = createTLFromMedia(asset, targetTrack, start, opts?.duration);
     setItems(prev => [...prev, it]);
     setSelectedId(it.id);
   }, [items, tracks, ensureTrack, createTLFromMedia, setItems]);
@@ -2158,16 +2170,19 @@ function Editor() {
     // "Cola" no início: se o usuário soltar próximo de 0 (até 1.5s) e a faixa estiver livre nesse intervalo, encaixa em 0.
     const trackIsEmptyNear0 = !items.some(i => i.trackId === trackId && i.start < Math.max(start, 1.5));
     if (start < 1.5 && trackIsEmptyNear0) start = 0;
-    let cursor = start;
+    const droppedAssets = ids.map(mid => media.find(m => m.id === mid)).filter(Boolean) as MediaAsset[];
+    const longestAudioDur = droppedAssets
+      .filter(asset => asset.kind === "audio")
+      .reduce((m, asset) => Math.max(m, asset.duration || 0), 0);
+    const cursors: Record<TrackKind, number> = { video: start, audio: start };
     for (const mid of ids) {
       const asset = media.find(m => m.id === mid);
       if (!asset) continue;
-      addAssetToTimeline(asset, { trackId, start: cursor });
-      // se múltiplos: encadeia
-      const dur = asset.kind === "image" ? Math.min(asset.duration || 5, 5) : (asset.duration || 5);
-      cursor += dur;
-
-
+      const laneKind: TrackKind = asset.kind === "audio" ? "audio" : "video";
+      const duration = asset.kind === "image" && longestAudioDur > 0 ? longestAudioDur : undefined;
+      addAssetToTimeline(asset, { trackId, start: cursors[laneKind], duration });
+      const dur = asset.kind === "image" ? (duration ?? Math.min(asset.duration || 5, 5)) : (asset.duration || 5);
+      cursors[laneKind] += dur;
     }
   };
 
@@ -2431,7 +2446,7 @@ function Editor() {
 
         <main className="flex min-w-0 flex-1 flex-col select-none">
           <div ref={previewShellRef} className="relative flex min-h-0 flex-1 items-center justify-center bg-black/40 p-6 select-none">
-            <div ref={previewBoxRef} className="group/preview relative overflow-hidden rounded-lg shadow-2xl select-none"
+            <div ref={previewBoxRef} className="group/preview relative isolate overflow-hidden rounded-lg shadow-2xl select-none"
               onWheel={onPreviewWheel}
               style={{
                 aspectRatio: `${aspect.w} / ${aspect.h}`,
@@ -3741,7 +3756,7 @@ function Editor() {
 
       {/* Export progress / result / error */}
       {(exporting || exportUrl || error) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-background/95 p-4">
           <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl">
             <div className="flex items-center justify-between">
               <h3 className="font-display text-lg font-semibold">{exportUrl ? "Exportação concluída" : exporting ? "Exportando..." : "Atenção"}</h3>

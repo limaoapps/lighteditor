@@ -18,6 +18,7 @@ import {
   type Ambience,
   type ChannelMode,
 } from "@/lib/audio-fx";
+import { computeItemBounds } from "@/lib/scene-geometry";
 
 export const Route = createFileRoute("/editor")({
   head: () => ({

@@ -654,13 +654,23 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
       }
     }
 
+    // fundos desfocados/espelhados das imagens sobrepostas ficam atrás dos objetos principais
+    for (const imgItem of imageItems) {
+      const dur = imgItem.outPoint - imgItem.inPoint;
+      const localT = t - imgItem.start;
+      if (localT < 0 || localT > dur) continue;
+      if (imgItem.fx?.fillMode !== "blur" && imgItem.fx?.fillMode !== "mirror") continue;
+      const el = await loadFor(imgItem);
+      if (el) drawImageOverlay(ctx, el as HTMLImageElement, imgItem, localT, dur, targetW, targetH, "background");
+    }
+
     // overlays de imagem em trilhas superiores (respeita tempo/posição/escala/fade)
     for (const imgItem of imageItems) {
       const dur = imgItem.outPoint - imgItem.inPoint;
       const localT = t - imgItem.start;
       if (localT < 0 || localT > dur) continue;
       const el = await loadFor(imgItem);
-      if (el) drawImageOverlay(ctx, el as HTMLImageElement, imgItem, localT, dur, targetW, targetH);
+      if (el) drawImageOverlay(ctx, el as HTMLImageElement, imgItem, localT, dur, targetW, targetH, "foreground");
     }
 
     // overlays de texto (múltiplos, respeitando timing/posição/estilo)

@@ -2993,6 +2993,7 @@ function Editor() {
               { key: "exposure", label: "Exposição", min: -100, max: 100 },
               { key: "shadows", label: "Sombras", min: -100, max: 100 },
               { key: "highlights", label: "Realces", min: -100, max: 100 },
+              { key: "blur", label: "Blur", min: 0, max: 100 },
               { key: "opacity", label: "Opacidade", min: 0, max: 100, suffix: "%" },
             ];
             return (

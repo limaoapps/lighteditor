@@ -1462,6 +1462,13 @@ function Editor() {
 
     try {
       const ff = await getFFmpeg();
+      if (!ff) {
+        console.error("FFmpeg não carregou.");
+        setError("FFmpeg não carregou.");
+        setExportMsg("Erro");
+        return;
+      }
+      console.log("FFmpeg carregado:", ff);
       ff.on("log", onLog);
       ff.on("progress", onProg);
       const targetH = QUALITY_HEIGHT[quality];
@@ -1490,8 +1497,10 @@ function Editor() {
           const ext = isImg ? (c.file?.name.split(".").pop() || "png").toLowerCase() : "bin";
           const inName = `in_${i}.${ext}`;
           const outName = `cut_${i}.mp4`;
+          const sourceFile = c.file;
+          if (!sourceFile) throw new Error(`Clipe sem arquivo original: ${c.name}`);
           setExportMsg(`Processando clipe ${i + 1}/${v1clips.length}...`);
-          await ff.writeFile(inName, await fetchFile(c.file!));
+          await ff.writeFile(inName, await fetchFile(sourceFile));
           const dur = (c.outPoint - c.inPoint);
           const to = dur.toFixed(3);
           const afilters: string[] = [];
@@ -1550,7 +1559,10 @@ function Editor() {
       const music = audioClips[0];
       setExportMsg("Renderizando saída...");
       const finalArgs: string[] = ["-i", "joined.mp4"];
-      if (music) { await ff.writeFile("bgm.bin", await fetchFile(music.file!)); finalArgs.push("-i", "bgm.bin"); }
+      if (music) {
+        if (!music.file) throw new Error(`Áudio sem arquivo original: ${music.name}`);
+        await ff.writeFile("bgm.bin", await fetchFile(music.file)); finalArgs.push("-i", "bgm.bin");
+      }
       if (vf.length) finalArgs.push("-vf", vf.join(","));
       if (music) {
         const mg = dbToGain(music.gainDb ?? 0) * (v1clips.length ? 0.4 : 1.0);

@@ -2631,6 +2631,19 @@ function Editor() {
                   <div><Film className="mx-auto mb-2 h-10 w-10 opacity-40" />Adicione um arquivo para começar.</div>
                 </div>
               )}
+
+              {/* WYSIWYG: motor único de render por cima do DOM (mesmo código do export).
+                  pointer-events: none — o DOM por baixo segue tratando seleção/drag/handles. */}
+              {useCanvasPreview && items.length > 0 && (
+                <PreviewCanvas
+                  aspect={aspect}
+                  v1Items={previewScene.v1Items}
+                  visualItems={previewScene.visualItems}
+                  textItems={previewScene.textItems}
+                  time={playhead}
+                  playing={playing}
+                />
+              )}
             </div>
           </div>
         </main>

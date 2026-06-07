@@ -72,14 +72,12 @@ const AVC_CODECS = [
 
 export async function isWebCodecsExportSupported(targetW: number, targetH: number, fps: number, vKbps: number): Promise<{ ok: boolean; codec?: string; hw?: string; reason?: string }> {
   if (typeof window === "undefined") return { ok: false, reason: "SSR" };
-  // @ts-expect-error WebCodecs types may be missing in lib.dom
   if (typeof VideoEncoder === "undefined" || typeof AudioEncoder === "undefined") {
     return { ok: false, reason: "WebCodecs indisponível neste navegador" };
   }
   for (const codec of AVC_CODECS) {
     for (const hw of ["prefer-hardware", "no-preference"] as const) {
       try {
-        // @ts-expect-error WebCodecs types may be missing in lib.dom
         const r = await VideoEncoder.isConfigSupported({
           codec,
           width: targetW,
@@ -162,7 +160,6 @@ function drawClipFrame(
     const x = (targetW - w) / 2, y = (targetH - h) / 2;
     ctx.save();
     if (fillMode === "blur" && blurPx > 0) {
-      // @ts-expect-error filter is widely supported on canvas
       ctx.filter = `blur(${blurPx}px)`;
     }
     if (fillMode === "mirror") {
@@ -173,7 +170,6 @@ function drawClipFrame(
       ctx.drawImage(source, x, y, w, h);
     }
     ctx.restore();
-    // @ts-expect-error
     ctx.filter = "none";
   } else if (fillMode === "stretch") {
     // no bg, drawn full
@@ -307,7 +303,6 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
 
   // ====== VIDEO ENCODER ======
   let vEncError: unknown = null;
-  // @ts-expect-error WebCodecs
   const vEnc: VideoEncoder = new VideoEncoder({
     output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
     error: (e: unknown) => { vEncError = e; log(`[wc] vEnc erro: ${String(e)}`); },
@@ -416,7 +411,6 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
       ctx.restore();
     }
 
-    // @ts-expect-error VideoFrame
     const frame = new VideoFrame(canvas, { timestamp: Math.round((f * 1_000_000) / fps), duration: Math.round(1_000_000 / fps) });
     const keyFrame = f % Math.max(1, Math.round(fps * 2)) === 0;
     try { vEnc.encode(frame, { keyFrame }); }
@@ -448,7 +442,6 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
   try { mixed = await buildMixedAudio(opts, sampleRate); }
   catch (e) { log(`[wc] mix de áudio falhou, gravando silêncio: ${String(e)}`); }
 
-  // @ts-expect-error AudioEncoder
   const aEnc: AudioEncoder = new AudioEncoder({
     output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
     error: (e: unknown) => log(`[wc] aEnc erro: ${String(e)}`),
@@ -471,7 +464,6 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
         out = new Float32Array(frames * 2);
         for (let i = 0; i < frames; i++) { out[i * 2] = data[i]; out[i * 2 + 1] = data[i]; }
       }
-      // @ts-expect-error AudioData
       const ad = new AudioData({
         format: "f32",
         sampleRate,
@@ -489,7 +481,6 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
     let baseFrame = 0;
     while (baseFrame < totalAFrames) {
       const n = Math.min(chunkFrames, totalAFrames - baseFrame);
-      // @ts-expect-error AudioData
       const ad = new AudioData({
         format: "f32",
         sampleRate,

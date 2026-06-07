@@ -549,6 +549,7 @@ function Editor() {
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [zoom, setZoom] = useState(40);
+  const [dragExtraSec, setDragExtraSec] = useState(0);
   const [tlViewportW, setTlViewportW] = useState(800);
   const [quality, setQuality] = useState<Quality>("1080");
 

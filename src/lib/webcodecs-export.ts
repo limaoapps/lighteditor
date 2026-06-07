@@ -223,6 +223,45 @@ function drawClipFrame(
   ctx.restore();
 }
 
+function computeZoomScale(fx: WCItem["fx"] | undefined, localT: number, dur: number): number {
+  if (!fx?.zoom) return 1;
+  const speedMul = fx.zoom.speed === "slow" ? 0.1 : fx.zoom.speed === "fast" ? 0.35 : 0.2;
+  const p = dur > 0 ? Math.min(1, Math.max(0, localT / dur)) : 0;
+  return fx.zoom.dir === "in" ? 1 + speedMul * p : 1 + speedMul * (1 - p);
+}
+
+function drawImageOverlay(
+  ctx: OffscreenCanvasRenderingContext2D,
+  img: HTMLImageElement,
+  item: WCItem,
+  localT: number,
+  dur: number,
+  targetW: number,
+  targetH: number,
+) {
+  const srcW = img.naturalWidth || item.width || targetW;
+  const srcH = img.naturalHeight || item.height || targetH;
+  if (srcW <= 0 || srcH <= 0) return;
+  const previewAR = targetW / targetH;
+  const ar = srcW / srcH;
+  let boxH = targetH * 0.6;
+  let boxW = boxH * ar;
+  if (boxW > targetW * 0.9) { boxW = targetW * 0.9; boxH = boxW / ar; }
+  const x = ((item.transform?.xPct ?? 50) / 100) * targetW;
+  const y = ((item.transform?.yPct ?? 50) / 100) * targetH;
+  const scale = (item.transform?.scale ?? 1) * computeZoomScale(item.fx, localT, dur);
+  const rot = ((item.transform?.rotation ?? 0) * Math.PI) / 180;
+  const op = computeOpacity(item, localT);
+
+  ctx.save();
+  ctx.globalAlpha = op;
+  ctx.translate(x, y);
+  if (rot) ctx.rotate(rot);
+  ctx.scale(scale, scale);
+  ctx.drawImage(img, -boxW / 2, -boxH / 2, boxW, boxH);
+  ctx.restore();
+}
+
 function hexToRgba(hex: string, alpha: number): string {
   const h = (hex || "#000000").replace("#", "");
   const v = h.length === 3 ? h.split("").map(c => c + c).join("") : h;

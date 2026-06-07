@@ -982,6 +982,7 @@ function Editor() {
       id: crypto.randomUUID(), kind: "text", trackId, name: "Texto",
       start, inPoint: 0, outPoint: 5, sourceDuration: 9999,
       text: defaultText(),
+      fx: { ...DEFAULT_FX },
       transform: { xPct: 50, yPct: 80, scale: 1, rotation: 0 },
     };
     setItems(prev => [...prev, it]);

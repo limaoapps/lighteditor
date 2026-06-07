@@ -769,20 +769,31 @@ function Editor() {
   }, [items, zoom, flashSnap]);
   const snapTimeRef = useRef(snapTime);
   useEffect(() => { snapTimeRef.current = snapTime; }, [snapTime]);
-  const snapResizeRef = useRef(snapResize);
-  useEffect(() => { snapResizeRef.current = snapResize; }, [snapResize]);
   const zoomRef = useRef(zoom);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
-  // Snap raw time to grid step (matches ruler tick step). Used during resize when enabled.
-  const snapToGrid = useCallback((t: number) => {
-    const z = zoomRef.current;
-    const step = z < 20 ? 10 : z < 40 ? 5 : z < 80 ? 2 : 1;
-    return Math.round(t / step) * step;
-  }, []);
-  const snapToGridRef = useRef(snapToGrid);
-  useEffect(() => { snapToGridRef.current = snapToGrid; }, [snapToGrid]);
   // Limite máximo do projeto para evitar durações inconsistentes
   const MAX_PROJECT_SEC = 3600; // 1 hora
+  const snapResizeTime = useCallback((t: number, excludeId?: string) => {
+    const thr = TIME_SNAP_PX / zoomRef.current;
+    let best = t, bestD = thr;
+    for (const cand of [0, MAX_PROJECT_SEC]) {
+      const d = Math.abs(cand - t);
+      if (d < bestD) { best = cand; bestD = d; }
+    }
+    for (const it of itemsRef.current) {
+      if (it.id === excludeId) continue;
+      for (const cand of [it.start, it.start + (it.outPoint - it.inPoint)]) {
+        const d = Math.abs(cand - t);
+        if (d < bestD) { best = cand; bestD = d; }
+      }
+    }
+    if (best !== t) flashSnap(best);
+    return Math.max(0, best);
+  }, [flashSnap]);
+  const snapResizeTimeRef = useRef(snapResizeTime);
+  useEffect(() => { snapResizeTimeRef.current = snapResizeTime; }, [snapResizeTime]);
+  const snapResizeRef = useRef(snapResize);
+  useEffect(() => { snapResizeRef.current = snapResize; }, [snapResize]);
 
   // ---- Add files → media library only ----
   const addFiles = useCallback(async (files: FileList | null) => {
@@ -1123,7 +1134,7 @@ function Editor() {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
           let raw = Math.max(0, tSec);
-          if (snapResizeRef.current) raw = Math.max(0, snapToGridRef.current(raw));
+          if (snapResizeRef.current) raw = Math.max(0, snapResizeTimeRef.current(raw, d.id));
           if (d.isImage) {
             const newStart = Math.max(0, Math.min(d.origEnd - 0.1, raw));
             return { ...i, start: newStart, inPoint: 0, outPoint: d.origEnd - newStart };
@@ -1137,7 +1148,7 @@ function Editor() {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
           let raw = Math.max(i.start + 0.1, tSec);
-          if (snapResizeRef.current) raw = Math.max(i.start + 0.1, snapToGridRef.current(raw));
+          if (snapResizeRef.current) raw = Math.max(i.start + 0.1, snapResizeTimeRef.current(raw, d.id));
           raw = Math.min(MAX_PROJECT_SEC, raw);
           const sourceCap = i.kind === "image" ? MAX_PROJECT_SEC : i.sourceDuration;
           const maxOut = Math.min(sourceCap, i.inPoint + Math.max(0.1, MAX_PROJECT_SEC - i.start));
@@ -2083,7 +2094,7 @@ function Editor() {
             <div className="mx-2 h-5 w-px bg-border" />
             <button
               onClick={() => setSnapResize(s => !s)}
-              title={snapResize ? "Snap à grade: ativo (clique para precisão livre)" : "Precisão livre (clique para alinhar à grade)"}
+              title={snapResize ? "Snap nas bordas: ativo (clique para precisão livre)" : "Precisão livre (clique para alinhar com outros clipes)"}
               className={`flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors ${snapResize ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-card"}`}
             >
               <Magnet className="h-3.5 w-3.5" />
@@ -2221,9 +2232,9 @@ function Editor() {
                 {snapMark !== null && (
                   <div className="pointer-events-none absolute top-0 z-40"
                     style={{ left: labelColW + snapMark * zoom, height: tracks.length * trackHeight }}>
-                    <div className="absolute inset-y-0 -left-px w-0.5 bg-yellow-300 shadow-[0_0_8px_2px_rgba(253,224,71,0.85)]" />
-                    <div className="absolute -left-1.5 -top-0.5 h-2 w-3 rounded-sm bg-yellow-300 shadow" />
-                    <div className="absolute -left-1.5 -bottom-0.5 h-2 w-3 rounded-sm bg-yellow-300 shadow" />
+                    <div className="absolute inset-y-0 -left-px w-0.5" style={{ background: "color-mix(in oklab, var(--foreground) 86%, transparent)", boxShadow: "0 0 8px color-mix(in oklab, var(--foreground) 70%, transparent)" }} />
+                    <div className="absolute -left-1 top-0 h-2 w-2 rounded-full" style={{ background: "color-mix(in oklab, var(--foreground) 86%, transparent)" }} />
+                    <div className="absolute -left-1 bottom-0 h-2 w-2 rounded-full" style={{ background: "color-mix(in oklab, var(--foreground) 86%, transparent)" }} />
                   </div>
                 )}
 

@@ -576,6 +576,7 @@ function Editor() {
   const [exportFps, setExportFps] = useState<number>(30);
   const [exportCodec, setExportCodec] = useState<Codec>("h264");
   const [speedMode, setSpeedMode] = useState<"turbo" | "rapido" | "qualidade">("rapido");
+  const [useHardwareAccel, setUseHardwareAccel] = useState<boolean>(true);
   const [bitrateMode, setBitrateMode] = useState<BitrateMode>("medium");
   const [customBitrate, setCustomBitrate] = useState<number>(8000);
   const [audioBitrate, setAudioBitrate] = useState<AudioBitrate>(192);
@@ -1518,7 +1519,54 @@ function Editor() {
 
     const logs: string[] = [];
 
+    // ===== Caminho rápido: WebCodecs (aceleração por hardware quando disponível) =====
+    if (useHardwareAccel && exportCodec === "h264") {
+      const targetHwc = QUALITY_HEIGHT[quality];
+      const targetWwc = Math.round((targetHwc * aspect.w) / aspect.h / 2) * 2;
+      try {
+        const { isWebCodecsExportSupported, exportWithWebCodecs } = await import("@/lib/webcodecs-export");
+        const sup = await isWebCodecsExportSupported(targetWwc, targetHwc, fps, vKbps);
+        if (sup.ok) {
+          setExportMsg(`Aceleração por hardware: ${sup.hw === "prefer-hardware" ? "GPU" : "software-otimizado"} (${sup.codec})`);
+          setExportLog([
+            `=== EXPORT WEBCODECS ===`,
+            `Codec: ${sup.codec} · Aceleração: ${sup.hw}`,
+            `Resolução: ${targetWwc}x${targetHwc} · ${fps} fps · ${vKbps} kbps`,
+          ]);
+          const textItem = items.find(i => i.kind === "text" && i.text?.content);
+          const music = audioClips[0];
+          const blob = await exportWithWebCodecs({
+            v1clips: v1clips as unknown as import("@/lib/webcodecs-export").WCItem[],
+            audioClips: audioClips as unknown as import("@/lib/webcodecs-export").WCItem[],
+            music: music as unknown as import("@/lib/webcodecs-export").WCItem | undefined,
+            textItem: textItem as unknown as import("@/lib/webcodecs-export").WCItem | undefined,
+            targetW: targetWwc, targetH: targetHwc,
+            fps, vKbps, aKbps, totalDuration: Math.max(0.1, totalDuration),
+            onProgress: (p) => setExportPct(p),
+            onMessage: (m) => setExportMsg(m),
+            onLog: (l) => setExportLog(prev => [...prev, l].slice(-500)),
+          });
+          const url = URL.createObjectURL(blob);
+          const sizeMB = blob.size / (1024 * 1024);
+          const fileName = `${exportFileName || "video"}.mp4`;
+          setExportUrl(url);
+          setExportMsg("Pronto!"); setExportPct(1);
+          setExportHistory(h => [{ url, name: fileName, at: Date.now(), sizeMB }, ...h].slice(0, 8));
+          if (exportElapsedTimerRef.current) { window.clearInterval(exportElapsedTimerRef.current); exportElapsedTimerRef.current = null; }
+          setExporting(false);
+          return;
+        } else {
+          setExportLog(prev => [...prev, `[wc] não suportado: ${sup.reason} — usando FFmpeg WASM`]);
+        }
+      } catch (e) {
+        const m = e instanceof Error ? e.message : String(e);
+        setExportLog(prev => [...prev, `[wc] falhou: ${m} — caindo para FFmpeg WASM`]);
+        console.warn("WebCodecs falhou, fallback FFmpeg:", e);
+      }
+    }
+
     try {
+
       // ===== DIAGNÓSTICO PRÉ-EXPORTAÇÃO =====
       const _th = QUALITY_HEIGHT[quality];
       const _tw = Math.round((_th * aspect.w) / aspect.h / 2) * 2;
@@ -2797,6 +2845,24 @@ function Editor() {
                   </span>
                 </div>
               </div>
+
+              <div className="md:col-span-2">
+                <label className="flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={useHardwareAccel}
+                    onChange={(e) => setUseHardwareAccel(e.target.checked)}
+                    className="h-3.5 w-3.5"
+                  />
+                  <span className="font-semibold uppercase tracking-wider text-muted-foreground">
+                    Aceleração por hardware (WebCodecs)
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">
+                    Usa NVENC/QuickSync/VideoToolbox quando disponível · fallback automático para WASM
+                  </span>
+                </label>
+              </div>
+
 
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Codec de vídeo</label>

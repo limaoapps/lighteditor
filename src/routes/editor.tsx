@@ -2698,7 +2698,10 @@ function Editor() {
                 <button
                   onClick={async () => {
                     try { const ff = await getFFmpeg(); ff.terminate(); } catch {}
-                    setExporting(false); setExportPct(0); setExportMsg(""); setError("Exportação cancelada.");
+                    setExporting(false); setExportPct(0); setExportMsg("");
+                    setExportLog(prev => [...prev, "Processo encerrado."]);
+                    console.warn("[EXPORT] Processo encerrado pelo usuário.");
+                    setError("Exportação cancelada — processo FFmpeg encerrado.");
                     if (exportElapsedTimerRef.current) { window.clearInterval(exportElapsedTimerRef.current); exportElapsedTimerRef.current = null; }
                   }}
                   className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-border bg-muted px-4 py-2 text-sm font-medium hover:bg-muted/70"

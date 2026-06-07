@@ -393,7 +393,8 @@ function drawTextOverlay(
   ctx.globalAlpha = alpha;
   ctx.translate(cx, cy);
   if (rot) ctx.rotate(rot);
-  try { (ctx as unknown as { filter: string }).filter = itemBlurPx(item.fx) > 0 ? `blur(${itemBlurPx(item.fx)}px)` : "none"; } catch { /* ignore */ }
+  const blurPx = itemBlurPx(item.fx, targetH);
+  try { (ctx as unknown as { filter: string }).filter = blurPx > 0 ? `blur(${blurPx}px)` : "none"; } catch { /* ignore */ }
   ctx.font = `${style} ${weight} ${size}px ${fontFamily}`;
   ctx.textBaseline = "middle";
   // letterSpacing (suportado em navegadores modernos)
@@ -643,7 +644,7 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
       const srcT = active.inPoint + localT;
       const fill = active.fx?.fillMode ?? "bars";
       const bg = active.fx?.bgColor ?? "#000000";
-      const blurPx = blurCanvasPx(active.fx);
+      const blurPx = blurCanvasPx(active.fx, targetH);
       const op = computeOpacity(active, localT);
 
       try {
@@ -660,10 +661,10 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
             }
             const sw = v.videoWidth || targetW;
             const sh = v.videoHeight || targetH;
-            drawClipFrame(ctx, v, sw, sh, targetW, targetH, fill, bg, blurPx, op, itemBlurPx(active.fx));
+            drawClipFrame(ctx, v, sw, sh, targetW, targetH, fill, bg, blurPx, op, itemBlurPx(active.fx, targetH));
           } else {
             const img = el as HTMLImageElement;
-            drawClipFrame(ctx, img, img.naturalWidth, img.naturalHeight, targetW, targetH, fill, bg, blurPx, op, itemBlurPx(active.fx));
+            drawClipFrame(ctx, img, img.naturalWidth, img.naturalHeight, targetW, targetH, fill, bg, blurPx, op, itemBlurPx(active.fx, targetH));
           }
         }
       } catch (e) {

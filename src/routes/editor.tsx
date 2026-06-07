@@ -8,12 +8,10 @@ import {
   Sparkles, Sliders, Wand2, RotateCcw, Palette,
   Settings as SettingsIcon, FileText, RefreshCw, Cpu, Info, Magnet,
 } from "lucide-react";
-import { getFFmpeg, fetchFile, resetFFmpeg } from "@/lib/ffmpeg-client";
 import {
   DEFAULT_AUDIO_FX as DEFAULT_AUDIO_FX_REF,
   EQ_BANDS,
   buildAudioFxGraph,
-  buildAudioFilterChain,
   type AudioFx,
   type AudioFxNodes,
   type ReverbPreset,
@@ -708,9 +706,9 @@ function Editor() {
   const [snapV, setSnapV] = useState(false);
 
   const [exporting, setExporting] = useState(false);
-  const [ffReady, setFfReady] = useState(false);
-  const [ffLoading, setFfLoading] = useState(true);
-  const [ffLoadError, setFfLoadError] = useState<string | null>(null);
+  const ffReady = true;
+  const ffLoading = false;
+  const ffLoadError: string | null = null;
   const [exportPct, setExportPct] = useState(0);
   const [exportMsg, setExportMsg] = useState("");
   const [exportUrl, setExportUrl] = useState<string | null>(null);
@@ -745,8 +743,6 @@ function Editor() {
   const lastExportSettingsRef = useRef<null | (() => void)>(null);
   const gpuInfoRef = useRef<{ available: boolean; vendor: string } | null>(null);
   const [exportHistory, setExportHistory] = useState<Array<{ url: string; name: string; at: number; sizeMB: number }>>([]);
-  const [diagRunning, setDiagRunning] = useState<null | "version" | "simple">(null);
-  const [diagResult, setDiagResult] = useState<string>("");
 
   // Detecta suporte a WebCodecs para o seletor de motor
   useEffect(() => {
@@ -772,29 +768,7 @@ function Editor() {
   }, [quality, aspect.w, aspect.h, exportFps, bitrateMode, customBitrate, exportEngine]);
 
 
-  useEffect(() => {
-    let mounted = true;
-    setFfLoading(true);
-    getFFmpeg()
-      .then(() => {
-        if (!mounted) return;
-        setFfReady(true);
-        setFfLoadError(null);
-        console.log("FFmpeg pronto para exportação.");
-      })
-      .catch((err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error("FFmpeg não carregou.", err);
-        if (mounted) {
-          setFfReady(false);
-          setFfLoadError(msg);
-        }
-      })
-      .finally(() => {
-        if (mounted) setFfLoading(false);
-      });
-    return () => { mounted = false; };
-  }, []);
+  // Engine de exportação: somente WebCodecs (FFmpeg removido).
 
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; clipId: string | null } | null>(null);
   const [mediaCtx, setMediaCtx] = useState<{ x: number; y: number; mediaId: string } | null>(null);
@@ -1673,85 +1647,7 @@ function Editor() {
     [totalDuration, computedVBitrate, audioBitrate],
   );
 
-  // ---- DIAGNÓSTICO ----
-  const runFfmpegVersionTest = async () => {
-    setDiagRunning("version"); setDiagResult("");
-    const lines: string[] = [`[diag] Carregando FFmpeg WASM...`];
-    try {
-      const ff = await getFFmpeg();
-      const onL = ({ message }: { message: string }) => { lines.push(message); };
-      ff.on("log", onL);
-      try {
-        // Force engine to print banner/version by invoking with no args (exits 1, mas imprime versão)
-        await ff.exec(["-version"]).catch(() => {});
-      } finally {
-        ff.off("log", onL);
-      }
-      lines.push(`[diag] OK — engine carregado.`);
-      console.log("%c[FFMPEG VERSION TEST]", "color:#22d3ee", lines.join("\n"));
-      setDiagResult(lines.join("\n"));
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      const out = `FFmpeg não encontrado / falha ao carregar.\n${msg}\n${lines.join("\n")}`;
-      console.error("[FFMPEG VERSION TEST]", out);
-      setDiagResult(out);
-    } finally {
-      setDiagRunning(null);
-    }
-  };
-
-  const runSimpleExportTest = async () => {
-    setDiagRunning("simple"); setDiagResult("");
-    const v1trackId = tracks.find(t => t.kind === "video")?.id;
-    const firstClip = items
-      .filter(i => i.trackId === v1trackId && (i.kind === "video" || i.kind === "image"))
-      .sort((a, b) => a.start - b.start)[0];
-    if (!firstClip || !firstClip.file) {
-      setDiagResult("Nenhum vídeo/imagem na timeline para testar.");
-      setDiagRunning(null); return;
-    }
-    const lines: string[] = [
-      `[teste] Clipe: ${firstClip.file.name} (${firstClip.kind})`,
-      `[teste] Saída: teste.mp4 · 640x360 @ 30fps · libx264`,
-    ];
-    try {
-      const ff = await getFFmpeg();
-      const onL = ({ message }: { message: string }) => { lines.push(message); };
-      ff.on("log", onL);
-      const isImg = firstClip.kind === "image";
-      const ext = isImg ? (firstClip.file.name.split(".").pop() || "png").toLowerCase() : "bin";
-      await ff.writeFile(`tin.${ext}`, await fetchFile(firstClip.file));
-      const dur = Math.max(1, Math.min(3, firstClip.outPoint - firstClip.inPoint)).toFixed(2);
-      const args = isImg
-        ? ["-loop", "1", "-framerate", "30", "-t", dur, "-i", `tin.${ext}`,
-           "-vf", "scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2",
-           "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-t", dur, "teste.mp4"]
-        : ["-t", dur, "-i", `tin.${ext}`,
-           "-vf", "scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2",
-           "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-an", "teste.mp4"];
-      lines.push(`$ ffmpeg ${args.join(" ")}`);
-      await ff.exec(args);
-      const data = (await ff.readFile("teste.mp4")) as Uint8Array;
-      lines.push(`[teste] OK — arquivo gerado: ${(data.byteLength / 1024).toFixed(1)} KB`);
-      const buf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
-      const url = URL.createObjectURL(new Blob([buf], { type: "video/mp4" }));
-      const a = document.createElement("a"); a.href = url; a.download = "teste.mp4";
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-      ff.off("log", onL);
-      await ff.deleteFile(`tin.${ext}`).catch(() => {});
-      await ff.deleteFile("teste.mp4").catch(() => {});
-      console.log("%c[SIMPLE EXPORT TEST]", "color:#22d3ee", lines.join("\n"));
-      setDiagResult(lines.join("\n"));
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      const out = `FALHA no teste de exportação.\n${msg}\n\n${lines.join("\n")}`;
-      console.error("[SIMPLE EXPORT TEST]", out);
-      setDiagResult(out);
-    } finally {
-      setDiagRunning(null);
-    }
-  };
+  // ---- DIAGNÓSTICO removido junto com FFmpeg ----
 
   const downloadExportLog = () => {
     const content = [
@@ -1807,37 +1703,11 @@ function Editor() {
     // Save retry handle (same settings)
     lastExportSettingsRef.current = () => { void doExport(); };
 
-    // Codec mapping — only libx264 ships in @ffmpeg/core WASM; fallback w/ note.
-    const codecRequested = exportCodec;
-    if (exportCodec === "h265" || exportCodec === "vp9") {
-      // we silently fallback but record in log
-    }
     const fps = Math.max(1, Math.min(60, exportFps || 30));
     const vKbps = computedVBitrate;
     const aKbps = audioBitrate;
-    // Modo de velocidade — usa CRF + parâmetros x264 para acelerar drasticamente o WASM (single-thread).
-    let vEncArgs: string[];
-    if (speedMode === "qualidade") {
-      vEncArgs = [
-        "-c:v", "libx264", "-preset", "superfast", "-tune", "fastdecode",
-        "-pix_fmt", "yuv420p", "-r", String(fps), "-threads", "0",
-        "-b:v", `${vKbps}k`, "-maxrate", `${Math.round(vKbps * 1.5)}k`, "-bufsize", `${vKbps * 2}k`,
-      ];
-    } else {
-      const crf = speedMode === "turbo" ? "30" : "26";
-      const x264Params = speedMode === "turbo"
-        ? "rc-lookahead=0:ref=1:bframes=0:weightp=0:cabac=0:8x8dct=0:trellis=0:me=dia:subme=0:aq-mode=0:mixed-refs=0:fast-pskip=1:no-mbtree=1:no-scenecut=1"
-        : "rc-lookahead=0:ref=1:bframes=0:weightp=1:trellis=0:me=hex:subme=1:aq-mode=0:fast-pskip=1:no-mbtree=1";
-      vEncArgs = [
-        "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
-        "-pix_fmt", "yuv420p", "-r", String(fps), "-threads", "0",
-        "-crf", crf, "-x264-params", x264Params,
-        "-maxrate", `${vKbps * 2}k`, "-bufsize", `${vKbps * 3}k`,
-      ];
-    }
-    const aEncArgs = ["-c:a", "aac", "-b:a", `${aKbps}k`, "-ar", "44100", "-ac", "2"];
 
-    setExporting(true); setExportPct(0); setExportMsg(ffReady ? "Carregando engine..." : "Inicializando FFmpeg...");
+    setExporting(true); setExportPct(0); setExportMsg("Inicializando WebCodecs...");
     setExportUrl(null); setError(null);
     setExportLog([]); setExportFfCmd("");
     setExportElapsed(0); setExportFpsLive(null); setExportSpeed(null);
@@ -1847,285 +1717,36 @@ function Editor() {
       setExportElapsed((performance.now() - exportStartRef.current) / 1000);
     }, 250) as unknown as number;
 
-    const logs: string[] = [];
-
-    // ===== Caminho rápido: WebCodecs (aceleração por hardware quando disponível) =====
-    if (useHardwareAccel && exportCodec === "h264") {
-      const targetHwc = QUALITY_HEIGHT[quality];
-      const targetWwc = Math.round((targetHwc * aspect.w) / aspect.h / 2) * 2;
-      try {
-        const { isWebCodecsExportSupported, exportWithWebCodecs } = await import("@/lib/webcodecs-export");
-        const sup = await isWebCodecsExportSupported(targetWwc, targetHwc, fps, vKbps);
-        if (sup.ok) {
-          setExportMsg(`Aceleração por hardware: ${sup.hw === "prefer-hardware" ? "GPU" : "software-otimizado"} (${sup.codec})`);
-          setExportLog([
-            `=== EXPORT WEBCODECS ===`,
-            `Codec: ${sup.codec} · Aceleração: ${sup.hw}`,
-            `Resolução: ${targetWwc}x${targetHwc} · ${fps} fps · ${vKbps} kbps`,
-          ]);
-          const textItems = items.filter(i => i.kind === "text" && i.text?.content);
-          const music = audioClips[0];
-          const blob = await exportWithWebCodecs({
-            v1clips: v1clips as unknown as import("@/lib/webcodecs-export").WCItem[],
-            audioClips: audioClips as unknown as import("@/lib/webcodecs-export").WCItem[],
-            music: music as unknown as import("@/lib/webcodecs-export").WCItem | undefined,
-            imageItems: imageOverlayItems as unknown as import("@/lib/webcodecs-export").WCItem[],
-            textItems: textItems as unknown as import("@/lib/webcodecs-export").WCItem[],
-            targetW: targetWwc, targetH: targetHwc,
-            fps, vKbps, aKbps, totalDuration: Math.max(0.1, totalDuration),
-            onProgress: (p) => setExportPct(p),
-            onMessage: (m) => setExportMsg(m),
-            onLog: (l) => setExportLog(prev => [...prev, l].slice(-500)),
-          });
-          const url = URL.createObjectURL(blob);
-          const sizeMB = blob.size / (1024 * 1024);
-          const fileName = `${exportFileName || "video"}.mp4`;
-          setExportUrl(url);
-          setExportMsg("Pronto!"); setExportPct(1);
-          setExportHistory(h => [{ url, name: fileName, at: Date.now(), sizeMB }, ...h].slice(0, 8));
-          if (exportElapsedTimerRef.current) { window.clearInterval(exportElapsedTimerRef.current); exportElapsedTimerRef.current = null; }
-          setExporting(false);
-          return;
-        } else {
-          setExportLog(prev => [...prev, `[wc] não suportado: ${sup.reason} — usando FFmpeg WASM`]);
-        }
-      } catch (e) {
-        const m = e instanceof Error ? e.message : String(e);
-        setExportLog(prev => [...prev, `[wc] falhou: ${m} — caindo para FFmpeg WASM`]);
-        console.warn("WebCodecs falhou, fallback FFmpeg:", e);
-      }
-    }
+    const targetH = QUALITY_HEIGHT[quality];
+    const targetW = Math.round((targetH * aspect.w) / aspect.h / 2) * 2;
 
     try {
-
-      // ===== DIAGNÓSTICO PRÉ-EXPORTAÇÃO =====
-      const _th = QUALITY_HEIGHT[quality];
-      const _tw = Math.round((_th * aspect.w) / aspect.h / 2) * 2;
-      const diag = [
-        `=== DIAGNÓSTICO DE EXPORTAÇÃO ===`,
-        `Arquivo: ${exportFileName || "video"}.mp4`,
-        `Pasta de saída: (download do navegador)`,
-        `Resolução: ${_tw}x${_th}`,
-        `FPS: ${fps}`,
-        `Codec solicitado: ${codecRequested} (engine: libx264 WASM)`,
-        `Bitrate vídeo: ${vKbps} kbps · áudio: ${aKbps} kbps`,
-        `Clipes vídeo/imagem na V1: ${items.filter(i => (i.kind === "video" || i.kind === "image")).length}`,
-        `Clipes áudio: ${items.filter(i => i.kind === "audio").length}`,
-        `Duração total: ${totalDuration.toFixed(2)}s`,
-        `FFmpeg core URL: /ffmpeg/ffmpeg-core.js`,
-        `User-Agent: ${navigator.userAgent}`,
-        `=================================`,
-        `Iniciando processo FFmpeg...`,
-      ];
-      console.group("%c[EXPORT DIAG]", "color:#22d3ee;font-weight:bold");
-      diag.forEach(l => console.log(l));
-      console.groupEnd();
-      setExportLog(diag);
-
-      const onLog = ({ message }: { message: string }) => {
-        logs.push(message); if (logs.length > 500) logs.shift();
-        const m1 = /fps=\s*([\d.]+)/.exec(message);
-        if (m1) setExportFpsLive(parseFloat(m1[1]));
-        const m2 = /speed=\s*([\d.]+)x/.exec(message);
-        if (m2) setExportSpeed(parseFloat(m2[1]));
-        setExportLog(prev => {
-          const next = [...prev, message];
-          return next.length > 500 ? next.slice(-500) : next;
-        });
-      };
-      const onProg = ({ progress: p }: { progress: number }) =>
-        setExportPct(Math.max(0, Math.min(1, p)));
-
-
-      setFfLoading(true);
-      const ff = await getFFmpeg();
-      setFfReady(true);
-      setFfLoadError(null);
-      setFfLoading(false);
-      if (!ff) {
-        console.error("FFmpeg não carregou.");
-        setError("FFmpeg não carregou.");
-        setExportMsg("Erro");
-        return;
+      const { isWebCodecsExportSupported, exportWithWebCodecs } = await import("@/lib/webcodecs-export");
+      const sup = await isWebCodecsExportSupported(targetW, targetH, fps, vKbps);
+      if (!sup.ok) {
+        throw new Error(`WebCodecs indisponível neste navegador: ${sup.reason ?? "sem suporte"}. Use Chrome/Edge/Opera recentes.`);
       }
-      console.log("FFmpeg carregado:", ff);
-      ff.on("log", onLog);
-      ff.on("progress", onProg);
-      const targetH = QUALITY_HEIGHT[quality];
-      const targetW = Math.round((targetH * aspect.w) / aspect.h / 2) * 2;
-      const inputs: string[] = [];
-
-      if (codecRequested !== "h264") {
-        logs.push(`[warn] Codec ${codecRequested.toUpperCase()} indisponível no engine WASM — usando H.264.`);
-      }
-      if (useGpu) {
-        logs.push(`[warn] Aceleração por GPU não é suportada no FFmpeg WASM — usando CPU.`);
-      }
-
-      if (!v1clips.length) {
-        const dur = Math.max(1, totalDuration).toFixed(3);
-        setExportMsg("Gerando vídeo base (áudio)...");
-        await ff.exec([
-          "-f", "lavfi", "-t", dur, "-i", `color=c=black:s=${targetW}x${targetH}:r=${fps}`,
-          "-f", "lavfi", "-t", dur, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
-          ...vEncArgs, ...aEncArgs, "-shortest", "joined.mp4",
-        ]);
-      } else {
-        for (let i = 0; i < v1clips.length; i++) {
-          const c = v1clips[i];
-          const isImg = c.kind === "image";
-          const ext = isImg ? (c.file?.name.split(".").pop() || "png").toLowerCase() : "bin";
-          const inName = `in_${i}.${ext}`;
-          const outName = `cut_${i}.mp4`;
-          const sourceFile = c.file;
-          if (!sourceFile) throw new Error(`Clipe sem arquivo original: ${c.name}`);
-          setExportMsg(`Processando clipe ${i + 1}/${v1clips.length}...`);
-          await ff.writeFile(inName, await fetchFile(sourceFile));
-          const dur = (c.outPoint - c.inPoint);
-          const to = dur.toFixed(3);
-          const afilters: string[] = [];
-          afilters.push(...buildAudioFilterChain(c.audioFx, c.gainDb ?? 0, dur));
-          if (c.fadeIn && c.fadeIn > 0.01) afilters.push(`afade=t=in:st=0:d=${c.fadeIn.toFixed(3)}`);
-          if (c.fadeOut && c.fadeOut > 0.01) afilters.push(`afade=t=out:st=${(dur - c.fadeOut).toFixed(3)}:d=${c.fadeOut.toFixed(3)}`);
-          const filter = exportVideoFilter(c, targetW, targetH);
-
-          const args: string[] = [];
-          if (isImg) {
-            args.push("-loop", "1", "-framerate", String(fps), "-t", to, "-i", inName);
-            args.push("-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
-            if (filter.type === "vf") args.push("-vf", filter.value, "-map", "0:v", "-map", "1:a");
-            else args.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "1:a");
-            args.push(...vEncArgs, ...aEncArgs, "-shortest", outName);
-          } else {
-            // Seek preciso: -ss DEPOIS do -i evita perda de frames (tela preta) no FFmpeg WASM.
-            args.push("-i", inName, "-ss", c.inPoint.toFixed(3), "-t", to);
-            args.push("-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100");
-            const vPart = filter.type === "vf" ? `[0:v]${filter.value}[vout]` : filter.value;
-            const aPart = afilters.length
-              ? `[0:a]${afilters.join(",")}[a0src];[a0src][1:a]amix=inputs=2:duration=first:dropout_transition=0:normalize=0:weights=1 0[aout]`
-              : `[0:a][1:a]amix=inputs=2:duration=first:dropout_transition=0:normalize=0:weights=1 0[aout]`;
-            args.push("-filter_complex", `${vPart};${aPart}`, "-map", "[vout]", "-map", "[aout]");
-            args.push(...vEncArgs, ...aEncArgs, "-shortest", outName);
-          }
-          try {
-            await ff.exec(args);
-          } catch {
-            // Fallback 1: vídeo sem trilha de áudio → ignora [0:a] e usa apenas anullsrc do lavfi
-            const fbArgs: string[] = ["-i", inName, "-ss", c.inPoint.toFixed(3), "-t", to,
-              "-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"];
-            if (filter.type === "vf") fbArgs.push("-vf", filter.value, "-map", "0:v", "-map", "1:a");
-            else fbArgs.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "1:a");
-            fbArgs.push(...vEncArgs, ...aEncArgs, "-shortest", outName);
-            try {
-              await ff.exec(fbArgs);
-            } catch {
-              // Fallback 2: seek rápido (tolerante a arquivos com índice/keyframes incompletos)
-              const fb2: string[] = ["-ss", c.inPoint.toFixed(3), "-i", inName, "-t", to,
-                "-f", "lavfi", "-t", to, "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"];
-              if (filter.type === "vf") fb2.push("-vf", filter.value, "-map", "0:v", "-map", "1:a");
-              else fb2.push("-filter_complex", filter.value, "-map", "[vout]", "-map", "1:a");
-              fb2.push(...vEncArgs, ...aEncArgs, "-shortest", outName);
-              await ff.exec(fb2);
-            }
-          }
-          await ff.deleteFile(inName);
-          inputs.push(outName);
-        }
-        setExportMsg("Juntando clipes...");
-        if (inputs.length === 1) {
-          await ff.exec(["-i", inputs[0], "-c", "copy", "joined.mp4"]);
-        } else {
-          const list = inputs.map(n => `file '${n}'`).join("\n");
-          await ff.writeFile("list.txt", new TextEncoder().encode(list));
-          // -c copy: streams já em H.264/AAC com mesmos params → concat sem re-encode
-          await ff.exec(["-f", "concat", "-safe", "0", "-i", "list.txt",
-            "-c", "copy", "joined.mp4"]);
-        }
-      }
-
+      setExportMsg(`Aceleração: ${sup.hw === "prefer-hardware" ? "GPU" : "software-otimizado"} (${sup.codec})`);
+      setExportLog([
+        `=== EXPORT WEBCODECS ===`,
+        `Codec: ${sup.codec} · Aceleração: ${sup.hw}`,
+        `Resolução: ${targetW}x${targetH} · ${fps} fps · ${vKbps} kbps`,
+        `Áudio: AAC ${aKbps} kbps`,
+      ]);
+      const textItems = items.filter(i => i.kind === "text" && i.text?.content);
       const music = audioClips[0];
-      setExportMsg("Renderizando saída...");
-      const finalArgs: string[] = ["-i", "joined.mp4"];
-      const overlayInputs: Array<{ item: TLItem; name: string; index: number }> = [];
-      for (const img of imageOverlayItems) {
-        if (!img.file) continue;
-        const ext = (img.file.name.split(".").pop() || "png").toLowerCase();
-        const name = `ov_${overlayInputs.length}.${ext}`;
-        await ff.writeFile(name, await fetchFile(img.file));
-        overlayInputs.push({ item: img, name, index: overlayInputs.length + 1 });
-        finalArgs.push("-loop", "1", "-framerate", String(fps), "-t", Math.max(0.1, totalDuration).toFixed(3), "-i", name);
-      }
-      const musicInputIndex = overlayInputs.length + 1;
-      if (music) {
-        if (!music.file) throw new Error(`Áudio sem arquivo original: ${music.name}`);
-        await ff.writeFile("bgm.bin", await fetchFile(music.file)); finalArgs.push("-i", "bgm.bin");
-      }
-      const filterParts: string[] = [];
-      let videoLabel = "0:v";
-      overlayInputs.forEach((ov, idx) => {
-        const it = ov.item;
-        const dur = it.outPoint - it.inPoint;
-        const end = it.start + dur;
-        const box = exportImageOverlayBox(it, targetW, targetH);
-        const alpha = Math.max(0, Math.min(1, (it.fx?.opacity ?? 100) / 100));
-        const fades = [
-          it.fadeIn && it.fadeIn > 0.01 ? `fade=t=in:st=${it.start.toFixed(3)}:d=${it.fadeIn.toFixed(3)}:alpha=1` : null,
-          it.fadeOut && it.fadeOut > 0.01 ? `fade=t=out:st=${Math.max(it.start, end - it.fadeOut).toFixed(3)}:d=${it.fadeOut.toFixed(3)}:alpha=1` : null,
-        ].filter(Boolean).join(",");
-        const inputLabel = it.fx?.fillMode === "blur" || it.fx?.fillMode === "mirror" ? `ovsrc${idx}` : `${ov.index}:v`;
-        const overlayBlur = visualBlurSigma(it.fx, targetH);
-        const overlayFx = overlayBlur > 0 ? `,gblur=sigma=${overlayBlur.toFixed(1)}:steps=1` : "";
-        if (it.fx?.fillMode === "blur" || it.fx?.fillMode === "mirror") {
-          filterParts.push(`[${ov.index}:v]split=2[ovbgsrc${idx}][ovsrc${idx}]`);
-          const bgCore = `scale=${targetW}:${targetH}:force_original_aspect_ratio=increase,crop=${targetW}:${targetH}`;
-          const bgFx = it.fx.fillMode === "blur" ? `${bgCore},gblur=sigma=${blurSigma(it.fx, targetH).toFixed(1)}:steps=3` : `${bgCore},hflip`;
-          const bgLabel = `imgbg${idx}`;
-          const bgOut = `vbg${idx}`;
-          filterParts.push(`[ovbgsrc${idx}]${bgFx},format=rgba,colorchannelmixer=aa=${alpha.toFixed(3)}${fades ? `,${fades}` : ""}[${bgLabel}]`);
-          filterParts.push(`[${videoLabel}][${bgLabel}]overlay=0:0:enable='between(t,${it.start.toFixed(3)},${end.toFixed(3)})'[${bgOut}]`);
-          videoLabel = bgOut;
-        }
-        const imgLabel = `img${idx}`;
-        filterParts.push(`[${inputLabel}]scale=${box.w}:${box.h}${overlayFx},format=rgba,colorchannelmixer=aa=${alpha.toFixed(3)}${fades ? `,${fades}` : ""}[${imgLabel}]`);
-        const out = `vov${idx}`;
-        filterParts.push(`[${videoLabel}][${imgLabel}]overlay=${box.x}:${box.y}:enable='between(t,${it.start.toFixed(3)},${end.toFixed(3)})'[${out}]`);
-        videoLabel = out;
+      const blob = await exportWithWebCodecs({
+        v1clips: v1clips as unknown as import("@/lib/webcodecs-export").WCItem[],
+        audioClips: audioClips as unknown as import("@/lib/webcodecs-export").WCItem[],
+        music: music as unknown as import("@/lib/webcodecs-export").WCItem | undefined,
+        imageItems: imageOverlayItems as unknown as import("@/lib/webcodecs-export").WCItem[],
+        textItems: textItems as unknown as import("@/lib/webcodecs-export").WCItem[],
+        targetW, targetH,
+        fps, vKbps, aKbps, totalDuration: Math.max(0.1, totalDuration),
+        onProgress: (p) => setExportPct(p),
+        onMessage: (m) => setExportMsg(m),
+        onLog: (l) => setExportLog(prev => [...prev, l].slice(-500)),
       });
-      const firstText = items.find(i => i.kind === "text" && i.text?.content);
-      if (firstText && firstText.text) {
-        const t = firstText.text;
-        const y = `${Math.round((firstText.transform?.yPct ?? 80) / 100 * targetH - t.size / 2)}`;
-        const esc = t.content.replace(/\\/g, "\\\\").replace(/:/g, "\\:").replace(/'/g, "\\'");
-        filterParts.push(`[${videoLabel}]drawtext=text='${esc}':fontcolor=${t.color}:fontsize=${t.size}:x=(w-text_w)/2:y=${y}:box=1:boxcolor=black@0.4:boxborderw=12[vtext]`);
-        videoLabel = "vtext";
-      }
-      if (music) {
-        const ducker = v1clips.length ? 0.4 : 1.0;
-        const musicChain = buildAudioFilterChain(music.audioFx, music.gainDb ?? 0);
-        // ducker aplicado depois (não somar dB), aloop infinito
-        const musicFilters = [...musicChain, `volume=${ducker.toFixed(3)}`, "aloop=loop=-1:size=2e9"].join(",");
-        filterParts.push(`[0:a]volume=1[a0];[${musicInputIndex}:a]${musicFilters}[a1];[a0][a1]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`);
-      }
-
-      const needsReencode = filterParts.length > 0 || !!music;
-      if (filterParts.length) {
-        finalArgs.push("-filter_complex", filterParts.join(";"));
-        finalArgs.push("-map", videoLabel === "0:v" ? "0:v" : `[${videoLabel}]`, "-map", music ? "[aout]" : "0:a");
-      }
-
-      if (needsReencode) {
-        finalArgs.push(...vEncArgs, ...aEncArgs);
-      } else {
-        // sem texto/música → remux puro (quase instantâneo)
-        finalArgs.push("-c", "copy");
-      }
-      finalArgs.push("-movflags", "+faststart", "-shortest", "output.mp4");
-      setExportFfCmd("ffmpeg " + finalArgs.map(a => a.includes(" ") ? `"${a}"` : a).join(" "));
-      await ff.exec(finalArgs);
-
-      const data = (await ff.readFile("output.mp4")) as Uint8Array;
-      const buf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
-      const blob = new Blob([buf], { type: "video/mp4" });
       const url = URL.createObjectURL(blob);
       const sizeMB = blob.size / (1024 * 1024);
       const fileName = `${exportFileName || "video"}.mp4`;
@@ -2133,14 +1754,6 @@ function Editor() {
       setExportMsg("Pronto!"); setExportPct(1);
       setExportHistory(h => [{ url, name: fileName, at: Date.now(), sizeMB }, ...h].slice(0, 8));
 
-      for (const n of inputs) await ff.deleteFile(n).catch(() => {});
-      await ff.deleteFile("list.txt").catch(() => {});
-      await ff.deleteFile("joined.mp4").catch(() => {});
-      await ff.deleteFile("output.mp4").catch(() => {});
-      for (const ov of overlayInputs) await ff.deleteFile(ov.name).catch(() => {});
-      if (music) await ff.deleteFile("bgm.bin").catch(() => {});
-
-      // Post-export actions
       if (postBeep) {
         try {
           const Ctx = (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
@@ -2163,15 +1776,9 @@ function Editor() {
         }, 200);
       }
     } catch (e) {
-      const tail = logs.slice(-6).join("\n");
-      console.error("[export] FFmpeg falhou:", e, "\nÚltimos logs:\n", tail);
+      console.error("[export] WebCodecs falhou:", e);
       const baseMsg = e instanceof Error ? e.message : "Falha na exportação";
-      setFfLoading(false);
-      if (/ffmpeg/i.test(baseMsg)) {
-        setFfReady(false);
-        setFfLoadError(baseMsg);
-      }
-      setError(`${baseMsg}${tail ? `\n\nDetalhes:\n${tail}` : ""}`);
+      setError(baseMsg);
       setExportMsg("Erro");
     } finally {
       setExporting(false);
@@ -3444,36 +3051,22 @@ function Editor() {
               <div className="md:col-span-2">
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Motor de exportação</label>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
-                  {([
-                    { k: "auto", label: "Automático", hint: "Usa hardware quando disponível, senão WASM" },
-                    { k: "webcodecs", label: "WebCodecs (Hardware)", hint: "NVENC/QuickSync/VideoToolbox · até 20× mais rápido" },
-                    { k: "wasm", label: "FFmpeg WASM (Software)", hint: "Compatível com todos os navegadores" },
-                  ] as const).map(o => {
-                    const disabled = o.k === "webcodecs" && webcodecsAvailable === false;
-                    return (
-                      <button key={o.k} onClick={() => setExportEngine(o.k)} title={o.hint} disabled={disabled}
-                        className={`rounded-md border px-3 py-1.5 text-xs ${exportEngine === o.k ? "border-primary bg-primary/15 text-primary" : "border-border bg-background hover:border-ring/50"} ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}>
-                        {o.label}
-                      </button>
-                    );
-                  })}
+                  <span className="rounded-md border border-primary bg-primary/15 px-3 py-1.5 text-xs text-primary">
+                    WebCodecs (Hardware) — NVENC/QuickSync/VideoToolbox
+                  </span>
                   <span className="ml-auto text-[11px] text-muted-foreground">
                     {webcodecsAvailable === null ? "Detectando suporte..." :
-                      webcodecsAvailable ? `WebCodecs disponível${webcodecsProbeInfo ? ` · ${webcodecsProbeInfo}` : ""}` :
-                      `WebCodecs indisponível${webcodecsProbeInfo ? ` · ${webcodecsProbeInfo}` : ""}`}
+                      webcodecsAvailable ? `Disponível${webcodecsProbeInfo ? ` · ${webcodecsProbeInfo}` : ""}` :
+                      `Indisponível neste navegador${webcodecsProbeInfo ? ` · ${webcodecsProbeInfo}` : ""}`}
                   </span>
                 </div>
               </div>
-
-
 
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Codec de vídeo</label>
                 <select value={exportCodec} onChange={(e) => setExportCodec(e.target.value as Codec)}
                   className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm">
                   <option value="h264">H.264 (Recomendado)</option>
-                  <option value="h265">H.265 / HEVC — indisponível no WASM</option>
-                  <option value="vp9">VP9 — indisponível no WASM</option>
                 </select>
               </div>
               <div>
@@ -3518,13 +3111,9 @@ function Editor() {
               </div>
 
               <div className="md:col-span-2 rounded-md border border-border bg-background/60 p-3">
-                <label className="flex cursor-pointer items-center gap-2 text-sm">
-                  <input type="checkbox" checked={useGpu} onChange={(e) => setUseGpu(e.target.checked)} />
-                  <Cpu className="h-4 w-4" /> Usar aceleração por hardware (GPU)
-                </label>
-                <div className="mt-1 flex items-start gap-1.5 text-[11px] text-muted-foreground">
+                <div className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
                   <Info className="mt-0.5 h-3 w-3 shrink-0" />
-                  <span>Detectado: <span className="text-foreground">{(gpuInfoRef.current?.vendor) ?? "GPU não detectada"}</span>. O FFmpeg WASM roda no navegador e não acessa NVENC/QSV/VCE — o encode será feito em CPU automaticamente.</span>
+                  <span>Renderização 100% via WebCodecs. GPU detectada: <span className="text-foreground">{gpuInfoRef.current?.vendor ?? "—"}</span>. A aceleração por hardware (NVENC/QuickSync/VideoToolbox) é usada automaticamente quando disponível.</span>
                 </div>
               </div>
 
@@ -3611,15 +3200,11 @@ function Editor() {
               </div>
               <div className="mt-3 flex gap-2">
                 <button
-                  onClick={async () => {
-                    try { const ff = await getFFmpeg(); ff.terminate(); } catch { /* ignore */ }
-                    resetFFmpeg();
-                    setFfReady(false);
-                    void getFFmpeg().then(() => setFfReady(true)).catch((err) => console.error("FFmpeg não recarregou após cancelar.", err));
+                  onClick={() => {
                     setExporting(false); setExportPct(0); setExportMsg("");
                     setExportLog(prev => [...prev, "Processo encerrado."]);
                     console.warn("[EXPORT] Processo encerrado pelo usuário.");
-                    setError("Exportação cancelada — processo FFmpeg encerrado.");
+                    setError("Exportação cancelada.");
                     if (exportElapsedTimerRef.current) { window.clearInterval(exportElapsedTimerRef.current); exportElapsedTimerRef.current = null; }
                   }}
                   className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-border bg-muted px-4 py-2 text-sm font-medium hover:bg-muted/70"

@@ -331,7 +331,8 @@ function* iterAudioChunks(buf: AudioBuffer, chunkFrames: number) {
 }
 
 export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> {
-  const { targetW, targetH, fps, vKbps, aKbps, totalDuration, v1clips, textItem } = opts;
+  const { targetW, targetH, fps, vKbps, aKbps, totalDuration, v1clips } = opts;
+  const textItems: WCItem[] = opts.textItems ?? (opts.textItem ? [opts.textItem] : []);
   const log = (m: string) => { opts.onLog?.(m); };
   const msg = (m: string) => { opts.onMessage?.(m); };
 

@@ -2026,6 +2026,9 @@ function Editor() {
       const dur = a.duration ?? (a.kind === "image" ? 5 : 5);
       cursor += dur;
     }
+  };
+
+
 
 
   return (

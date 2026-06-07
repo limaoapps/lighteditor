@@ -1272,7 +1272,7 @@ function Editor() {
         }), false);
       } else if (d.type === "gain") {
         const dyPx = clientY - d.baseY;
-        const db = Math.max(-30, Math.min(12, d.baseDb - dyPx * 0.25));
+        const db = Math.max(-30, Math.min(30, d.baseDb - dyPx * 0.25));
         setItems(prev => prev.map(i => i.id === d.id ? { ...i, gainDb: db } : i), false);
       }
     };

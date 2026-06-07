@@ -277,6 +277,12 @@ function bitrateFromMode(q: Quality, mode: BitrateMode, custom: number): number 
   if (mode === "high")   return Math.round(base * 1.6);
   return base; // medium
 }
+function formatFadeLabel(sec: number): string {
+  if (!sec || sec < 0.0005) return "0 ms";
+  if (sec < 1) return `${Math.round(sec * 1000)} ms`;
+  if (sec < 10) return `${sec.toFixed(2)} s`;
+  return `${sec.toFixed(1)} s`;
+}
 function estimateSizeMB(durationSec: number, vKbps: number, aKbps: number): number {
   const bits = (vKbps + aKbps) * 1000 * Math.max(0.1, durationSec);
   return bits / 8 / (1024 * 1024);
@@ -2392,14 +2398,36 @@ function Editor() {
                               <div data-handle="R" onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); const end = i.start + (i.outPoint - i.inPoint); const time = getTimelineTimeFromClientX(e.clientX) ?? end; skipHistory.current = true; lastTimelinePointer.current = { x: e.clientX, y: e.clientY }; dragRef.current = { type: "resizeR", id: i.id, origOut: i.outPoint, pointerOffsetPx: (time - end) * zoom }; }}
                                 className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-ew-resize bg-white/40 hover:bg-white" />
 
-                              <div data-handle="FI" title="Fade in (arraste à direita)"
+                              <div data-handle="FI" title={`Fade in: ${formatFadeLabel(i.fadeIn ?? 0)} (arraste à direita)`}
                                 onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "fadeIn", id: i.id }; }}
                                 className="absolute left-2 top-1 z-20 h-3 w-3 cursor-ew-resize rounded-full bg-white opacity-0 ring-1 ring-black/50 group-hover/clip:opacity-90"
                                 style={{ left: Math.max(4, fiW - 6) }} />
-                              <div data-handle="FO" title="Fade out (arraste à esquerda)"
+                              <div data-handle="FO" title={`Fade out: ${formatFadeLabel(i.fadeOut ?? 0)} (arraste à esquerda)`}
                                 onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "fadeOut", id: i.id }; }}
                                 className="absolute top-1 z-20 h-3 w-3 cursor-ew-resize rounded-full bg-white opacity-0 ring-1 ring-black/50 group-hover/clip:opacity-90"
                                 style={{ right: Math.max(4, foW - 6) }} />
+                              {(i.fadeIn ?? 0) > 0.005 && (
+                                <div className="pointer-events-none absolute top-3.5 z-20 whitespace-nowrap rounded bg-black/80 px-1 text-[9px] font-mono tabular-nums text-white opacity-0 ring-1 ring-white/20 group-hover/clip:opacity-100"
+                                  style={{ left: Math.max(2, fiW - 6) }}>
+                                  {formatFadeLabel(i.fadeIn ?? 0)}
+                                </div>
+                              )}
+                              {(i.fadeOut ?? 0) > 0.005 && (
+                                <div className="pointer-events-none absolute top-3.5 z-20 whitespace-nowrap rounded bg-black/80 px-1 text-[9px] font-mono tabular-nums text-white opacity-0 ring-1 ring-white/20 group-hover/clip:opacity-100"
+                                  style={{ right: Math.max(2, foW - 6) }}>
+                                  {formatFadeLabel(i.fadeOut ?? 0)}
+                                </div>
+                              )}
+                              {(() => {
+                                const d = dragRef.current;
+                                if (!d || (d.type !== "fadeIn" && d.type !== "fadeOut") || d.id !== i.id) return null;
+                                return (
+                                  <div className="pointer-events-none absolute -top-5 z-30 whitespace-nowrap rounded bg-primary px-1.5 py-0.5 text-[10px] font-mono tabular-nums text-primary-foreground shadow"
+                                    style={d.type === "fadeIn" ? { left: Math.max(0, fiW - 14) } : { right: Math.max(0, foW - 14) }}>
+                                    {d.type === "fadeIn" ? `Fade in ${formatFadeLabel(i.fadeIn ?? 0)}` : `Fade out ${formatFadeLabel(i.fadeOut ?? 0)}`}
+                                  </div>
+                                );
+                              })()}
 
                               {isAudio && (
                                 <div data-handle="G" title={`Ganho: ${(i.gainDb ?? 0).toFixed(1)}dB (arraste vertical)`}

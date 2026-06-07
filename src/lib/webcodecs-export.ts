@@ -72,26 +72,35 @@ const AVC_CODECS = [
   "avc1.42e01f",
 ];
 
-export async function isWebCodecsExportSupported(targetW: number, targetH: number, fps: number, vKbps: number): Promise<{ ok: boolean; codec?: string; hw?: HardwareAcceleration; reason?: string }> {
+export async function isWebCodecsExportSupported(targetW: number, targetH: number, fps: number, vKbps: number): Promise<{ ok: boolean; codec?: string; hw?: HardwareAcceleration; bitrateMode?: "constant" | "variable"; latencyMode?: "quality" | "realtime"; reason?: string }> {
   if (typeof window === "undefined") return { ok: false, reason: "SSR" };
   if (typeof VideoEncoder === "undefined" || typeof AudioEncoder === "undefined") {
     return { ok: false, reason: "WebCodecs indisponível neste navegador" };
   }
   for (const codec of AVC_CODECS) {
     for (const hw of ["prefer-hardware", "no-preference"] as const) {
-      try {
-        const r = await VideoEncoder.isConfigSupported({
-          codec,
-          width: targetW,
-          height: targetH,
-          bitrate: vKbps * 1000,
-          framerate: fps,
-          hardwareAcceleration: hw,
-          avc: { format: "avc" },
-        });
-        if (r?.supported) return { ok: true, codec, hw };
-      } catch {
-        /* try next */
+      // Tenta primeiro com VBR + quality, depois cai para defaults (mais compatível).
+      const variants: Array<{ bitrateMode?: "constant" | "variable"; latencyMode?: "quality" | "realtime" }> = [
+        { bitrateMode: "variable", latencyMode: "quality" },
+        { bitrateMode: "variable" },
+        {},
+      ];
+      for (const v of variants) {
+        try {
+          const r = await VideoEncoder.isConfigSupported({
+            codec,
+            width: targetW,
+            height: targetH,
+            bitrate: vKbps * 1000,
+            framerate: fps,
+            hardwareAcceleration: hw,
+            avc: { format: "avc" },
+            ...v,
+          });
+          if (r?.supported) return { ok: true, codec, hw, ...v };
+        } catch {
+          /* try next */
+        }
       }
     }
   }
@@ -320,22 +329,23 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
 
   // ====== VIDEO ENCODER ======
   let vEncError: unknown = null;
+  let videoChunksOut = 0;
   const vEnc: VideoEncoder = new VideoEncoder({
-    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+    output: (chunk, meta) => { videoChunksOut++; muxer.addVideoChunk(chunk, meta); },
     error: (e: unknown) => { vEncError = e; log(`[wc] vEnc erro: ${String(e)}`); },
   });
-  vEnc.configure({
+  const configBase: VideoEncoderConfig = {
     codec: support.codec!,
     width: targetW,
     height: targetH,
     bitrate: vKbps * 1000,
     framerate: fps,
     hardwareAcceleration: support.hw,
-    // VBR + quality mode = arquivo menor mantendo qualidade visual
-    bitrateMode: "variable",
-    latencyMode: "quality",
     avc: { format: "avc" },
-  });
+  };
+  if (support.bitrateMode) configBase.bitrateMode = support.bitrateMode;
+  if (support.latencyMode) configBase.latencyMode = support.latencyMode;
+  vEnc.configure(configBase);
 
   // ====== CANVAS ======
   const canvas = new OffscreenCanvas(targetW, targetH);
@@ -453,6 +463,11 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
 
   await vEnc.flush();
   vEnc.close();
+  if (vEncError) throw new Error(`Encoder de vídeo falhou: ${String(vEncError)}`);
+  if (videoChunksOut === 0) {
+    throw new Error("WebCodecs não emitiu chunks de vídeo (provável incompatibilidade do navegador)");
+  }
+  log(`[wc] vídeo: ${videoChunksOut} chunks emitidos`);
 
   // libera elementos de vídeo
   for (const v of videoEls.values()) { try { v.pause(); v.src = ""; v.load(); } catch { /* ignore */ } }

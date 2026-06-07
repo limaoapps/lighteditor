@@ -54,12 +54,13 @@ const REVERB_SPECS: Record<Exclude<ReverbPreset, "none">, IRSpec> = {
   plate:      { duration: 1.5, decay: 2.6, predelay: 0.005, brightness: 0.9 },
   cathedral:  { duration: 4.5, decay: 1.6, predelay: 0.040, brightness: 0.35 },
 };
+// Ambientes mais pronunciados — caverna bem "cavernosa", subterrâneo bem "abafado".
 const AMBIENCE_SPECS: Record<Exclude<Ambience, "none">, IRSpec & { wet: number }> = {
-  room:        { duration: 0.4, decay: 4.0, predelay: 0.005, brightness: 0.7, wet: 0.18 },
-  hall:        { duration: 1.8, decay: 2.4, predelay: 0.020, brightness: 0.5, wet: 0.25 },
-  cave:        { duration: 3.2, decay: 1.8, predelay: 0.030, brightness: 0.3, wet: 0.32 },
-  outdoor:     { duration: 0.3, decay: 5.0, predelay: 0.000, brightness: 0.9, wet: 0.10 },
-  underwater:  { duration: 1.0, decay: 2.5, predelay: 0.000, brightness: 0.18, wet: 0.45 },
+  room:        { duration: 0.5, decay: 3.5, predelay: 0.008, brightness: 0.65, wet: 0.28 },
+  hall:        { duration: 2.4, decay: 1.8, predelay: 0.025, brightness: 0.45, wet: 0.45 },
+  cave:        { duration: 5.5, decay: 0.9, predelay: 0.060, brightness: 0.18, wet: 0.75 },
+  outdoor:     { duration: 0.35, decay: 4.5, predelay: 0.000, brightness: 0.95, wet: 0.18 },
+  underwater:  { duration: 2.2, decay: 1.4, predelay: 0.000, brightness: 0.08, wet: 0.85 },
 };
 
 /** Gera IR sintético (ruído com decaimento exponencial). */
@@ -282,19 +283,26 @@ export function buildAudioFilterChain(
       out.push(`aecho=0.8:${og}:${p.delays}:${p.decays}`);
     }
   }
-  // Ambience (mesma técnica, mais sutil)
+  // Ambience (mais pronunciado: caverna e subterrâneo bem perceptíveis)
   if (fx?.ambience && fx.ambience !== "none") {
-    const ambMap: Record<string, { delays: string; decays: string }> = {
-      room:       { delays: "30|50",          decays: "0.25|0.15" },
-      hall:       { delays: "80|180|260",     decays: "0.4|0.25|0.15" },
-      cave:       { delays: "100|220|400|620", decays: "0.5|0.4|0.3|0.2" },
-      outdoor:    { delays: "20",             decays: "0.1" },
-      underwater: { delays: "40|80|120",      decays: "0.5|0.4|0.3" },
+    const ambMap: Record<string, { delays: string; decays: string; gain: number }> = {
+      room:       { delays: "30|50",                  decays: "0.35|0.25",            gain: 0.7 },
+      hall:       { delays: "80|180|260|360",         decays: "0.55|0.4|0.3|0.2",     gain: 0.8 },
+      cave:       { delays: "120|260|450|720|1000|1400", decays: "0.7|0.6|0.5|0.4|0.3|0.2", gain: 0.95 },
+      outdoor:    { delays: "20",                     decays: "0.1",                  gain: 0.6 },
+      underwater: { delays: "60|140|220|320",         decays: "0.7|0.55|0.4|0.3",     gain: 0.9 },
     };
     const p = ambMap[fx.ambience];
-    if (p) out.push(`aecho=0.8:0.7:${p.delays}:${p.decays}`);
+    if (p) out.push(`aecho=0.8:${p.gain.toFixed(2)}:${p.delays}:${p.decays}`);
     if (fx.ambience === "underwater") {
-      out.push("lowpass=f=900");
+      // Som "submerso" bem fechado: passa-baixa agressiva + corte de agudos
+      out.push("lowpass=f=450");
+      out.push("highpass=f=80");
+    }
+    if (fx.ambience === "cave") {
+      // Reforça os médios-graves típicos de caverna
+      out.push("lowpass=f=2200");
+      out.push("equalizer=f=180:width_type=o:width=1.4:g=4");
     }
   }
   // Ganho (>0 dB permitido — até +30dB ou mais)

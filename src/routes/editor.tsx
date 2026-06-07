@@ -1872,11 +1872,52 @@ function Editor() {
 
   // ---- Drag from Media to Timeline ----
   const onTrackDragOver = (e: React.DragEvent) => {
-    if (e.dataTransfer.types.includes("application/x-vle-media") || e.dataTransfer.types.includes(EFFECT_DND_TYPE)) {
+    if (
+      e.dataTransfer.types.includes("application/x-vle-media") ||
+      e.dataTransfer.types.includes(EFFECT_DND_TYPE) ||
+      e.dataTransfer.types.includes("application/x-lle-transition")
+    ) {
       e.preventDefault(); e.dataTransfer.dropEffect = "copy";
     }
   };
   const onTrackDrop = (e: React.DragEvent, trackId: string) => {
+    const transitionId = e.dataTransfer.getData("application/x-lle-transition");
+    if (transitionId) {
+      e.preventDefault();
+      const preset = TRANSITION_GROUPS.flatMap(g => g.items).find(t => t.id === transitionId);
+      const dur = preset?.dur ?? 0.6;
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const xPx = e.clientX - rect.left;
+      const t = Math.max(0, xPx / zoom);
+      const trackItems = items.filter(i => i.trackId === trackId).sort((a, b) => a.start - b.start);
+      // procura par adjacente cujo ponto de junção esteja perto do drop
+      let left: typeof trackItems[number] | undefined;
+      let right: typeof trackItems[number] | undefined;
+      let bestDist = Infinity;
+      for (let k = 0; k < trackItems.length - 1; k++) {
+        const a = trackItems[k];
+        const b = trackItems[k + 1];
+        const aEnd = a.start + (a.outPoint - a.inPoint);
+        // considera junção quando clipes estão encostados (gap pequeno) e drop próximo da borda
+        const gap = b.start - aEnd;
+        const junction = (aEnd + b.start) / 2;
+        const d = Math.abs(t - junction);
+        if (Math.abs(gap) < 0.25 && d < bestDist) { bestDist = d; left = a; right = b; }
+      }
+      if (left && right) {
+        setItems(p => p.map(i =>
+          i.id === left!.id ? { ...i, fadeOut: dur, transition: transitionId } :
+          i.id === right!.id ? { ...i, fadeIn: dur, transition: transitionId } : i
+        ));
+        return;
+      }
+      // fallback: aplica no clipe sob o cursor
+      const hit = trackItems.find(i => t >= i.start && t <= i.start + (i.outPoint - i.inPoint));
+      if (hit) {
+        setItems(p => p.map(i => i.id === hit.id ? { ...i, fadeIn: dur, fadeOut: dur, transition: transitionId } : i));
+      }
+      return;
+    }
     const effectId = e.dataTransfer.getData(EFFECT_DND_TYPE) as TimelineEffectId;
     if (effectId) {
       e.preventDefault();

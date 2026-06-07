@@ -1397,6 +1397,8 @@ function Editor() {
   }, [previewAR]);
 
   const startMove = (id: string, e: React.MouseEvent, tr: Transform) => {
+    const tgt = e.target as HTMLElement | null;
+    if (tgt && tgt.closest?.('[data-handle="resize"]')) return;
     e.stopPropagation();
     setSelectedId(id);
     const previewBox = previewBoxRef.current;

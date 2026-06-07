@@ -1784,16 +1784,17 @@ function Editor() {
               {/* Background fill (blur/mirror) for V1 video */}
               {activeV1Video && (() => {
                 const fx = activeV1Video.fx;
-                return hasBackgroundFill(fx) ? (
+                if (!fx || !hasBackgroundFill(fx)) return null;
+                return (
                   <video
-                    key={`bg-${activeV1Video.id}-${fx!.fillMode}`}
+                    key={`bg-${activeV1Video.id}-${fx.fillMode}`}
                     ref={videoBgElRef}
                     src={activeV1Video.url}
                     muted playsInline
                     className="pointer-events-none absolute inset-0 h-full w-full"
-                    style={backgroundFillStyle(fx!)}
+                    style={backgroundFillStyle(fx)}
                   />
-                ) : null;
+                );
               })()}
               {(() => {
                 const tr = activeV1Video?.transform;
@@ -2524,8 +2525,8 @@ function Editor() {
                     {fx.zoom && (
                       <div className="grid grid-cols-3 gap-1">
                         {(["slow","med","fast"] as const).map(s => (
-                          <button key={s} onClick={() => patchFx({ zoom: { dir: fx.zoom!.dir, speed: s } })}
-                            className={`rounded border px-1.5 py-1 text-[10px] ${fx.zoom!.speed === s ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                          <button key={s} onClick={() => fx.zoom && patchFx({ zoom: { dir: fx.zoom.dir, speed: s } })}
+                            className={`rounded border px-1.5 py-1 text-[10px] ${fx.zoom.speed === s ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
                             {s === "slow" ? "Lenta" : s === "med" ? "Média" : "Rápida"}
                           </button>
                         ))}

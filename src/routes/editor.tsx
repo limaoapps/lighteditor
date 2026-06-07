@@ -2418,12 +2418,16 @@ function Editor() {
                                   {formatFadeLabel(i.fadeOut ?? 0)}
                                 </div>
                               )}
-                              {dragRef.current?.id === i.id && (dragRef.current?.type === "fadeIn" || dragRef.current?.type === "fadeOut") && (
-                                <div className="pointer-events-none absolute -top-5 z-30 whitespace-nowrap rounded bg-primary px-1.5 py-0.5 text-[10px] font-mono tabular-nums text-primary-foreground shadow"
-                                  style={dragRef.current?.type === "fadeIn" ? { left: Math.max(0, fiW - 14) } : { right: Math.max(0, foW - 14) }}>
-                                  {dragRef.current?.type === "fadeIn" ? `Fade in ${formatFadeLabel(i.fadeIn ?? 0)}` : `Fade out ${formatFadeLabel(i.fadeOut ?? 0)}`}
-                                </div>
-                              )}
+                              {(() => {
+                                const d = dragRef.current;
+                                if (!d || (d.type !== "fadeIn" && d.type !== "fadeOut") || d.id !== i.id) return null;
+                                return (
+                                  <div className="pointer-events-none absolute -top-5 z-30 whitespace-nowrap rounded bg-primary px-1.5 py-0.5 text-[10px] font-mono tabular-nums text-primary-foreground shadow"
+                                    style={d.type === "fadeIn" ? { left: Math.max(0, fiW - 14) } : { right: Math.max(0, foW - 14) }}>
+                                    {d.type === "fadeIn" ? `Fade in ${formatFadeLabel(i.fadeIn ?? 0)}` : `Fade out ${formatFadeLabel(i.fadeOut ?? 0)}`}
+                                  </div>
+                                );
+                              })()}
 
                               {isAudio && (
                                 <div data-handle="G" title={`Ganho: ${(i.gainDb ?? 0).toFixed(1)}dB (arraste vertical)`}

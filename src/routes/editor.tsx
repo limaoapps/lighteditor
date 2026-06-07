@@ -588,6 +588,8 @@ function Editor() {
   const lastExportSettingsRef = useRef<null | (() => void)>(null);
   const gpuInfoRef = useRef<{ available: boolean; vendor: string } | null>(null);
   const [exportHistory, setExportHistory] = useState<Array<{ url: string; name: string; at: number; sizeMB: number }>>([]);
+  const [diagRunning, setDiagRunning] = useState<null | "version" | "simple">(null);
+  const [diagResult, setDiagResult] = useState<string>("");
 
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; clipId: string | null } | null>(null);
   const [mediaCtx, setMediaCtx] = useState<{ x: number; y: number; mediaId: string } | null>(null);
@@ -1229,6 +1231,99 @@ function Editor() {
     [totalDuration, computedVBitrate, audioBitrate],
   );
 
+  // ---- DIAGNÓSTICO ----
+  const runFfmpegVersionTest = async () => {
+    setDiagRunning("version"); setDiagResult("");
+    const lines: string[] = [`[diag] Carregando FFmpeg WASM...`];
+    try {
+      const ff = await getFFmpeg();
+      const onL = ({ message }: { message: string }) => { lines.push(message); };
+      ff.on("log", onL);
+      try {
+        // Force engine to print banner/version by invoking with no args (exits 1, mas imprime versão)
+        await ff.exec(["-version"]).catch(() => {});
+      } finally {
+        ff.off("log", onL);
+      }
+      lines.push(`[diag] OK — engine carregado.`);
+      console.log("%c[FFMPEG VERSION TEST]", "color:#22d3ee", lines.join("\n"));
+      setDiagResult(lines.join("\n"));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const out = `FFmpeg não encontrado / falha ao carregar.\n${msg}\n${lines.join("\n")}`;
+      console.error("[FFMPEG VERSION TEST]", out);
+      setDiagResult(out);
+    } finally {
+      setDiagRunning(null);
+    }
+  };
+
+  const runSimpleExportTest = async () => {
+    setDiagRunning("simple"); setDiagResult("");
+    const v1trackId = tracks.find(t => t.kind === "video")?.id;
+    const firstClip = items
+      .filter(i => i.trackId === v1trackId && (i.kind === "video" || i.kind === "image"))
+      .sort((a, b) => a.start - b.start)[0];
+    if (!firstClip || !firstClip.file) {
+      setDiagResult("Nenhum vídeo/imagem na timeline para testar.");
+      setDiagRunning(null); return;
+    }
+    const lines: string[] = [
+      `[teste] Clipe: ${firstClip.file.name} (${firstClip.kind})`,
+      `[teste] Saída: teste.mp4 · 640x360 @ 30fps · libx264`,
+    ];
+    try {
+      const ff = await getFFmpeg();
+      const onL = ({ message }: { message: string }) => { lines.push(message); };
+      ff.on("log", onL);
+      const isImg = firstClip.kind === "image";
+      const ext = isImg ? (firstClip.file.name.split(".").pop() || "png").toLowerCase() : "bin";
+      await ff.writeFile(`tin.${ext}`, await fetchFile(firstClip.file));
+      const dur = Math.max(1, Math.min(3, firstClip.outPoint - firstClip.inPoint)).toFixed(2);
+      const args = isImg
+        ? ["-loop", "1", "-framerate", "30", "-t", dur, "-i", `tin.${ext}`,
+           "-vf", "scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2",
+           "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-t", dur, "teste.mp4"]
+        : ["-t", dur, "-i", `tin.${ext}`,
+           "-vf", "scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2",
+           "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-an", "teste.mp4"];
+      lines.push(`$ ffmpeg ${args.join(" ")}`);
+      await ff.exec(args);
+      const data = (await ff.readFile("teste.mp4")) as Uint8Array;
+      lines.push(`[teste] OK — arquivo gerado: ${(data.byteLength / 1024).toFixed(1)} KB`);
+      const buf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+      const url = URL.createObjectURL(new Blob([buf], { type: "video/mp4" }));
+      const a = document.createElement("a"); a.href = url; a.download = "teste.mp4";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      ff.off("log", onL);
+      await ff.deleteFile(`tin.${ext}`).catch(() => {});
+      await ff.deleteFile("teste.mp4").catch(() => {});
+      console.log("%c[SIMPLE EXPORT TEST]", "color:#22d3ee", lines.join("\n"));
+      setDiagResult(lines.join("\n"));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const out = `FALHA no teste de exportação.\n${msg}\n\n${lines.join("\n")}`;
+      console.error("[SIMPLE EXPORT TEST]", out);
+      setDiagResult(out);
+    } finally {
+      setDiagRunning(null);
+    }
+  };
+
+  const downloadExportLog = () => {
+    const content = [
+      `# export.log — ${new Date().toISOString()}`,
+      exportFfCmd ? `\n$ ${exportFfCmd}\n` : "",
+      ...exportLog,
+    ].join("\n");
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "export.log";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  };
+
   const doExport = async () => {
     const v1trackId = tracks.find(t => t.kind === "video")?.id;
     const v1clips = items
@@ -1263,6 +1358,30 @@ function Editor() {
     exportElapsedTimerRef.current = window.setInterval(() => {
       setExportElapsed((performance.now() - exportStartRef.current) / 1000);
     }, 250) as unknown as number;
+
+    // ===== DIAGNÓSTICO PRÉ-EXPORTAÇÃO =====
+    const _th = QUALITY_HEIGHT[quality];
+    const _tw = Math.round((_th * aspect.w) / aspect.h / 2) * 2;
+    const diag = [
+      `=== DIAGNÓSTICO DE EXPORTAÇÃO ===`,
+      `Arquivo: ${exportFileName || "video"}.mp4`,
+      `Pasta de saída: (download do navegador)`,
+      `Resolução: ${_tw}x${_th}`,
+      `FPS: ${fps}`,
+      `Codec solicitado: ${codecRequested} (engine: libx264 WASM)`,
+      `Bitrate vídeo: ${vKbps} kbps · áudio: ${aKbps} kbps`,
+      `Clipes vídeo/imagem na V1: ${items.filter(i => (i.kind === "video" || i.kind === "image")).length}`,
+      `Clipes áudio: ${items.filter(i => i.kind === "audio").length}`,
+      `Duração total: ${totalDuration.toFixed(2)}s`,
+      `FFmpeg core URL: https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd/ffmpeg-core.js`,
+      `User-Agent: ${navigator.userAgent}`,
+      `=================================`,
+      `Iniciando processo FFmpeg...`,
+    ];
+    console.group("%c[EXPORT DIAG]", "color:#22d3ee;font-weight:bold");
+    diag.forEach(l => console.log(l));
+    console.groupEnd();
+    setExportLog(diag);
 
     const logs: string[] = [];
     const onLog = ({ message }: { message: string }) => {
@@ -2520,6 +2639,31 @@ function Editor() {
               )}
             </div>
 
+            <div className="mt-6 rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+              <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-amber-300">
+                <FileText className="h-3.5 w-3.5" /> Diagnóstico
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => void runFfmpegVersionTest()}
+                  disabled={diagRunning !== null}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50">
+                  {diagRunning === "version" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Cpu className="h-3.5 w-3.5" />}
+                  TESTAR FFMPEG
+                </button>
+                <button
+                  onClick={() => void runSimpleExportTest()}
+                  disabled={diagRunning !== null || !items.length}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50">
+                  {diagRunning === "simple" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                  TESTE DE EXPORTAÇÃO (teste.mp4)
+                </button>
+              </div>
+              {diagResult && (
+                <pre className="mt-2 max-h-40 overflow-auto rounded bg-black/70 p-2 font-mono text-[10px] leading-snug text-green-300 whitespace-pre-wrap break-all">{diagResult}</pre>
+              )}
+            </div>
+
             <div className="mt-6 flex items-center justify-end gap-2">
               <button onClick={() => setShowExportSettings(false)}
                 className="rounded-md border border-border bg-background px-4 py-2 text-sm hover:bg-muted">Cancelar</button>
@@ -2579,7 +2723,10 @@ function Editor() {
                 <button
                   onClick={async () => {
                     try { const ff = await getFFmpeg(); ff.terminate(); } catch {}
-                    setExporting(false); setExportPct(0); setExportMsg(""); setError("Exportação cancelada.");
+                    setExporting(false); setExportPct(0); setExportMsg("");
+                    setExportLog(prev => [...prev, "Processo encerrado."]);
+                    console.warn("[EXPORT] Processo encerrado pelo usuário.");
+                    setError("Exportação cancelada — processo FFmpeg encerrado.");
                     if (exportElapsedTimerRef.current) { window.clearInterval(exportElapsedTimerRef.current); exportElapsedTimerRef.current = null; }
                   }}
                   className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-border bg-muted px-4 py-2 text-sm font-medium hover:bg-muted/70"
@@ -2607,11 +2754,17 @@ function Editor() {
             </>)}
 
             {showExportLog && (
-              <div className="mt-3 max-h-56 overflow-auto rounded-md border border-border bg-black/80 p-2 font-mono text-[10px] leading-snug text-green-300">
-                {exportFfCmd && <div className="mb-2 break-all text-amber-300">$ {exportFfCmd}</div>}
-                {exportLog.length === 0 ? <div className="text-muted-foreground">Sem entradas.</div> :
-                  exportLog.slice(-200).map((l, i) => <div key={i} className="break-all">{l}</div>)}
-              </div>
+              <>
+                <div className="mt-3 max-h-56 overflow-auto rounded-md border border-border bg-black/80 p-2 font-mono text-[10px] leading-snug text-green-300">
+                  {exportFfCmd && <div className="mb-2 break-all text-amber-300">$ {exportFfCmd}</div>}
+                  {exportLog.length === 0 ? <div className="text-muted-foreground">Sem entradas.</div> :
+                    exportLog.slice(-200).map((l, i) => <div key={i} className="break-all">{l}</div>)}
+                </div>
+                <button onClick={downloadExportLog}
+                  className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-md border border-border bg-muted px-3 py-1.5 text-[11px] hover:bg-muted/70">
+                  <Download className="h-3 w-3" /> Baixar export.log
+                </button>
+              </>
             )}
           </div>
         </div>

@@ -254,6 +254,7 @@ function drawClipFrame(
   }
   // foreground
   ctx.globalAlpha = Math.max(0, Math.min(1, opacity));
+  try { (ctx as unknown as { filter: string }).filter = itemBlurPx({ blur: blurPx } as WCItem["fx"]) > 0 ? `blur(${itemBlurPx({ blur: blurPx } as WCItem["fx"])}px)` : "none"; } catch { /* ignore */ }
   if (fillMode === "stretch") {
     ctx.drawImage(source, 0, 0, targetW, targetH);
   } else {
@@ -262,6 +263,7 @@ function drawClipFrame(
     const x = (targetW - w) / 2, y = (targetH - h) / 2;
     ctx.drawImage(source, x, y, w, h);
   }
+  try { (ctx as unknown as { filter: string }).filter = "none"; } catch { /* ignore */ }
   ctx.restore();
 }
 

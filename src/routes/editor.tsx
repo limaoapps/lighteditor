@@ -3347,7 +3347,6 @@ function Editor() {
           </div>
           </div>
         </div>
-        </div>
       </div>
 
       {/* Context menu */}

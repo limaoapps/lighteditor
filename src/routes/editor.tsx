@@ -1003,6 +1003,18 @@ function Editor() {
     setItems(prev => prev.filter(i => i.mediaId !== mediaId));
   };
 
+  const applyTimelineEffect = useCallback((itemId: string, effectId: TimelineEffectId) => {
+    setItems(prev => prev.map(i => {
+      if (i.id !== itemId) return i;
+      const current = i.fx ?? { ...DEFAULT_FX };
+      if (effectId === "background-blur" && (i.kind === "image" || i.kind === "video")) {
+        return { ...i, fx: { ...current, fillMode: "blur", blurBg: Math.max(current.blurBg || 0, 70) } };
+      }
+      return { ...i, fx: { ...current, blur: Math.max(current.blur || 0, 35) } };
+    }));
+    setSelectedId(itemId);
+  }, [setItems]);
+
   const splitAt = useCallback((t: number, onlyClipId?: string) => {
     setItems(prev => {
       const out: TLItem[] = [];

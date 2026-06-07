@@ -1197,14 +1197,24 @@ function Editor() {
   const startMove = (id: string, e: React.MouseEvent, tr: Transform) => {
     e.stopPropagation();
     setSelectedId(id);
-    const rect = previewBoxRef.current!.getBoundingClientRect();
+    const previewBox = previewBoxRef.current;
+    if (!previewBox) {
+      console.error("Preview ainda não está pronto para mover o item.");
+      return;
+    }
+    const rect = previewBox.getBoundingClientRect();
     skipHistory.current = true;
     transformDrag.current = { id, startX: e.clientX, startY: e.clientY, baseX: tr.xPct, baseY: tr.yPct, rect };
   };
   const startScale = (id: string, e: React.MouseEvent, tr: Transform) => {
     e.stopPropagation();
     setSelectedId(id);
-    const rect = previewBoxRef.current!.getBoundingClientRect();
+    const previewBox = previewBoxRef.current;
+    if (!previewBox) {
+      console.error("Preview ainda não está pronto para redimensionar o item.");
+      return;
+    }
+    const rect = previewBox.getBoundingClientRect();
     const cx = rect.left + (tr.xPct / 100) * rect.width;
     const cy = rect.top + (tr.yPct / 100) * rect.height;
     const baseDist = Math.hypot(e.clientX - cx, e.clientY - cy) || 1;

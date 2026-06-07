@@ -3471,13 +3471,10 @@ function Editor() {
 
             <div className="mt-5 grid gap-5 md:grid-cols-2">
               <div>
-                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Preset</label>
-                <select value={exportPreset} onChange={(e) => applyExportPreset(e.target.value as ExportPresetKey)}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm">
-                  {(Object.keys(EXPORT_PRESETS) as ExportPresetKey[]).map(k => (
-                    <option key={k} value={k}>{EXPORT_PRESETS[k].label}</option>
-                  ))}
-                </select>
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Formato vinculado</label>
+                <div className="mt-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm">
+                  {EXPORT_PRESETS[exportPreset]?.label ?? "Personalizado"} · {ASPECTS[aspectKey].label}
+                </div>
               </div>
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Nome do arquivo</label>
@@ -3490,11 +3487,10 @@ function Editor() {
               </div>
 
               <div>
-                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Resolução</label>
-                <select value={quality} onChange={(e) => { setQuality(e.target.value as Quality); setExportPreset("custom"); }}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm">
-                  <option value="720">720p</option><option value="1080">1080p</option><option value="2160">4K (2160p)</option>
-                </select>
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Resolução vinculada</label>
+                <div className="mt-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm">
+                  {targetW}×{targetH} · {quality === "2160" ? "4K" : `${quality}p`}
+                </div>
               </div>
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">FPS</label>

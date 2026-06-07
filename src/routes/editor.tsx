@@ -1340,17 +1340,29 @@ function Editor() {
   };
   const pasteClip = () => {
     const src = clipboardRef.current; if (!src) return;
-    const trackId = tracks.find(t => t.id === src.trackId) ? src.trackId : (tracks.find(t => t.kind === (src.kind === "audio" ? "audio" : "video"))?.id ?? "");
-    if (!trackId) return;
+    // Cria uma nova trilha automaticamente: vídeo/imagem acima das demais; áudio abaixo.
+    const kind: TrackKind = src.kind === "audio" ? "audio" : "video";
+    const sameKind = tracks.filter(t => t.kind === kind);
+    const nums = sameKind.map(t => parseInt(t.id.slice(1), 10)).filter(n => !isNaN(n));
+    const n = (nums.length ? Math.max(...nums) : 0) + 1;
+    const prefix = kind === "video" ? "V" : "A";
+    const newId = `${prefix}${n}`;
+    const newTrack: Track = { id: newId, kind, label: `${newId} · ${kind === "video" ? "Vídeo" : "Áudio"}` };
+    setTracks(prev => {
+      if (kind === "video") {
+        // acima de tudo: primeira posição (V1 fica abaixo das novas)
+        return [newTrack, ...prev];
+      }
+      // áudio: após a última trilha de áudio (fundo)
+      const out = [...prev];
+      let lastAudioIdx = -1;
+      for (let i = 0; i < out.length; i++) if (out[i].kind === "audio") lastAudioIdx = i;
+      if (lastAudioIdx < 0) out.push(newTrack); else out.splice(lastAudioIdx + 1, 0, newTrack);
+      return out;
+    });
     const dur = src.outPoint - src.inPoint;
-    const it: TLItem = { ...src, id: crypto.randomUUID(), start: playhead, fadeIn: 0, fadeOut: 0 };
-    // avoid overlap by shifting if needed
-    const overlapping = items.some(i => i.trackId === trackId && !(playhead + dur <= i.start || playhead >= i.start + (i.outPoint - i.inPoint)));
-    if (overlapping) {
-      const endMax = items.filter(i => i.trackId === trackId).reduce((m, i) => Math.max(m, i.start + (i.outPoint - i.inPoint)), 0);
-      it.start = endMax;
-    }
-    it.trackId = trackId;
+    const it: TLItem = { ...src, id: crypto.randomUUID(), start: playhead, fadeIn: 0, fadeOut: 0, trackId: newId };
+    void dur;
     setItems(prev => [...prev, it]);
     setSelectedId(it.id);
   };

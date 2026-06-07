@@ -1502,7 +1502,12 @@ function Editor() {
             className="rounded-md border border-border bg-card px-2 py-1.5 text-xs">
             <option value="720">720p</option><option value="1080">1080p</option><option value="2160">4K</option>
           </select>
-          <button onClick={doExport} disabled={exporting || !items.length}
+          <button
+            onClick={() => {
+              if (!gpuInfoRef.current) gpuInfoRef.current = detectGpu();
+              setShowExportSettings(true);
+            }}
+            disabled={exporting || !items.length}
             className="glow-primary inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50">
             {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
             Exportar

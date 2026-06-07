@@ -288,6 +288,22 @@ function drawImageOverlay(
   const rot = ((item.transform?.rotation ?? 0) * Math.PI) / 180;
   const op = computeOpacity(item, localT);
 
+  if (item.fx?.fillMode === "blur" || item.fx?.fillMode === "mirror") {
+    ctx.save();
+    ctx.globalAlpha = op;
+    if (item.fx.fillMode === "blur") {
+      drawSoftCover(ctx, img, srcW, srcH, targetW, targetH, blurCanvasPx(item.fx));
+    } else {
+      const cover = Math.max(targetW / srcW, targetH / srcH) * 1.06;
+      const bgW = srcW * cover;
+      const bgH = srcH * cover;
+      ctx.translate(targetW, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, (targetW - bgW) / 2, (targetH - bgH) / 2, bgW, bgH);
+    }
+    ctx.restore();
+  }
+
   ctx.save();
   ctx.globalAlpha = op;
   ctx.translate(x, y);

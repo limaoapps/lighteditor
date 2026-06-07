@@ -2267,7 +2267,7 @@ function Editor() {
                 <div
                   onMouseDown={(e) => startMove(activeV1Video.id, e, activeV1Video.transform!)}
                   className="absolute inset-0 cursor-move"
-                  style={{ background: "transparent", zIndex: trackZ(activeV1Video.trackId) + 0.5 as unknown as number }}
+                  style={{ background: "transparent", zIndex: trackZ(activeV1Video.trackId) + 1 }}
                 />
               )}
 

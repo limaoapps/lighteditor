@@ -321,7 +321,9 @@ function drawImageOverlay(
   ctx.translate(x, y);
   if (rot) ctx.rotate(rot);
   ctx.scale(scale, scale);
+  try { (ctx as unknown as { filter: string }).filter = itemBlurPx(item.fx) > 0 ? `blur(${itemBlurPx(item.fx)}px)` : "none"; } catch { /* ignore */ }
   ctx.drawImage(img, -boxW / 2, -boxH / 2, boxW, boxH);
+  try { (ctx as unknown as { filter: string }).filter = "none"; } catch { /* ignore */ }
   ctx.restore();
 }
 
@@ -386,6 +388,7 @@ function drawTextOverlay(
   ctx.globalAlpha = alpha;
   ctx.translate(cx, cy);
   if (rot) ctx.rotate(rot);
+  try { (ctx as unknown as { filter: string }).filter = itemBlurPx(item.fx) > 0 ? `blur(${itemBlurPx(item.fx)}px)` : "none"; } catch { /* ignore */ }
   ctx.font = `${style} ${weight} ${size}px ${fontFamily}`;
   ctx.textBaseline = "middle";
   // letterSpacing (suportado em navegadores modernos)
@@ -652,10 +655,10 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
             }
             const sw = v.videoWidth || targetW;
             const sh = v.videoHeight || targetH;
-            drawClipFrame(ctx, v, sw, sh, targetW, targetH, fill, bg, blurPx, op);
+            drawClipFrame(ctx, v, sw, sh, targetW, targetH, fill, bg, blurPx, op, itemBlurPx(active.fx));
           } else {
             const img = el as HTMLImageElement;
-            drawClipFrame(ctx, img, img.naturalWidth, img.naturalHeight, targetW, targetH, fill, bg, blurPx, op);
+            drawClipFrame(ctx, img, img.naturalWidth, img.naturalHeight, targetW, targetH, fill, bg, blurPx, op, itemBlurPx(active.fx));
           }
         }
       } catch (e) {

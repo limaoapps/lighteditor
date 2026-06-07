@@ -1820,14 +1820,27 @@ function Editor() {
       ]);
       const textItems = items.filter(i => i.kind === "text" && i.text?.content);
       const music = audioClips[0];
+
+      // Normaliza a timeline: a exportação reproduz exatamente o que está na timeline,
+      // removendo gap inicial e cortando ao fim do último clipe (comportamento profissional).
+      const allForBounds = [...v1clips, ...imageOverlayItems, ...audioClips, ...textItems];
+      const minStart = allForBounds.length ? Math.min(...allForBounds.map(c => c.start)) : 0;
+      const maxEnd = allForBounds.length
+        ? Math.max(...allForBounds.map(c => c.start + (c.outPoint - c.inPoint)))
+        : 0;
+      const shift = Math.max(0, minStart);
+      const realDuration = Math.max(0.1, maxEnd - shift);
+      const offsetClips = <T extends { start: number }>(arr: T[]): T[] =>
+        arr.map(c => ({ ...c, start: Math.max(0, c.start - shift) }));
+
       const blob = await exportWithWebCodecs({
-        v1clips: v1clips as unknown as import("@/lib/webcodecs-export").WCItem[],
-        audioClips: audioClips as unknown as import("@/lib/webcodecs-export").WCItem[],
-        music: music as unknown as import("@/lib/webcodecs-export").WCItem | undefined,
-        imageItems: imageOverlayItems as unknown as import("@/lib/webcodecs-export").WCItem[],
-        textItems: textItems as unknown as import("@/lib/webcodecs-export").WCItem[],
+        v1clips: offsetClips(v1clips) as unknown as import("@/lib/webcodecs-export").WCItem[],
+        audioClips: offsetClips(audioClips) as unknown as import("@/lib/webcodecs-export").WCItem[],
+        music: (music ? offsetClips([music])[0] : undefined) as unknown as import("@/lib/webcodecs-export").WCItem | undefined,
+        imageItems: offsetClips(imageOverlayItems) as unknown as import("@/lib/webcodecs-export").WCItem[],
+        textItems: offsetClips(textItems) as unknown as import("@/lib/webcodecs-export").WCItem[],
         targetW, targetH,
-        fps, vKbps, aKbps, totalDuration: Math.max(0.1, totalDuration),
+        fps, vKbps, aKbps, totalDuration: realDuration,
         onProgress: (p) => setExportPct(p),
         onMessage: (m) => setExportMsg(m),
         onLog: (l) => setExportLog(prev => [...prev, l].slice(-500)),

@@ -480,6 +480,12 @@ const TRANSITION_GROUPS: Array<{ label: string; items: TransitionPreset[] }> = [
   },
 ];
 
+const ALL_TRANSITIONS: TransitionPreset[] = TRANSITION_GROUPS.flatMap(g => g.items);
+const getTransitionById = (id?: string): TransitionPreset | undefined =>
+  id ? ALL_TRANSITIONS.find(t => t.id === id) : undefined;
+
+
+
 const QUICK_EFFECTS: { id: string; label: string }[] = [
   { id: "bw", label: "Preto e Branco" },
   { id: "sepia", label: "Sépia" },

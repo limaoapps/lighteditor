@@ -274,6 +274,7 @@ function drawImageOverlay(
   dur: number,
   targetW: number,
   targetH: number,
+  layer: "background" | "foreground" | "both" = "both",
 ) {
   const srcW = img.naturalWidth || item.width || targetW;
   const srcH = img.naturalHeight || item.height || targetH;
@@ -288,7 +289,7 @@ function drawImageOverlay(
   const rot = ((item.transform?.rotation ?? 0) * Math.PI) / 180;
   const op = computeOpacity(item, localT);
 
-  if (item.fx?.fillMode === "blur" || item.fx?.fillMode === "mirror") {
+  if ((layer === "background" || layer === "both") && (item.fx?.fillMode === "blur" || item.fx?.fillMode === "mirror")) {
     ctx.save();
     ctx.globalAlpha = op;
     if (item.fx.fillMode === "blur") {
@@ -303,6 +304,8 @@ function drawImageOverlay(
     }
     ctx.restore();
   }
+
+  if (layer === "background") return;
 
   ctx.save();
   ctx.globalAlpha = op;

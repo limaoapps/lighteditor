@@ -1043,6 +1043,21 @@ function Editor() {
     return 10 + (videoTrackOrder.count - idx) * 2;
   }, [videoTrackOrder]);
 
+  const syncExportPresetToAspect = useCallback((nextAspect: AspectKey) => {
+    const current = EXPORT_PRESETS[exportPreset];
+    if (current?.aspect === nextAspect) return;
+    const matching = (Object.keys(EXPORT_PRESETS) as ExportPresetKey[]).find(k => {
+      const p = EXPORT_PRESETS[k];
+      return k !== "custom" && p.aspect === nextAspect && p.quality === quality;
+    });
+    setExportPreset(matching ?? "custom");
+  }, [exportPreset, quality]);
+
+  const setProjectAspect = useCallback((nextAspect: AspectKey) => {
+    setAspectKey(nextAspect);
+    syncExportPresetToAspect(nextAspect);
+  }, [syncExportPresetToAspect]);
+
   // Box-select global listeners para a mídia
   useEffect(() => {
     if (!mediaBoxSel) return;
@@ -1788,6 +1803,8 @@ function Editor() {
 
   // ---- Export ----
   const computedVBitrate = bitrateFromMode(quality, bitrateMode, customBitrate);
+  const exportTargetH = QUALITY_HEIGHT[quality];
+  const exportTargetW = Math.round((exportTargetH * aspect.w) / aspect.h / 2) * 2;
   const estimatedMB = useMemo(
     () => estimateSizeMB(Math.max(1, totalDuration), computedVBitrate, audioBitrate),
     [totalDuration, computedVBitrate, audioBitrate],
@@ -1829,17 +1846,17 @@ function Editor() {
 
     const v1trackId = tracks.find(t => t.kind === "video")?.id;
     const v1clips = items
-      .filter(i => i.trackId === v1trackId && (i.kind === "video" || i.kind === "image"))
+      .filter(i => i.trackId === v1trackId && i.kind === "video")
       .sort((a, b) => a.start - b.start);
-    const imageOverlayItems = items
-      .filter(i => i.kind === "image" && i.trackId !== v1trackId)
+    const visualOverlayItems = items
+      .filter(i => i.kind === "image" || (i.kind === "video" && i.trackId !== v1trackId))
       .sort((a, b) => a.start - b.start);
     const audioClips = items.filter(i => i.kind === "audio");
-    if (!v1clips.length && !imageOverlayItems.length && !audioClips.length) {
+    if (!v1clips.length && !visualOverlayItems.length && !audioClips.length) {
       setError("Adicione pelo menos um vídeo, imagem ou áudio na timeline.");
       return;
     }
-    const missingFiles = [...v1clips, ...imageOverlayItems, ...audioClips].filter(c => !c.file);
+    const missingFiles = [...v1clips, ...visualOverlayItems, ...audioClips].filter(c => !c.file);
     if (missingFiles.length) {
       const names = missingFiles.map(c => c.name).join(", ");
       console.error("Clipes sem arquivo original:", names);
@@ -1884,7 +1901,7 @@ function Editor() {
 
       // Normaliza a timeline: a exportação reproduz exatamente o que está na timeline,
       // removendo gap inicial e cortando ao fim do último clipe (comportamento profissional).
-      const allForBounds = [...v1clips, ...imageOverlayItems, ...audioClips, ...textItems];
+      const allForBounds = [...v1clips, ...visualOverlayItems, ...audioClips, ...textItems];
       const minStart = allForBounds.length ? Math.min(...allForBounds.map(c => c.start)) : 0;
       const maxEnd = allForBounds.length
         ? Math.max(...allForBounds.map(c => c.start + (c.outPoint - c.inPoint)))
@@ -1894,12 +1911,14 @@ function Editor() {
       const offsetClips = <T extends { start: number }>(arr: T[]): T[] =>
         arr.map(c => ({ ...c, start: Math.max(0, c.start - shift) }));
 
+      const withLayer = <T extends TLItem>(arr: T[]) => arr.map(c => ({ ...c, zIndex: trackZ(c.trackId) }));
+
       const blob = await exportWithWebCodecs({
-        v1clips: offsetClips(v1clips) as unknown as import("@/lib/webcodecs-export").WCItem[],
+        v1clips: withLayer(offsetClips(v1clips)) as unknown as import("@/lib/webcodecs-export").WCItem[],
         audioClips: offsetClips(audioClips) as unknown as import("@/lib/webcodecs-export").WCItem[],
         music: (music ? offsetClips([music])[0] : undefined) as unknown as import("@/lib/webcodecs-export").WCItem | undefined,
-        imageItems: offsetClips(imageOverlayItems) as unknown as import("@/lib/webcodecs-export").WCItem[],
-        textItems: offsetClips(textItems) as unknown as import("@/lib/webcodecs-export").WCItem[],
+        imageItems: withLayer(offsetClips(visualOverlayItems)) as unknown as import("@/lib/webcodecs-export").WCItem[],
+        textItems: withLayer(offsetClips(textItems)) as unknown as import("@/lib/webcodecs-export").WCItem[],
         targetW, targetH,
         fps, vKbps, aKbps, totalDuration: realDuration,
         onProgress: (p) => setExportPct(p),
@@ -2087,21 +2106,29 @@ function Editor() {
           <button onClick={redo} title="Refazer (Ctrl+Y)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Redo2 className="h-4 w-4" /></button>
           <div className="mx-2 h-6 w-px bg-border" />
           <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Proporção</label>
-          <select value={aspectKey} onChange={(e) => setAspectKey(e.target.value as AspectKey)}
+          <select value={aspectKey} onChange={(e) => setProjectAspect(e.target.value as AspectKey)}
             className="rounded-md border border-border bg-card px-2 py-1.5 text-xs">
             {(Object.keys(ASPECTS) as AspectKey[]).map(k => <option key={k} value={k}>{ASPECTS[k].label}</option>)}
           </select>
           {aspectKey === "custom" && (
             <div className="flex items-center gap-1 text-xs">
-              <input type="number" min={1} value={customAR.w} onChange={(e) => setCustomAR(s => ({ ...s, w: Math.max(1, Number(e.target.value) || 1) }))}
+              <input type="number" min={1} value={customAR.w} onChange={(e) => { setCustomAR(s => ({ ...s, w: Math.max(1, Number(e.target.value) || 1) })); setExportPreset("custom"); }}
                 className="w-14 rounded border border-border bg-card px-1.5 py-1" />
               <span className="text-muted-foreground">:</span>
-              <input type="number" min={1} value={customAR.h} onChange={(e) => setCustomAR(s => ({ ...s, h: Math.max(1, Number(e.target.value) || 1) }))}
+              <input type="number" min={1} value={customAR.h} onChange={(e) => { setCustomAR(s => ({ ...s, h: Math.max(1, Number(e.target.value) || 1) })); setExportPreset("custom"); }}
                 className="w-14 rounded border border-border bg-card px-1.5 py-1" />
             </div>
           )}
           <div className="mx-2 h-6 w-px bg-border" />
-          <select value={quality} onChange={(e) => setQuality(e.target.value as Quality)}
+          <select value={quality} onChange={(e) => {
+            const nextQuality = e.target.value as Quality;
+            setQuality(nextQuality);
+            const matching = (Object.keys(EXPORT_PRESETS) as ExportPresetKey[]).find(k => {
+              const p = EXPORT_PRESETS[k];
+              return k !== "custom" && p.aspect === aspectKey && p.quality === nextQuality;
+            });
+            setExportPreset(matching ?? "custom");
+          }}
             className="rounded-md border border-border bg-card px-2 py-1.5 text-xs">
             <option value="720">720p</option><option value="1080">1080p</option><option value="2160">4K</option>
           </select>
@@ -2469,7 +2496,7 @@ function Editor() {
                     cursor: "move",
                     opacity: (computeVisualOpacity(ov, playhead)) * t.opacity,
                     filter: cssFilter(ov.fx),
-                    zIndex: 5,
+                    zIndex: trackZ(ov.trackId),
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
                     maxWidth: "90%",
                   };
@@ -2494,7 +2521,7 @@ function Editor() {
                   transform: `translate(-50%,-50%) scale(${tr.scale}) rotate(${tr.rotation}deg)`,
                   border: "1.5px dashed var(--primary)",
                   pointerEvents: "none",
-                  zIndex: 6,
+                  zIndex: trackZ(previewTarget.trackId) + 1,
                 };
                 return (
                   <div key={`sel-${previewTarget.id}`} style={style}>
@@ -3085,7 +3112,7 @@ function Editor() {
 
           <div className="flex border-t border-border">
           <div ref={timelineRef} onMouseDown={onTimelineMouseDown}
-            className="no-scrollbar relative h-[280px] min-w-0 flex-1 overflow-x-auto overflow-y-hidden bg-track">
+            className="no-scrollbar relative h-[280px] min-w-0 flex-1 overflow-auto bg-track">
 
             <div className="relative" style={{ width: labelColW + rulerSpan * zoom, minWidth: "100%" }}>
               <div data-role="ruler" className="sticky top-0 z-20 flex cursor-ew-resize select-none border-b border-border bg-panel" style={{ height: rulerH }}>
@@ -3446,13 +3473,10 @@ function Editor() {
 
             <div className="mt-5 grid gap-5 md:grid-cols-2">
               <div>
-                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Preset</label>
-                <select value={exportPreset} onChange={(e) => applyExportPreset(e.target.value as ExportPresetKey)}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm">
-                  {(Object.keys(EXPORT_PRESETS) as ExportPresetKey[]).map(k => (
-                    <option key={k} value={k}>{EXPORT_PRESETS[k].label}</option>
-                  ))}
-                </select>
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Formato vinculado</label>
+                <div className="mt-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm">
+                  {EXPORT_PRESETS[exportPreset]?.label ?? "Personalizado"} · {ASPECTS[aspectKey].label}
+                </div>
               </div>
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Nome do arquivo</label>
@@ -3465,11 +3489,10 @@ function Editor() {
               </div>
 
               <div>
-                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Resolução</label>
-                <select value={quality} onChange={(e) => { setQuality(e.target.value as Quality); setExportPreset("custom"); }}
-                  className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm">
-                  <option value="720">720p</option><option value="1080">1080p</option><option value="2160">4K (2160p)</option>
-                </select>
+                <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Resolução vinculada</label>
+                <div className="mt-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm">
+                  {exportTargetW}×{exportTargetH} · {quality === "2160" ? "4K" : `${quality}p`}
+                </div>
               </div>
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">FPS</label>

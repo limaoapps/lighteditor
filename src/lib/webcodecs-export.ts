@@ -69,6 +69,7 @@ export type WCItem = {
     strokeWidth?: number;
   };
   transform?: { xPct?: number; yPct?: number; scale?: number; rotation?: number };
+  zIndex?: number;
 };
 
 export type WCExportOptions = {
@@ -279,9 +280,11 @@ function computeZoomScale(fx: WCItem["fx"] | undefined, localT: number, dur: num
   return fx.zoom.dir === "in" ? 1 + speedMul * p : 1 + speedMul * (1 - p);
 }
 
-function drawImageOverlay(
+function drawVisualOverlay(
   ctx: OffscreenCanvasRenderingContext2D,
-  img: HTMLImageElement,
+  source: CanvasImageSource,
+  sourceW: number,
+  sourceH: number,
   item: WCItem,
   localT: number,
   dur: number,
@@ -289,8 +292,8 @@ function drawImageOverlay(
   targetH: number,
   layer: "background" | "foreground" | "both" = "both",
 ) {
-  const srcW = img.naturalWidth || item.width || targetW;
-  const srcH = img.naturalHeight || item.height || targetH;
+  const srcW = sourceW || item.width || targetW;
+  const srcH = sourceH || item.height || targetH;
   if (srcW <= 0 || srcH <= 0) return;
   const ar = srcW / srcH;
   let boxH = targetH * 0.6;
@@ -306,14 +309,14 @@ function drawImageOverlay(
     ctx.save();
     ctx.globalAlpha = op;
     if (item.fx.fillMode === "blur") {
-      drawSoftCover(ctx, img, srcW, srcH, targetW, targetH, blurCanvasPx(item.fx, targetH));
+      drawSoftCover(ctx, source, srcW, srcH, targetW, targetH, blurCanvasPx(item.fx, targetH));
     } else {
       const cover = Math.max(targetW / srcW, targetH / srcH) * 1.06;
       const bgW = srcW * cover;
       const bgH = srcH * cover;
       ctx.translate(targetW, 0);
       ctx.scale(-1, 1);
-      ctx.drawImage(img, (targetW - bgW) / 2, (targetH - bgH) / 2, bgW, bgH);
+      ctx.drawImage(source, (targetW - bgW) / 2, (targetH - bgH) / 2, bgW, bgH);
     }
     ctx.restore();
   }
@@ -327,7 +330,7 @@ function drawImageOverlay(
   ctx.scale(scale, scale);
   const blurPx = itemBlurPx(item.fx, targetH);
   try { (ctx as unknown as { filter: string }).filter = blurPx > 0 ? `blur(${blurPx}px)` : "none"; } catch { /* ignore */ }
-  ctx.drawImage(img, -boxW / 2, -boxH / 2, boxW, boxH);
+  ctx.drawImage(source, -boxW / 2, -boxH / 2, boxW, boxH);
   try { (ctx as unknown as { filter: string }).filter = "none"; } catch { /* ignore */ }
   ctx.restore();
 }
@@ -512,6 +515,16 @@ async function buildMixedAudio(opts: WCExportOptions, sampleRate: number): Promi
       wireSource(src, c);
       try { src.start(c.start, c.inPoint, c.outPoint - c.inPoint); } catch { /* ignore */ }
     }
+    for (const c of opts.imageItems ?? []) {
+      if (c.kind !== "video" || !c.file || opts.v1clips.some(v => v.id === c.id)) continue;
+      let abuf: AudioBuffer | null = null;
+      try { abuf = await decodeAudio(probe, c.file); } catch { continue; }
+      if (!abuf) continue;
+      const src = ac.createBufferSource();
+      src.buffer = abuf;
+      wireSource(src, c);
+      try { src.start(c.start, c.inPoint, c.outPoint - c.inPoint); } catch { /* ignore */ }
+    }
     if (opts.music?.file) {
       let abuf: AudioBuffer | null = null;
       try { abuf = await decodeAudio(probe, opts.music.file); } catch { abuf = null; }
@@ -629,6 +642,8 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
   for (const c of [...v1clips, ...imageItems]) { try { await loadFor(c); } catch (e) { log(`[wc] load falhou ${c.name}: ${String(e)}`); } }
 
   const findActive = (t: number) => v1clips.find(c => t >= c.start && t < c.start + (c.outPoint - c.inPoint));
+  const visualItems = [...imageItems].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+  const sortedTextItems = [...textItems].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
 
   let lastSeekClipId: string | null = null;
   let lastSeekClipTime = -1;
@@ -674,27 +689,51 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
       }
     }
 
-    // fundos desfocados/espelhados das imagens sobrepostas ficam atrás dos objetos principais
-    for (const imgItem of imageItems) {
-      const dur = imgItem.outPoint - imgItem.inPoint;
-      const localT = t - imgItem.start;
+    // fundos desfocados/espelhados das camadas ficam atrás dos objetos principais
+    for (const visualItem of visualItems) {
+      const dur = visualItem.outPoint - visualItem.inPoint;
+      const localT = t - visualItem.start;
       if (localT < 0 || localT > dur) continue;
-      if (imgItem.fx?.fillMode !== "blur" && imgItem.fx?.fillMode !== "mirror") continue;
-      const el = await loadFor(imgItem);
-      if (el) drawImageOverlay(ctx, el as HTMLImageElement, imgItem, localT, dur, targetW, targetH, "background");
+      if (visualItem.fx?.fillMode !== "blur" && visualItem.fx?.fillMode !== "mirror") continue;
+      const el = await loadFor(visualItem);
+      if (!el) continue;
+      if (visualItem.kind === "video") {
+        const v = el as HTMLVideoElement;
+        const srcT = visualItem.inPoint + localT;
+        if (visualItem.id !== lastSeekClipId || Math.abs(v.currentTime - srcT) > (0.5 / fps)) {
+          await seekVideo(v, srcT);
+          lastSeekClipId = visualItem.id;
+        }
+        drawVisualOverlay(ctx, v, v.videoWidth || targetW, v.videoHeight || targetH, visualItem, localT, dur, targetW, targetH, "background");
+      } else {
+        const img = el as HTMLImageElement;
+        drawVisualOverlay(ctx, img, img.naturalWidth, img.naturalHeight, visualItem, localT, dur, targetW, targetH, "background");
+      }
     }
 
-    // overlays de imagem em trilhas superiores (respeita tempo/posição/escala/fade)
-    for (const imgItem of imageItems) {
-      const dur = imgItem.outPoint - imgItem.inPoint;
-      const localT = t - imgItem.start;
+    // overlays de imagem/vídeo em todas as trilhas, respeitando ordem visual da timeline
+    for (const visualItem of visualItems) {
+      const dur = visualItem.outPoint - visualItem.inPoint;
+      const localT = t - visualItem.start;
       if (localT < 0 || localT > dur) continue;
-      const el = await loadFor(imgItem);
-      if (el) drawImageOverlay(ctx, el as HTMLImageElement, imgItem, localT, dur, targetW, targetH, "foreground");
+      const el = await loadFor(visualItem);
+      if (!el) continue;
+      if (visualItem.kind === "video") {
+        const v = el as HTMLVideoElement;
+        const srcT = visualItem.inPoint + localT;
+        if (visualItem.id !== lastSeekClipId || Math.abs(v.currentTime - srcT) > (0.5 / fps)) {
+          await seekVideo(v, srcT);
+          lastSeekClipId = visualItem.id;
+        }
+        drawVisualOverlay(ctx, v, v.videoWidth || targetW, v.videoHeight || targetH, visualItem, localT, dur, targetW, targetH, "foreground");
+      } else {
+        const img = el as HTMLImageElement;
+        drawVisualOverlay(ctx, img, img.naturalWidth, img.naturalHeight, visualItem, localT, dur, targetW, targetH, "foreground");
+      }
     }
 
     // overlays de texto (múltiplos, respeitando timing/posição/estilo)
-    for (const tItem of textItems) {
+    for (const tItem of sortedTextItems) {
       if (!tItem.text?.content) continue;
       const dur = tItem.outPoint - tItem.inPoint;
       const localT = t - tItem.start;

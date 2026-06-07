@@ -1753,8 +1753,7 @@ function Editor() {
           const dur = (c.outPoint - c.inPoint);
           const to = dur.toFixed(3);
           const afilters: string[] = [];
-          const g = dbToGain(c.gainDb ?? 0);
-          if (g !== 1) afilters.push(`volume=${g.toFixed(3)}`);
+          afilters.push(...buildAudioFilterChain(c.audioFx, c.gainDb ?? 0, dur));
           if (c.fadeIn && c.fadeIn > 0.01) afilters.push(`afade=t=in:st=0:d=${c.fadeIn.toFixed(3)}`);
           if (c.fadeOut && c.fadeOut > 0.01) afilters.push(`afade=t=out:st=${(dur - c.fadeOut).toFixed(3)}:d=${c.fadeOut.toFixed(3)}`);
           const filter = exportVideoFilter(c, targetW, targetH);

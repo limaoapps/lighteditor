@@ -8,7 +8,7 @@ import {
   Sparkles, Sliders, Wand2, RotateCcw, Palette,
   Settings as SettingsIcon, FileText, RefreshCw, Cpu, Info,
 } from "lucide-react";
-import { getFFmpeg, fetchFile } from "@/lib/ffmpeg-client";
+import { getFFmpeg, fetchFile, resetFFmpeg } from "@/lib/ffmpeg-client";
 
 export const Route = createFileRoute("/editor")({
   head: () => ({
@@ -559,6 +559,7 @@ function Editor() {
   const [snapV, setSnapV] = useState(false);
 
   const [exporting, setExporting] = useState(false);
+  const [ffReady, setFfReady] = useState(false);
   const [exportPct, setExportPct] = useState(0);
   const [exportMsg, setExportMsg] = useState("");
   const [exportUrl, setExportUrl] = useState<string | null>(null);
@@ -590,6 +591,22 @@ function Editor() {
   const [exportHistory, setExportHistory] = useState<Array<{ url: string; name: string; at: number; sizeMB: number }>>([]);
   const [diagRunning, setDiagRunning] = useState<null | "version" | "simple">(null);
   const [diagResult, setDiagResult] = useState<string>("");
+
+  useEffect(() => {
+    let mounted = true;
+    getFFmpeg()
+      .then(() => {
+        if (!mounted) return;
+        setFfReady(true);
+        console.log("FFmpeg pronto para exportação.");
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("FFmpeg não carregou.", err);
+        if (mounted) setError(`FFmpeg não carregou: ${msg}`);
+      });
+    return () => { mounted = false; };
+  }, []);
 
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; clipId: string | null } | null>(null);
   const [mediaCtx, setMediaCtx] = useState<{ x: number; y: number; mediaId: string } | null>(null);
@@ -936,7 +953,8 @@ function Editor() {
     const v = videoElRef.current;
     if (!v) return;
     if (!activeV1Video) { v.pause(); v.removeAttribute("src"); v.load(); return; }
-    const wanted = activeV1Video.url!;
+    const wanted = activeV1Video.url;
+    if (!wanted) { v.pause(); v.removeAttribute("src"); v.load(); return; }
     if (v.src !== wanted) v.src = wanted;
     const target = activeV1Video.inPoint + (playhead - activeV1Video.start);
     if (Math.abs(v.currentTime - target) > 0.25) v.currentTime = target;
@@ -950,7 +968,8 @@ function Editor() {
     if (!bg) return;
     const needsBg = hasBackgroundFill(activeV1Video?.fx);
     if (!activeV1Video || !needsBg) { bg.pause(); bg.removeAttribute("src"); bg.load(); return; }
-    const wanted = activeV1Video.url!;
+    const wanted = activeV1Video.url;
+    if (!wanted) { bg.pause(); bg.removeAttribute("src"); bg.load(); return; }
     if (bg.src !== wanted) bg.src = wanted;
     const target = activeV1Video.inPoint + (playhead - activeV1Video.start);
     if (Math.abs(bg.currentTime - target) > 0.25) bg.currentTime = target;
@@ -959,15 +978,17 @@ function Editor() {
   }, [activeV1Video, playing, playhead]);
 
   useEffect(() => {
-    const audios = items.filter(i => i.kind === "audio");
+    const audios = items.filter(i => i.kind === "audio" && i.url);
     for (const a of audios) {
-      if (!audioRefs.current[a.id]) audioRefs.current[a.id] = new Audio(a.url!);
+      if (!a.url) continue;
+      if (!audioRefs.current[a.id]) audioRefs.current[a.id] = new Audio(a.url);
     }
     for (const id of Object.keys(audioRefs.current)) {
       if (!audios.find(a => a.id === id)) { audioRefs.current[id].pause(); delete audioRefs.current[id]; }
     }
     for (const a of audios) {
       const el = audioRefs.current[a.id];
+      if (!el) continue;
       const inRange = playhead >= a.start && playhead < a.start + (a.outPoint - a.inPoint);
       el.muted = !!trackMuted[a.trackId];
       el.volume = computeVol(a, playhead);
@@ -1180,14 +1201,24 @@ function Editor() {
   const startMove = (id: string, e: React.MouseEvent, tr: Transform) => {
     e.stopPropagation();
     setSelectedId(id);
-    const rect = previewBoxRef.current!.getBoundingClientRect();
+    const previewBox = previewBoxRef.current;
+    if (!previewBox) {
+      console.error("Preview ainda não está pronto para mover o item.");
+      return;
+    }
+    const rect = previewBox.getBoundingClientRect();
     skipHistory.current = true;
     transformDrag.current = { id, startX: e.clientX, startY: e.clientY, baseX: tr.xPct, baseY: tr.yPct, rect };
   };
   const startScale = (id: string, e: React.MouseEvent, tr: Transform) => {
     e.stopPropagation();
     setSelectedId(id);
-    const rect = previewBoxRef.current!.getBoundingClientRect();
+    const previewBox = previewBoxRef.current;
+    if (!previewBox) {
+      console.error("Preview ainda não está pronto para redimensionar o item.");
+      return;
+    }
+    const rect = previewBox.getBoundingClientRect();
     const cx = rect.left + (tr.xPct / 100) * rect.width;
     const cy = rect.top + (tr.yPct / 100) * rect.height;
     const baseDist = Math.hypot(e.clientX - cx, e.clientY - cy) || 1;
@@ -1325,6 +1356,29 @@ function Editor() {
   };
 
   const doExport = async () => {
+    try {
+      console.log("Iniciando exportação...");
+      if (!ffReady) {
+        console.error("FFmpeg ainda não está pronto.");
+        setError("FFmpeg ainda está carregando. Aguarde alguns segundos e tente novamente.");
+        return;
+      }
+      if (!items || items.length === 0) {
+        console.error("Nenhum clipe carregado.");
+        setError("Nenhum clipe carregado.");
+        return;
+      }
+      if (!tracks || tracks.length === 0) {
+        console.error("Nenhuma trilha disponível.");
+        setError("Nenhuma trilha disponível.");
+        return;
+      }
+    } catch (err) {
+      console.error("Erro durante exportação:", err);
+      setError(err instanceof Error ? err.message : "Erro durante exportação");
+      return;
+    }
+
     const v1trackId = tracks.find(t => t.kind === "video")?.id;
     const v1clips = items
       .filter(i => i.trackId === v1trackId && (i.kind === "video" || i.kind === "image"))
@@ -1332,6 +1386,13 @@ function Editor() {
     const audioClips = items.filter(i => i.kind === "audio");
     if (!v1clips.length && !audioClips.length) {
       setError("Adicione pelo menos um vídeo, imagem ou áudio na timeline.");
+      return;
+    }
+    const missingFiles = [...v1clips, ...audioClips].filter(c => !c.file);
+    if (missingFiles.length) {
+      const names = missingFiles.map(c => c.name).join(", ");
+      console.error("Clipes sem arquivo original:", names);
+      setError(`Alguns clipes estão sem arquivo original: ${names}`);
       return;
     }
     // Save retry handle (same settings)
@@ -1401,6 +1462,13 @@ function Editor() {
 
     try {
       const ff = await getFFmpeg();
+      if (!ff) {
+        console.error("FFmpeg não carregou.");
+        setError("FFmpeg não carregou.");
+        setExportMsg("Erro");
+        return;
+      }
+      console.log("FFmpeg carregado:", ff);
       ff.on("log", onLog);
       ff.on("progress", onProg);
       const targetH = QUALITY_HEIGHT[quality];
@@ -1429,8 +1497,10 @@ function Editor() {
           const ext = isImg ? (c.file?.name.split(".").pop() || "png").toLowerCase() : "bin";
           const inName = `in_${i}.${ext}`;
           const outName = `cut_${i}.mp4`;
+          const sourceFile = c.file;
+          if (!sourceFile) throw new Error(`Clipe sem arquivo original: ${c.name}`);
           setExportMsg(`Processando clipe ${i + 1}/${v1clips.length}...`);
-          await ff.writeFile(inName, await fetchFile(c.file!));
+          await ff.writeFile(inName, await fetchFile(sourceFile));
           const dur = (c.outPoint - c.inPoint);
           const to = dur.toFixed(3);
           const afilters: string[] = [];
@@ -1489,7 +1559,10 @@ function Editor() {
       const music = audioClips[0];
       setExportMsg("Renderizando saída...");
       const finalArgs: string[] = ["-i", "joined.mp4"];
-      if (music) { await ff.writeFile("bgm.bin", await fetchFile(music.file!)); finalArgs.push("-i", "bgm.bin"); }
+      if (music) {
+        if (!music.file) throw new Error(`Áudio sem arquivo original: ${music.name}`);
+        await ff.writeFile("bgm.bin", await fetchFile(music.file)); finalArgs.push("-i", "bgm.bin");
+      }
       if (vf.length) finalArgs.push("-vf", vf.join(","));
       if (music) {
         const mg = dbToGain(music.gainDb ?? 0) * (v1clips.length ? 0.4 : 1.0);
@@ -1626,10 +1699,10 @@ function Editor() {
               if (!gpuInfoRef.current) gpuInfoRef.current = detectGpu();
               setShowExportSettings(true);
             }}
-            disabled={exporting || !items.length}
+            disabled={exporting || !items.length || !ffReady}
             className="glow-primary inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50">
-            {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-            Exportar
+            {exporting || !ffReady ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+            {ffReady ? "Exportar" : "Carregando"}
           </button>
         </div>
       </header>
@@ -1711,16 +1784,17 @@ function Editor() {
               {/* Background fill (blur/mirror) for V1 video */}
               {activeV1Video && (() => {
                 const fx = activeV1Video.fx;
-                return hasBackgroundFill(fx) ? (
+                if (!fx || !hasBackgroundFill(fx)) return null;
+                return (
                   <video
-                    key={`bg-${activeV1Video.id}-${fx!.fillMode}`}
+                    key={`bg-${activeV1Video.id}-${fx.fillMode}`}
                     ref={videoBgElRef}
                     src={activeV1Video.url}
                     muted playsInline
                     className="pointer-events-none absolute inset-0 h-full w-full"
-                    style={backgroundFillStyle(fx!)}
+                    style={backgroundFillStyle(fx)}
                   />
-                ) : null;
+                );
               })()}
               {(() => {
                 const tr = activeV1Video?.transform;
@@ -1756,15 +1830,19 @@ function Editor() {
               <div className={`pointer-events-none absolute inset-x-0 top-1/2 h-px transition-opacity ${snapH ? "bg-primary opacity-100" : "bg-white/10 opacity-0 group-hover/preview:opacity-30"}`} />
 
               {/* Per-image background fill */}
-              {overlays.filter(ov => ov.kind === "image" && hasBackgroundFill(ov.fx)).map(ov => (
-                <img key={`imgbg-${ov.id}`} src={ov.url} alt="" draggable={false}
-                  className="pointer-events-none absolute inset-0 h-full w-full"
-                  style={{
-                    ...backgroundFillStyle(ov.fx!),
-                    zIndex: 3,
-                    opacity: computeVisualOpacity(ov, playhead),
-                  }} />
-              ))}
+              {overlays.filter(ov => ov.kind === "image" && hasBackgroundFill(ov.fx)).map(ov => {
+                const fx = ov.fx;
+                if (!fx) return null;
+                return (
+                  <img key={`imgbg-${ov.id}`} src={ov.url} alt="" draggable={false}
+                    className="pointer-events-none absolute inset-0 h-full w-full"
+                    style={{
+                      ...backgroundFillStyle(fx),
+                      zIndex: 3,
+                      opacity: computeVisualOpacity(ov, playhead),
+                    }} />
+                );
+              })}
               {overlays.map(ov => {
                 const tr = ov.transform!;
                 const isSel = ov.id === selectedId;
@@ -1982,8 +2060,13 @@ function Editor() {
                                 if ((e.target as HTMLElement).dataset.handle) return;
                                 if (e.button !== 0) return;
                                 e.stopPropagation(); setSelectedId(i.id);
-                                const rect = timelineRef.current!.getBoundingClientRect();
-                                const xPx = e.clientX - rect.left + (timelineRef.current?.scrollLeft ?? 0) - labelColW;
+                                const timeline = timelineRef.current;
+                                if (!timeline) {
+                                  console.error("Timeline ainda não está pronta para arrastar o clipe.");
+                                  return;
+                                }
+                                const rect = timeline.getBoundingClientRect();
+                                const xPx = e.clientX - rect.left + timeline.scrollLeft - labelColW;
                                 skipHistory.current = true;
                                 dragRef.current = { type: "move", id: i.id, offsetSec: xPx / zoom - i.start, origTrackId: i.trackId };
                               }}
@@ -2443,16 +2526,20 @@ function Editor() {
                       <button onClick={() => patchFx({ zoom: { dir: "out", speed: fx.zoom?.speed ?? "med" } })}
                         className={`rounded border px-1.5 py-1 text-[10px] ${fx.zoom?.dir === "out" ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>Afastar</button>
                     </div>
-                    {fx.zoom && (
-                      <div className="grid grid-cols-3 gap-1">
-                        {(["slow","med","fast"] as const).map(s => (
-                          <button key={s} onClick={() => patchFx({ zoom: { dir: fx.zoom!.dir, speed: s } })}
-                            className={`rounded border px-1.5 py-1 text-[10px] ${fx.zoom!.speed === s ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
-                            {s === "slow" ? "Lenta" : s === "med" ? "Média" : "Rápida"}
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                    {(() => {
+                      const zoomFx = fx.zoom;
+                      if (!zoomFx) return null;
+                      return (
+                        <div className="grid grid-cols-3 gap-1">
+                          {(["slow","med","fast"] as const).map(s => (
+                            <button key={s} onClick={() => patchFx({ zoom: { dir: zoomFx.dir, speed: s } })}
+                              className={`rounded border px-1.5 py-1 text-[10px] ${zoomFx.speed === s ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                              {s === "slow" ? "Lenta" : s === "med" ? "Média" : "Rápida"}
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </details>
 
@@ -2669,9 +2756,9 @@ function Editor() {
                 className="rounded-md border border-border bg-background px-4 py-2 text-sm hover:bg-muted">Cancelar</button>
               <button
                 onClick={() => { setShowExportSettings(false); void doExport(); }}
-                disabled={!items.length}
+                disabled={!items.length || !ffReady || exporting}
                 className="glow-primary inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
-                <Download className="h-4 w-4" /> Iniciar exportação
+                {!ffReady ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} {ffReady ? "Iniciar exportação" : "Carregando FFmpeg"}
               </button>
             </div>
           </div>
@@ -2723,6 +2810,9 @@ function Editor() {
                 <button
                   onClick={async () => {
                     try { const ff = await getFFmpeg(); ff.terminate(); } catch {}
+                    resetFFmpeg();
+                    setFfReady(false);
+                    void getFFmpeg().then(() => setFfReady(true)).catch((err) => console.error("FFmpeg não recarregou após cancelar.", err));
                     setExporting(false); setExportPct(0); setExportMsg("");
                     setExportLog(prev => [...prev, "Processo encerrado."]);
                     console.warn("[EXPORT] Processo encerrado pelo usuário.");

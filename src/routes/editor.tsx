@@ -1129,6 +1129,23 @@ function Editor() {
         setItems(prev => prev.map(i => i.id === d.id ? { ...i, gainDb: db } : i), false);
       }
     };
+    // Continuous auto-scroll + resize while mouse held at edge (no mousemove events)
+    let lastMouseX = 0, lastMouseY = 0;
+    const trackMouse = (e: MouseEvent) => { lastMouseX = e.clientX; lastMouseY = e.clientY; };
+    const tick = window.setInterval(() => {
+      const d = dragRef.current; if (!d) return;
+      if (d.type !== "move" && d.type !== "resizeL" && d.type !== "resizeR") return;
+      const tl = timelineRef.current; const rect = tl?.getBoundingClientRect();
+      if (!tl || !rect) return;
+      const edge = 60;
+      const overRight = lastMouseX - (rect.right - edge);
+      const overLeft = (rect.left + edge) - lastMouseX;
+      if (overRight > 0 || overLeft > 0) {
+        if (overRight > 0) tl.scrollLeft += Math.min(30, overRight * 0.4);
+        else tl.scrollLeft = Math.max(0, tl.scrollLeft - Math.min(30, overLeft * 0.4));
+        onMove(new MouseEvent("mousemove", { clientX: lastMouseX, clientY: lastMouseY }));
+      }
+    }, 30);
     const onUp = () => {
       if (dragRef.current) {
         skipHistory.current = false;
@@ -1137,8 +1154,14 @@ function Editor() {
       dragRef.current = null;
     };
     window.addEventListener("mousemove", onMove);
+    window.addEventListener("mousemove", trackMouse);
     window.addEventListener("mouseup", onUp);
-    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mousemove", trackMouse);
+      window.removeEventListener("mouseup", onUp);
+      window.clearInterval(tick);
+    };
   }, [zoom, snapTime, setItems, pushHistory, items, tracks, ensureTrack]);
 
   // ---- Preview transform drag with center-snap ----

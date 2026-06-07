@@ -278,6 +278,13 @@ function bitrateFromMode(q: Quality, mode: BitrateMode, custom: number): number 
   return base; // medium
 }
 function estimateSizeMB(durationSec: number, vKbps: number, aKbps: number): number {
+function formatFadeLabel(sec: number): string {
+  if (!sec || sec < 0.0005) return "0 ms";
+  if (sec < 1) return `${Math.round(sec * 1000)} ms`;
+  if (sec < 10) return `${sec.toFixed(2)} s`;
+  return `${sec.toFixed(1)} s`;
+}
+function _estimateSizeMB_orig(durationSec: number, vKbps: number, aKbps: number): number {
   const bits = (vKbps + aKbps) * 1000 * Math.max(0.1, durationSec);
   return bits / 8 / (1024 * 1024);
 }

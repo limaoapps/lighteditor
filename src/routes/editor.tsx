@@ -588,6 +588,8 @@ function Editor() {
   const lastExportSettingsRef = useRef<null | (() => void)>(null);
   const gpuInfoRef = useRef<{ available: boolean; vendor: string } | null>(null);
   const [exportHistory, setExportHistory] = useState<Array<{ url: string; name: string; at: number; sizeMB: number }>>([]);
+  const [diagRunning, setDiagRunning] = useState<null | "version" | "simple">(null);
+  const [diagResult, setDiagResult] = useState<string>("");
 
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; clipId: string | null } | null>(null);
   const [mediaCtx, setMediaCtx] = useState<{ x: number; y: number; mediaId: string } | null>(null);

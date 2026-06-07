@@ -1885,6 +1885,15 @@ function Editor() {
           it.fadeIn && it.fadeIn > 0.01 ? `fade=t=in:st=${it.start.toFixed(3)}:d=${it.fadeIn.toFixed(3)}:alpha=1` : null,
           it.fadeOut && it.fadeOut > 0.01 ? `fade=t=out:st=${Math.max(it.start, end - it.fadeOut).toFixed(3)}:d=${it.fadeOut.toFixed(3)}:alpha=1` : null,
         ].filter(Boolean).join(",");
+        if (it.fx?.fillMode === "blur" || it.fx?.fillMode === "mirror") {
+          const bgCore = `scale=${targetW}:${targetH}:force_original_aspect_ratio=increase,crop=${targetW}:${targetH}`;
+          const bgFx = it.fx.fillMode === "blur" ? `${bgCore},gblur=sigma=${blurSigma(it.fx).toFixed(1)}:steps=2` : `${bgCore},hflip`;
+          const bgLabel = `imgbg${idx}`;
+          const bgOut = `vbg${idx}`;
+          filterParts.push(`[${ov.index}:v]${bgFx},format=rgba,colorchannelmixer=aa=${alpha.toFixed(3)}${fades ? `,${fades}` : ""}[${bgLabel}]`);
+          filterParts.push(`[${videoLabel}][${bgLabel}]overlay=0:0:enable='between(t,${it.start.toFixed(3)},${end.toFixed(3)})'[${bgOut}]`);
+          videoLabel = bgOut;
+        }
         const imgLabel = `img${idx}`;
         filterParts.push(`[${ov.index}:v]scale=${box.w}:${box.h},format=rgba,colorchannelmixer=aa=${alpha.toFixed(3)}${fades ? `,${fades}` : ""}[${imgLabel}]`);
         const out = `vov${idx}`;

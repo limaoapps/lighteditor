@@ -849,8 +849,7 @@ function Editor() {
     let cancelled = false;
     (async () => {
       try {
-        const targetH = QUALITY_HEIGHT[quality];
-        const targetW = Math.round((targetH * aspect.w) / aspect.h / 2) * 2;
+        const { targetW, targetH } = computeExportSize(quality, aspect);
         const bitrateGuess = bitrateMode === "custom" ? customBitrate : (targetH >= 2160 ? 35000 : targetH >= 1080 ? 8000 : 5000);
         const { isWebCodecsExportSupported } = await import("@/lib/webcodecs-export");
         const sup = await isWebCodecsExportSupported(targetW, targetH, exportFps, bitrateGuess);
@@ -1821,8 +1820,7 @@ function Editor() {
 
   // ---- Export ----
   const computedVBitrate = bitrateFromMode(quality, bitrateMode, customBitrate);
-  const exportTargetH = QUALITY_HEIGHT[quality];
-  const exportTargetW = Math.round((exportTargetH * aspect.w) / aspect.h / 2) * 2;
+  const { targetW: exportTargetW, targetH: exportTargetH } = computeExportSize(quality, aspect);
   const estimatedMB = useMemo(
     () => estimateSizeMB(Math.max(1, totalDuration), computedVBitrate, audioBitrate),
     [totalDuration, computedVBitrate, audioBitrate],
@@ -1898,8 +1896,7 @@ function Editor() {
       setExportElapsed((performance.now() - exportStartRef.current) / 1000);
     }, 250) as unknown as number;
 
-    const targetH = QUALITY_HEIGHT[quality];
-    const targetW = Math.round((targetH * aspect.w) / aspect.h / 2) * 2;
+    const { targetW, targetH } = computeExportSize(quality, aspect);
 
     try {
       const { isWebCodecsExportSupported, exportWithWebCodecs } = await import("@/lib/webcodecs-export");

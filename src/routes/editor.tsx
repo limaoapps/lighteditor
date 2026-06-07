@@ -1047,6 +1047,17 @@ function Editor() {
       const d = dragRef.current; if (!d) return;
       const rect = timelineRef.current?.getBoundingClientRect();
       if (!rect) return;
+      // Auto-scroll horizontally when dragging near/past edges (move/resize handles)
+      if (d.type === "move" || d.type === "resizeL" || d.type === "resizeR") {
+        const edge = 60;
+        const tl = timelineRef.current;
+        if (tl) {
+          const overRight = e.clientX - (rect.right - edge);
+          const overLeft = (rect.left + edge) - e.clientX;
+          if (overRight > 0) tl.scrollLeft += Math.min(40, overRight * 0.5);
+          else if (overLeft > 0) tl.scrollLeft = Math.max(0, tl.scrollLeft - Math.min(40, overLeft * 0.5));
+        }
+      }
       const xPx = e.clientX - rect.left + (timelineRef.current?.scrollLeft ?? 0) - labelColW;
       const tSec = Math.max(0, xPx / zoom);
       skipHistory.current = true;

@@ -171,6 +171,45 @@ function seekVideo(v: HTMLVideoElement, t: number): Promise<void> {
   });
 }
 
+function blurCanvasPx(fx?: WCItem["fx"]): number {
+  if (fx?.fillMode !== "blur") return 0;
+  const n = Math.max(0, Math.min(100, fx.blurBg ?? 30)) / 100;
+  return n <= 0 ? 0 : n * n * 56 + n * 8;
+}
+
+function drawSoftCover(
+  ctx: OffscreenCanvasRenderingContext2D,
+  source: CanvasImageSource,
+  srcW: number,
+  srcH: number,
+  targetW: number,
+  targetH: number,
+  blurPx: number,
+) {
+  const intensity = Math.max(0, Math.min(1, blurPx / 64));
+  const downsample = 1 + intensity * 24;
+  const tmpW = Math.max(24, Math.round(targetW / downsample));
+  const tmpH = Math.max(24, Math.round(targetH / downsample));
+  const tmp = new OffscreenCanvas(tmpW, tmpH);
+  const tctx = tmp.getContext("2d")!;
+  const cover = Math.max(tmpW / srcW, tmpH / srcH) * (1.04 + intensity * 0.18);
+  const w = srcW * cover;
+  const h = srcH * cover;
+  const x = (tmpW - w) / 2;
+  const y = (tmpH - h) / 2;
+  tctx.imageSmoothingEnabled = true;
+  tctx.imageSmoothingQuality = "high";
+  tctx.drawImage(source, x, y, w, h);
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  try { (ctx as unknown as { filter: string }).filter = blurPx > 0 ? `blur(${Math.min(18, blurPx / 3)}px)` : "none"; } catch { /* ignore */ }
+  const bleed = Math.ceil(Math.min(targetW, targetH) * 0.04 + blurPx * 0.5);
+  ctx.drawImage(tmp, -bleed, -bleed, targetW + bleed * 2, targetH + bleed * 2);
+  try { (ctx as unknown as { filter: string }).filter = "none"; } catch { /* ignore */ }
+  ctx.restore();
+}
+
 function drawClipFrame(
   ctx: OffscreenCanvasRenderingContext2D,
   source: CanvasImageSource,
@@ -195,25 +234,7 @@ function drawClipFrame(
     const w = srcW * cover, h = srcH * cover;
     const x = (targetW - w) / 2, y = (targetH - h) / 2;
     if (fillMode === "blur") {
-      // Blur robusto sem depender de ctx.filter: downscale agressivo + upscale suavizado.
-      // Quanto maior o blurPx, menor o canvas intermediário (mais borrão).
-      const baseW = 64;
-      const small = Math.max(16, Math.round(baseW - Math.min(48, blurPx)));
-      const ratio = srcH / Math.max(1, srcW);
-      const tmpW = small;
-      const tmpH = Math.max(8, Math.round(small * ratio));
-      const tmp = new OffscreenCanvas(tmpW, tmpH);
-      const tctx = tmp.getContext("2d")!;
-      tctx.imageSmoothingEnabled = true;
-      tctx.imageSmoothingQuality = "high";
-      // Tenta usar ctx.filter no auxiliar quando suportado para suavizar ainda mais
-      try { (tctx as unknown as { filter: string }).filter = `blur(${Math.max(1, Math.min(8, Math.round(blurPx / 4)))}px)`; } catch { /* ignore */ }
-      tctx.drawImage(source, 0, 0, tmpW, tmpH);
-      ctx.save();
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(tmp, x, y, w, h);
-      ctx.restore();
+      drawSoftCover(ctx, source, srcW, srcH, targetW, targetH, blurPx);
     } else {
       // mirror
       ctx.save();

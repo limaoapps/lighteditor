@@ -1485,20 +1485,17 @@ function Editor() {
     const vKbps = computedVBitrate;
     const aKbps = audioBitrate;
     // Modo de velocidade — usa CRF + parâmetros x264 para acelerar drasticamente o WASM (single-thread).
-    // "turbo": prioriza velocidade máxima (CRF alto, sem CABAC/bframes/lookahead) — pode dobrar/triplicar o fps de codificação.
-    // "rapido": equilíbrio velocidade/qualidade. "qualidade": preset superfast com bitrate alvo (mais lento).
     let vEncArgs: string[];
     if (speedMode === "qualidade") {
-      const vBitArgs = ["-b:v", `${vKbps}k`, "-maxrate", `${Math.round(vKbps * 1.5)}k`, "-bufsize", `${vKbps * 2}k`];
       vEncArgs = [
         "-c:v", "libx264", "-preset", "superfast", "-tune", "fastdecode",
         "-pix_fmt", "yuv420p", "-r", String(fps), "-threads", "0",
-        ...vBitArgs,
+        "-b:v", `${vKbps}k`, "-maxrate", `${Math.round(vKbps * 1.5)}k`, "-bufsize", `${vKbps * 2}k`,
       ];
     } else {
       const crf = speedMode === "turbo" ? "30" : "26";
       const x264Params = speedMode === "turbo"
-        ? "rc-lookahead=0:ref=1:bframes=0:weightp=0:cabac=0:8x8dct=0:trellis=0:me=dia:subme=0:aq-mode=0:mixed-refs=0:fast-pskip=1:sliced-threads=0:no-mbtree=1:no-scenecut=1"
+        ? "rc-lookahead=0:ref=1:bframes=0:weightp=0:cabac=0:8x8dct=0:trellis=0:me=dia:subme=0:aq-mode=0:mixed-refs=0:fast-pskip=1:no-mbtree=1:no-scenecut=1"
         : "rc-lookahead=0:ref=1:bframes=0:weightp=1:trellis=0:me=hex:subme=1:aq-mode=0:fast-pskip=1:no-mbtree=1";
       vEncArgs = [
         "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency",
@@ -1507,7 +1504,6 @@ function Editor() {
         "-maxrate", `${vKbps * 2}k`, "-bufsize", `${vKbps * 3}k`,
       ];
     }
-    void vBitArgs;
     const aEncArgs = ["-c:a", "aac", "-b:a", `${aKbps}k`, "-ar", "44100", "-ac", "2"];
 
     setExporting(true); setExportPct(0); setExportMsg(ffReady ? "Carregando engine..." : "Inicializando FFmpeg...");

@@ -765,6 +765,8 @@ function CornerHandles({ id, tr, onStartScale }: { id: string; tr: Transform; on
 }
 
 function Editor() {
+  const [showMobilePanel, setShowMobilePanel] = useState(false);
+  const [showMobileInspector, setShowMobileInspector] = useState(false);
   // Carrega todas as Google Fonts uma única vez
   useEffect(() => {
     if (typeof document === "undefined") return;

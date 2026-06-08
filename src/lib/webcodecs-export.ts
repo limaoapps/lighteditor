@@ -545,13 +545,13 @@ async function buildMixedAudio(opts: WCExportOptions, sampleRate: number): Promi
     gainEnvelope.gain.cancelScheduledValues(0);
     gainEnvelope.gain.setValueAtTime(edgeGain, startT);
     if (safeFadeIn > 0.01) {
-      gainEnvelope.gain.linearRampToValueAtTime(targetGain, centerStart);
+      gainEnvelope.gain.exponentialRampToValueAtTime(targetGain, centerStart);
     } else {
       gainEnvelope.gain.setValueAtTime(targetGain, startT);
     }
     gainEnvelope.gain.setValueAtTime(targetGain, centerEnd);
     if (safeFadeOut > 0.01) {
-      gainEnvelope.gain.linearRampToValueAtTime(edgeGain, startT + dur);
+      gainEnvelope.gain.exponentialRampToValueAtTime(edgeGain, startT + dur);
     }
     if (graph) {
       src.connect(graph.input);

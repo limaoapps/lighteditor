@@ -2664,10 +2664,10 @@ function Editor() {
         </main>
         <div
           onMouseDown={(e) => { sideDragRef.current = { side: "R", startX: e.clientX, startW: rightW }; document.body.style.cursor = "ew-resize"; }}
-          className="w-1 shrink-0 cursor-ew-resize bg-border hover:bg-primary/40"
+          className="hidden w-1 shrink-0 cursor-ew-resize bg-border hover:bg-primary/40 md:block"
           title="Arraste para redimensionar"
         />
-        <aside className="flex shrink-0 flex-col gap-2 overflow-y-auto border-l border-border bg-panel p-3 select-none" style={{ width: rightW }}>
+        <aside className="hidden shrink-0 flex-col gap-2 overflow-y-auto border-l border-border bg-panel p-3 select-none md:flex" style={{ width: rightW }}>
           <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             <Sparkles className="h-3 w-3 text-primary" /> Inspetor
           </div>

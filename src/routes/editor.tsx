@@ -3207,9 +3207,11 @@ function Editor() {
 
         <div className="flex shrink-0 flex-col select-none">
           <div className="flex items-center gap-3 border-t border-border bg-panel px-4 py-2">
-            <button onClick={() => { if (playhead >= totalDuration - 0.05) setPlayhead(0); setPlaying(true); }} disabled={!items.length} className="rounded p-1.5 hover:bg-card disabled:opacity-40"><Play className="h-4 w-4" /></button>
-            <button onClick={() => setPlaying(false)} className="rounded p-1.5 hover:bg-card"><Pause className="h-4 w-4" /></button>
-            <button onClick={() => { setPlaying(false); setPlayhead(0); }} className="rounded p-1.5 hover:bg-card"><Square className="h-4 w-4" /></button>
+            <div className="flex items-center gap-0.5 sm:gap-2">
+              <button onClick={() => { if (playhead >= totalDuration - 0.05) setPlayhead(0); setPlaying(true); }} disabled={!items.length} className="rounded p-1.5 hover:bg-card disabled:opacity-40"><Play className="h-4 w-4" /></button>
+              <button onClick={() => setPlaying(false)} className="rounded p-1.5 hover:bg-card"><Pause className="h-4 w-4" /></button>
+              <button onClick={() => { setPlaying(false); setPlayhead(0); }} className="rounded p-1.5 hover:bg-card"><RotateCcw className="h-4 w-4" /></button>
+            </div>
             <div className="ml-2 flex items-center gap-1 font-mono text-[11px] tabular-nums text-primary sm:text-xs">
               <span className="font-bold">{fmt(playhead)}</span>
               <span className="text-muted-foreground">/</span>

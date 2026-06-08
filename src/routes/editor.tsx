@@ -3462,11 +3462,36 @@ function Editor() {
               </div>
             </div>
           </div>
-          <div className="flex h-[280px] shrink-0 items-stretch gap-2 border-l border-border bg-panel px-3 py-2">
+          <div className="hidden h-[280px] shrink-0 items-stretch gap-2 border-l border-border bg-panel px-3 py-2 md:flex">
             <MasterFader label="L" db={masterDbL} setDb={setMasterDbL} peak={masterPeakL} clip={masterClipL} onClearClip={() => setMasterClipL(false)} />
             <MasterFader label="R" db={masterDbR} setDb={setMasterDbR} peak={masterPeakR} clip={masterClipR} onClearClip={() => setMasterClipR(false)} />
           </div>
           </div>
+        </div>
+        
+        {/* Mobile Bottom Navigation Bar (CapCut style) */}
+        <div className="flex h-16 shrink-0 items-center justify-around border-t border-border bg-panel px-2 md:hidden">
+          {[
+            { id: "media" as LeftPanel, icon: Film, label: "Mídia" },
+            { id: "titles" as LeftPanel, icon: TypeIcon, label: "Texto" },
+            { id: "transitions" as LeftPanel, icon: RefreshCw, label: "Transições" },
+            { id: "effects" as LeftPanel, icon: Wand2, label: "Efeitos" },
+          ].map(tab => {
+            const Icon = tab.icon;
+            const active = leftPanel === tab.id;
+            return (
+              <button key={tab.id} onClick={() => { setLeftPanel(tab.id); setShowMobilePanel(true); }}
+                className={`flex flex-col items-center gap-1 rounded-md px-2 py-1 transition ${active ? "text-primary" : "text-muted-foreground"}`}>
+                <Icon className="h-5 w-5" />
+                <span className="text-[10px] font-medium">{tab.label}</span>
+              </button>
+            );
+          })}
+          <button onClick={() => { setShowMobileInspector(true); }}
+            className={`flex flex-col items-center gap-1 rounded-md px-2 py-1 transition ${selected ? "text-primary" : "text-muted-foreground"}`}>
+            <Sliders className="h-5 w-5" />
+            <span className="text-[10px] font-medium">Ajustes</span>
+          </button>
         </div>
       </div>
 

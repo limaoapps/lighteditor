@@ -1670,7 +1670,8 @@ function Editor() {
       if (activeV1Video.audioFx) g.nodes.setFx(activeV1Video.audioFx);
       // multiplica fade do envelope no gain final via post-gain (recomputado a cada frame)
       const fade = computeVol(activeV1Video, playhead);
-      g.nodes.setGain(((activeV1Video.gainDb ?? 0) + (fade < 0.999 ? 20 * Math.log10(Math.max(0.0001, fade)) : 0)));
+      // Envelope linear-em-dB: nas bordas dos fades cai para 0dB (passthrough), no meio fica em gainDb.
+      g.nodes.setGain((activeV1Video.gainDb ?? 0) * fade);
     } else {
       // fallback se WebAudio falhou
       v.volume = Math.min(1, computeVol(activeV1Video, playhead));

@@ -4002,7 +4002,9 @@ function Editor() {
                           className={`rounded-lg border py-2 text-xs font-medium transition-colors ${selected.audioFx?.ambience === "lounge" ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:bg-accent"}`}
                         >
                           Som Lounge
+                        </button>
                       </div>
+
 
                       {/* Gradual Balance Control (Centro -> Esquerda/Direita) */}
                       <div className="space-y-2 mt-4">

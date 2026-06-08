@@ -1670,7 +1670,8 @@ function Editor() {
       if (activeV1Video.audioFx) g.nodes.setFx(activeV1Video.audioFx);
       // multiplica fade do envelope no gain final via post-gain (recomputado a cada frame)
       const fade = computeVol(activeV1Video, playhead);
-      g.nodes.setGain(((activeV1Video.gainDb ?? 0) + (fade < 0.999 ? 20 * Math.log10(Math.max(0.0001, fade)) : 0)));
+      // Envelope linear-em-dB: nas bordas dos fades cai para 0dB (passthrough), no meio fica em gainDb.
+      g.nodes.setGain((activeV1Video.gainDb ?? 0) * fade);
     } else {
       // fallback se WebAudio falhou
       v.volume = Math.min(1, computeVol(activeV1Video, playhead));
@@ -1725,7 +1726,7 @@ function Editor() {
         g.nodes.setMuted(!!trackMuted[a.trackId]);
         if (a.audioFx) g.nodes.setFx(a.audioFx);
         const fade = computeVol(a, playhead);
-        g.nodes.setGain(((a.gainDb ?? 0) + (fade < 0.999 ? 20 * Math.log10(Math.max(0.0001, fade)) : 0)));
+        g.nodes.setGain((a.gainDb ?? 0) * fade);
       } else {
         el.muted = !!trackMuted[a.trackId];
         el.volume = Math.min(1, computeVol(a, playhead));
@@ -3714,6 +3715,8 @@ function Editor() {
                               <div data-handle="R" onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); const end = i.start + (i.outPoint - i.inPoint); const time = getTimelineTimeFromClientX(e.clientX) ?? end; skipHistory.current = true; lastTimelinePointer.current = { x: e.clientX, y: e.clientY }; dragRef.current = { type: "resizeR", id: i.id, origOut: i.outPoint, pointerOffsetPx: (time - end) * zoom }; }}
                                 className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-ew-resize bg-white/40 hover:bg-white" />
 
+                              {!isAudio && (
+                                <>
                               <div data-handle="FI" title={`Fade in: ${formatFadeLabel(i.fadeIn ?? 0)} (arraste à direita)`}
                                 onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "fadeIn", id: i.id }; }}
                                 className="absolute left-2 top-1 z-20 h-3 w-3 cursor-ew-resize rounded-full bg-white opacity-0 ring-1 ring-black/50 group-hover/clip:opacity-90"
@@ -3733,6 +3736,8 @@ function Editor() {
                                   style={{ right: Math.max(2, foW - 6) }}>
                                   {formatFadeLabel(i.fadeOut ?? 0)}
                                 </div>
+                              )}
+                                </>
                               )}
                               {(() => {
                                 const d = dragRef.current;

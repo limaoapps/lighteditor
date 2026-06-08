@@ -414,6 +414,28 @@ function MasterFader({ label, db, setDb, peak, clip, onClearClip }: {
   );
 }
 
+function ChannelMeter({ peak, label }: { peak: number; label: string }) {
+  const minDb = -60, maxDb = 0;
+  const peakDb = peak > 0.00001 ? 20 * Math.log10(peak) : -80;
+  const meterPct = Math.max(0, Math.min(1, (peakDb - minDb) / (maxDb - minDb)));
+  return (
+    <div className="flex flex-col gap-0.5">
+      <div className="flex justify-between text-[7px] font-bold text-muted-foreground uppercase leading-none">
+        <span>{label}</span>
+      </div>
+      <div className="relative h-1 w-full overflow-hidden rounded-full bg-zinc-900 ring-1 ring-white/5">
+        <div
+          className="absolute inset-y-0 left-0 transition-[width] duration-75"
+          style={{
+            width: `${meterPct * 100}%`,
+            background: "linear-gradient(to right, #22c55e 0%, #22c55e 70%, #eab308 85%, #ef4444 100%)",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 const DEFAULT_FX: Fx = {
   brightness: 0, contrast: 0, saturation: 0, temperature: 0,
   sharpness: 0, exposure: 0, shadows: 0, highlights: 0, blur: 0,
@@ -831,6 +853,12 @@ function Editor() {
   >(null);
   const mediaItemRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const mediaListRef = useRef<HTMLDivElement | null>(null);
+
+  // Metering for balance (pan) view
+  const [panPeaks, setPanPeaks] = useState({ L: 0, R: 0 });
+  const panAnalyzersRef = useRef<{ L: AnalyserNode; R: AnalyserNode } | null>(null);
+  const panReqRef = useRef<number | null>(null);
+
 
 
   const [exporting, setExporting] = useState(false);
@@ -3001,6 +3029,70 @@ function Editor() {
                 </div>
 
                 <div className="border-t border-border pt-2">
+                {/* Pan meters side effect */}
+                {(() => {
+                  useEffect(() => {
+                    const ctx = ensureAudioCtx();
+                    if (!ctx || !selected || !selected.id) return;
+                    
+                    const entry = mediaGraphRef.current[selected.id];
+                    if (!entry) return;
+
+                    // Setup analyzers if needed
+                    if (!panAnalyzersRef.current) {
+                      const al = ctx.createAnalyser();
+                      const ar = ctx.createAnalyser();
+                      al.fftSize = 512;
+                      ar.fftSize = 512;
+                      panAnalyzersRef.current = { L: al, R: ar };
+                    }
+
+                    const { L, R } = panAnalyzersRef.current;
+                    const nodes = entry.nodes;
+                    
+                    // Connect nodes.splitter (which we just added to AudioFxNodes) to our local analyzers
+                    nodes.splitter.connect(L, 0);
+                    nodes.splitter.connect(R, 1);
+
+                    const buf = new Float32Array(L.fftSize);
+                    let currentL = 0;
+                    let currentR = 0;
+
+                    const update = () => {
+                      L.getFloatTimeDomainData(buf);
+                      let maxL = 0;
+                      for (let i = 0; i < buf.length; i++) {
+                        const v = Math.abs(buf[i]);
+                        if (v > maxL) maxL = v;
+                      }
+                      
+                      R.getFloatTimeDomainData(buf);
+                      let maxR = 0;
+                      for (let i = 0; i < buf.length; i++) {
+                        const v = Math.abs(buf[i]);
+                        if (v > maxR) maxR = v;
+                      }
+
+                      currentL = Math.max(maxL, currentL * 0.85);
+                      currentR = Math.max(maxR, currentR * 0.85);
+                      
+                      setPanPeaks({ L: currentL, R: currentR });
+                      panReqRef.current = requestAnimationFrame(update);
+                    };
+
+                    panReqRef.current = requestAnimationFrame(update);
+
+                    return () => {
+                      if (panReqRef.current) cancelAnimationFrame(panReqRef.current);
+                      try {
+                        nodes.splitter.disconnect(L);
+                        nodes.splitter.disconnect(R);
+                      } catch (e) {}
+                    };
+                  }, [selected?.id]);
+                  return null;
+                })()}
+
                   <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Echo / Delay</div>
                   <label className="flex items-center gap-2">
                     <span className="w-12 text-muted-foreground">Mix</span>
@@ -3060,14 +3152,20 @@ function Editor() {
                               : `D ${Math.round(afx.pan * 100)}%`}
                         </span>
                       </div>
-                      <input 
-                        type="range" min="-1" max="1" step="0.01" 
-                        value={afx.pan ?? 0}
-                        onChange={(e) => patchAfx({ pan: Number(e.target.value), channelMode: "panned" })}
-                        onDoubleClick={() => patchAfx({ pan: 0, channelMode: "stereo" })}
-                        className="w-full h-1 rounded bg-muted appearance-none cursor-pointer accent-primary" 
-                        title="Balanço (Pan) - Duplo clique para centralizar"
-                      />
+                      <div className="flex flex-col gap-2">
+                        <input 
+                          type="range" min="-1" max="1" step="0.01" 
+                          value={afx.pan ?? 0}
+                          onChange={(e) => patchAfx({ pan: Number(e.target.value), channelMode: "panned" })}
+                          onDoubleClick={() => patchAfx({ pan: 0, channelMode: "stereo" })}
+                          className="w-full h-1 rounded bg-muted appearance-none cursor-pointer accent-primary" 
+                          title="Balanço (Pan) - Duplo clique para centralizar"
+                        />
+                        <div className="grid grid-cols-2 gap-4 px-0.5">
+                          <ChannelMeter peak={panPeaks.L} label="E" />
+                          <ChannelMeter peak={panPeaks.R} label="D" />
+                        </div>
+                      </div>
                     </div>
                   </div>
 

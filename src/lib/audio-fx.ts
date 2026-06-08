@@ -116,6 +116,7 @@ export function irForAmbience(ctx: BaseAudioContext, amb: Ambience): { ir: Audio
 export type AudioFxNodes = {
   input: AudioNode;
   output: AudioNode;
+  splitter: ChannelSplitterNode; // Permite conectar analisadores externos por canal
   setGain: (db: number) => void;
   setFx: (fx: AudioFx) => void;
   setMuted: (m: boolean) => void;
@@ -243,7 +244,7 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
   let lastAmb: Ambience = "none";
 
   const api: AudioFxNodes = {
-    input, output: muteGain,
+    input, output: muteGain, splitter,
     setGain(db: number) {
       // sem clamp — permite estouro proposital
       out.gain.value = dbToGain(db);

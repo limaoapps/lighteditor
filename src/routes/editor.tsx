@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   Film, Plus, Scissors, Trash2, Play, Pause, Square, Download, ArrowLeft,
   Loader2, X, Volume2, VolumeX, ZoomIn, ZoomOut, Type as TypeIcon, Music2,
@@ -4160,7 +4160,7 @@ function Editor() {
                                   }));
                                 }}
                                 className="absolute inset-0 z-10 w-full h-full opacity-0 cursor-pointer orientation-vertical"
-                                style={{ WebkitAppearance: "slider-vertical" as any }}
+                                style={{ WebkitAppearance: "slider-vertical" } as CSSProperties}
                               />
                             </div>
                             <span className="text-[8px] text-muted-foreground font-mono">

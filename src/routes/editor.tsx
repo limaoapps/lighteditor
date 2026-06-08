@@ -1098,6 +1098,46 @@ function Editor() {
   );
 
   useEffect(() => { itemsRef.current = items; }, [items]);
+
+  // Pan meters (analisador L/R do clipe selecionado) — efeito de nível superior
+  useEffect(() => {
+    if (!selectedId) return;
+    const ctx = ensureAudioCtx();
+    if (!ctx) return;
+    const entry = mediaGraphRef.current[selectedId];
+    if (!entry) return;
+
+    if (!panAnalyzersRef.current) {
+      const al = ctx.createAnalyser();
+      const ar = ctx.createAnalyser();
+      al.fftSize = 512; ar.fftSize = 512;
+      panAnalyzersRef.current = { L: al, R: ar };
+    }
+    const { L, R } = panAnalyzersRef.current;
+    try {
+      entry.nodes.splitter.connect(L, 0);
+      entry.nodes.splitter.connect(R, 1);
+    } catch { /* ignore */ }
+
+    const buf = new Float32Array(L.fftSize);
+    let curL = 0, curR = 0;
+    const tick = () => {
+      L.getFloatTimeDomainData(buf);
+      let mL = 0; for (let i = 0; i < buf.length; i++) { const v = Math.abs(buf[i]); if (v > mL) mL = v; }
+      R.getFloatTimeDomainData(buf);
+      let mR = 0; for (let i = 0; i < buf.length; i++) { const v = Math.abs(buf[i]); if (v > mR) mR = v; }
+      curL = Math.max(mL, curL * 0.85);
+      curR = Math.max(mR, curR * 0.85);
+      setPanPeaks({ L: curL, R: curR });
+      panReqRef.current = requestAnimationFrame(tick);
+    };
+    panReqRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (panReqRef.current) cancelAnimationFrame(panReqRef.current);
+      try { entry.nodes.splitter.disconnect(L); entry.nodes.splitter.disconnect(R); } catch { /* ignore */ }
+    };
+  }, [selectedId, ensureAudioCtx]);
   useEffect(() => { tracksRef.current = tracks; }, [tracks]);
 
   const usedMediaIds = useMemo(() => new Set(items.map(i => i.mediaId).filter(Boolean) as string[]), [items]);

@@ -56,6 +56,7 @@ export const DEFAULT_AUDIO_FX: AudioFx = {
   pan: 0,
   stereoWidth: 100,
   positionDepth: 0,
+  voicePreset: "none",
 };
 
 
@@ -69,7 +70,49 @@ export function hasAudioFx(fx?: Partial<AudioFx> | null): boolean {
   if (fx.channelMode && fx.channelMode !== "stereo") return true;
   if (Math.abs((fx.stereoWidth ?? 100) - 100) > 1) return true;
   if (Math.abs(fx.positionDepth ?? 0) > 0.01) return true;
+  if (fx.voicePreset && fx.voicePreset !== "none") return true;
   return false;
+}
+
+/** ===== Presets de efeito de voz ===== */
+export type VoiceSpec = {
+  ringHz: number; ringDepth: number;   // 0..1 (0 = sem ring mod)
+  drive: number;                        // 0..1 (distorção)
+  lowCutHz: number;                     // highpass freq
+  highCutHz: number;                    // lowpass freq
+  bandQ: number;                        // ressonância dos filtros
+  wet: number;                          // 0..1 (mix dry/wet do bloco de voz)
+  outGainDb: number;                    // compensação de volume
+};
+export const VOICE_SPECS: Record<Exclude<VoicePreset, "none">, VoiceSpec> = {
+  robot:      { ringHz: 50,  ringDepth: 0.85, drive: 0.35, lowCutHz: 250,  highCutHz: 3200, bandQ: 1.0, wet: 1,    outGainDb: 2 },
+  monster:    { ringHz: 30,  ringDepth: 0.55, drive: 0.55, lowCutHz: 60,   highCutHz: 900,  bandQ: 0.8, wet: 1,    outGainDb: 4 },
+  alien:      { ringHz: 180, ringDepth: 0.75, drive: 0.20, lowCutHz: 500,  highCutHz: 5000, bandQ: 1.2, wet: 1,    outGainDb: 0 },
+  megaphone:  { ringHz: 0,   ringDepth: 0,    drive: 0.75, lowCutHz: 600,  highCutHz: 3500, bandQ: 2.0, wet: 1,    outGainDb: 3 },
+  telephone:  { ringHz: 0,   ringDepth: 0,    drive: 0.25, lowCutHz: 400,  highCutHz: 3000, bandQ: 1.5, wet: 1,    outGainDb: 1 },
+  radio:      { ringHz: 0,   ringDepth: 0,    drive: 0.45, lowCutHz: 350,  highCutHz: 4200, bandQ: 1.8, wet: 1,    outGainDb: 2 },
+  whisper:    { ringHz: 0,   ringDepth: 0,    drive: 0.10, lowCutHz: 700,  highCutHz: 8000, bandQ: 0.7, wet: 0.85, outGainDb: 4 },
+  chipmunk:   { ringHz: 0,   ringDepth: 0,    drive: 0.15, lowCutHz: 800,  highCutHz: 10000,bandQ: 0.7, wet: 1,    outGainDb: 0 },
+  demon:      { ringHz: 22,  ringDepth: 0.70, drive: 0.70, lowCutHz: 40,   highCutHz: 700,  bandQ: 1.1, wet: 1,    outGainDb: 5 },
+  underwater: { ringHz: 0,   ringDepth: 0,    drive: 0.10, lowCutHz: 80,   highCutHz: 500,  bandQ: 0.8, wet: 1,    outGainDb: 3 },
+  ghost:      { ringHz: 7,   ringDepth: 0.45, drive: 0.15, lowCutHz: 200,  highCutHz: 4000, bandQ: 0.9, wet: 0.9,  outGainDb: 1 },
+};
+
+function makeDriveCurve(amount: number): Float32Array {
+  const n = 1024; const k = Math.max(0, Math.min(0.999, amount));
+  const curve = new Float32Array(n);
+  const deg = Math.PI / 180;
+  const a = (k * 100) + 0.0001;
+  for (let i = 0; i < n; i++) {
+    const x = (i * 2) / n - 1;
+    curve[i] = ((3 + a) * x * 20 * deg) / (Math.PI + a * Math.abs(x));
+  }
+  return curve;
+}
+function makeLinearCurve(): Float32Array {
+  const n = 1024; const c = new Float32Array(n);
+  for (let i = 0; i < n; i++) c[i] = (i * 2) / n - 1;
+  return c;
 }
 
 /** ===== Presets de reverb (parâmetros de geração de IR sintético) ===== */

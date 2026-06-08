@@ -3028,12 +3028,13 @@ function Editor() {
                 <div className="border-t border-border pt-2">
                   <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Ambiente</div>
                   <div className="grid grid-cols-3 gap-1">
-                    {(["none","room","hall","cave","outdoor","underwater"] as Ambience[]).map(a => (
+                    {(["none","room","hall","cave","outdoor","underwater", "lounge"] as Ambience[]).map(a => (
                       <button key={a} onClick={() => patchAfx({ ambience: a })}
                         className={`rounded-md border px-1.5 py-1 text-[10px] capitalize ${afx.ambience === a ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
-                        {a === "none" ? "off" : a === "underwater" ? "submerso" : a === "outdoor" ? "ext." : a === "room" ? "sala" : a === "hall" ? "salão" : a === "cave" ? "caverna" : a}
+                        {a === "none" ? "off" : a === "underwater" ? "submerso" : a === "outdoor" ? "ext." : a === "room" ? "sala" : a === "hall" ? "salão" : a === "cave" ? "caverna" : a === "lounge" ? "lounge" : a}
                       </button>
                     ))}
+
                   </div>
                 </div>
 

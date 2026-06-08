@@ -3778,8 +3778,11 @@ function Editor() {
                           const visualFoW = (i.fadeOut ?? 0) * zoom;
                           const audioFiW = getAudioFadeIn(i) * zoom;
                           const audioFoW = getAudioFadeOut(i) * zoom;
-                          const hasAudio = i.kind === "audio" || i.kind === "video";
+                          // Áudio (waveform/ganho/fades de áudio) só aparece em clipes de áudio.
+                          // Vídeos silenciados (áudio extraído) NÃO mostram waveform — mostram filmstrip.
+                          const hasAudio = i.kind === "audio" || (i.kind === "video" && !i.silenced);
                           const hasVisual = i.kind !== "audio";
+                          const showFilmstrip = i.kind === "video" && !!i.url;
                           return (
                             <div key={i.id}
                               onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setSelectedId(i.id); setCtxMenu({ x: e.clientX, y: e.clientY, clipId: i.id }); }}

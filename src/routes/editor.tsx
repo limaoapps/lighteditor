@@ -1313,7 +1313,7 @@ function Editor() {
       transform: asset.kind === "image" || asset.kind === "video" ? { xPct: 50, yPct: 50, scale: 1, rotation: 0 } : undefined,
       fadeIn: 0, fadeOut: 0,
       gainDb: (asset.kind === "audio" || asset.kind === "video") ? 0 : undefined,
-      audioFx: (asset.kind === "audio" || asset.kind === "video") ? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq], pan: DEFAULT_AUDIO_FX_REF.pan ?? 0, stereoWidth: DEFAULT_AUDIO_FX_REF.stereoWidth ?? 100, positionDepth: DEFAULT_AUDIO_FX_REF.positionDepth ?? 0 } : undefined,
+      audioFx: (asset.kind === "audio" || asset.kind === "video") ? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] } : undefined,
       fx: (asset.kind === "image" || asset.kind === "video") ? { ...DEFAULT_FX } : undefined,
     };
   }, []);

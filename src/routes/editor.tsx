@@ -4002,7 +4002,6 @@ function Editor() {
                           className={`rounded-lg border py-2 text-xs font-medium transition-colors ${selected.audioFx?.ambience === "lounge" ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:bg-accent"}`}
                         >
                           Som Lounge
-                        </button>
                       </div>
 
                       {/* Gradual Balance Control (Centro -> Esquerda/Direita) */}
@@ -4036,9 +4035,6 @@ function Editor() {
                           <span className="text-[10px] font-bold text-muted-foreground">R</span>
                         </div>
                       </div>
-
-
-                      </div>
                     </div>
                   </div>
                 )}
@@ -4062,6 +4058,7 @@ function Editor() {
           </div>
         </div>
       )}
+
 
       {/* Context menu */}
 

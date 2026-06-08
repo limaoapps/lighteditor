@@ -39,6 +39,7 @@ export type WCItem = {
   audioFadeOut?: number;
   gainDb?: number;
   audioFx?: AudioFx;
+  silenced?: boolean;
   fx?: {
     fillMode: "bars" | "blur" | "mirror" | "stretch" | "color";
     bgColor?: string;
@@ -563,7 +564,7 @@ async function buildMixedAudio(opts: WCExportOptions, sampleRate: number): Promi
 
   try {
     for (const c of opts.v1clips) {
-      if (c.kind !== "video" || !c.file) continue;
+      if (c.kind !== "video" || !c.file || c.silenced) continue;
       let abuf: AudioBuffer | null = null;
       try { abuf = await decodeAudio(probe, c.file); } catch { continue; }
       if (!abuf) continue;
@@ -573,7 +574,7 @@ async function buildMixedAudio(opts: WCExportOptions, sampleRate: number): Promi
       try { src.start(c.start, c.inPoint, c.outPoint - c.inPoint); } catch { /* ignore */ }
     }
     for (const c of opts.imageItems ?? []) {
-      if (c.kind !== "video" || !c.file || opts.v1clips.some(v => v.id === c.id)) continue;
+      if (c.kind !== "video" || !c.file || c.silenced || opts.v1clips.some(v => v.id === c.id)) continue;
       let abuf: AudioBuffer | null = null;
       try { abuf = await decodeAudio(probe, c.file); } catch { continue; }
       if (!abuf) continue;

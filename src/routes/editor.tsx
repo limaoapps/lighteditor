@@ -3947,13 +3947,11 @@ function Editor() {
                         <span className="text-sm font-semibold">Modo de Canal</span>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        {(["stereo", "mono", "left", "right", "swap"] as ChannelMode[]).map((m) => {
-                          const labels: Record<ChannelMode, string> = {
+                      <div className="grid grid-cols-3 gap-2">
+                        {(["stereo", "mono"] as ChannelMode[]).map((m) => {
+                          const labels: Record<string, string> = {
                             stereo: "Estéreo",
                             mono: "Mono",
-                            left: "Esquerdo",
-                            right: "Direito",
-                            swap: "Inverter",
                           };
                           return (
                             <button
@@ -3973,6 +3971,56 @@ function Editor() {
                             </button>
                           );
                         })}
+                        <button
+                          onClick={() => {
+                            const isLounge = selected.audioFx?.ambience === "lounge";
+                            const nextAmb = isLounge ? "none" : "lounge";
+                            setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), ambience: nextAmb } } : i));
+                            if (mediaGraphRef.current[selected.id]) {
+                              mediaGraphRef.current[selected.id].nodes.setFx({
+                                ...(selected.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }),
+                                ambience: nextAmb
+                              });
+                            }
+                          }}
+                          className={`rounded-lg border py-2 text-xs font-medium transition-colors ${selected.audioFx?.ambience === "lounge" ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:bg-accent"}`}
+                        >
+                          Som Lounge
+                        </button>
+                      </div>
+
+                      {/* Gradual Balance Control (Centro -> Esquerda/Direita) */}
+                      <div className="space-y-2 mt-4">
+                        <div className="flex justify-between items-center">
+                          <label className="text-[10px] uppercase font-bold text-muted-foreground">Balanço (Pan)</label>
+                          <span className="text-[10px] font-mono text-primary">
+                            {selected.audioFx?.pan === 0 || !selected.audioFx?.pan ? "CENTRO" : 
+                             selected.audioFx.pan < 0 ? `${Math.abs(selected.audioFx.pan * 100).toFixed(0)}% ESQ` : 
+                             `${(selected.audioFx.pan * 100).toFixed(0)}% DIR`}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] font-bold text-muted-foreground">L</span>
+                          <input 
+                            type="range" min="-1" max="1" step="0.01" 
+                            value={selected.audioFx?.pan ?? 0}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), pan: val, channelMode: "panned" } } : i));
+                              if (mediaGraphRef.current[selected.id]) {
+                                mediaGraphRef.current[selected.id].nodes.setFx({
+                                  ...(selected.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }),
+                                  pan: val,
+                                  channelMode: "panned"
+                                });
+                              }
+                            }}
+                            className="flex-1 h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" 
+                          />
+                          <span className="text-[10px] font-bold text-muted-foreground">R</span>
+                        </div>
+                      </div>
+
 
                       </div>
                     </div>

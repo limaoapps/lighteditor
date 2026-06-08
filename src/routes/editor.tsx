@@ -2253,9 +2253,9 @@ function Editor() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex min-h-0 flex-1">
-        <aside className="flex shrink-0 border-r border-border bg-panel select-none" style={{ width: leftW }}>
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <aside className="hidden shrink-0 border-r border-border bg-panel select-none md:flex" style={{ width: leftW }}>
           <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-border bg-background/30 py-2">
             {([
               { id: "media" as LeftPanel, icon: Film, label: "Mídia" },

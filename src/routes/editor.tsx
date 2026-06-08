@@ -1403,7 +1403,29 @@ function Editor() {
       .reduce((m, i) => Math.max(m, i.start + (i.outPoint - i.inPoint)), 0);
     const start = opts?.start != null ? Math.max(0, opts.start) : defaultStart;
     const it = createTLFromMedia(asset, targetTrack, start, opts?.duration);
-    setItems(prev => [...prev, it]);
+
+    // Separação automática: vídeo com áudio gera item de áudio espelhado em A1 e o
+    // vídeo passa a ser silenciado. Vídeo → frames; áudio → waveform/ganho/efeitos.
+    const newItems: TLItem[] = [it];
+    if (asset.kind === "video" && asset.duration > 0) {
+      it.silenced = true;
+      it.audioFx = undefined;
+      it.gainDb = undefined;
+      const audioTrack = tracks.find(t => t.kind === "audio")?.id ?? ensureTrack("audio");
+      const audioAsset: MediaAsset = {
+        id: crypto.randomUUID(),
+        kind: "audio",
+        name: `${asset.name} · áudio`,
+        file: asset.file,
+        url: asset.url,
+        duration: asset.duration,
+      };
+      const audioItem = createTLFromMedia(audioAsset, audioTrack, start, asset.duration);
+      audioItem.mediaId = asset.id;
+      newItems.push(audioItem);
+    }
+
+    setItems(prev => [...prev, ...newItems]);
     setSelectedId(it.id);
   }, [items, tracks, ensureTrack, createTLFromMedia, setItems]);
 

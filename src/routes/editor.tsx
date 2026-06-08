@@ -950,9 +950,9 @@ function Editor() {
   const clipboardRef = useRef<TLItem | null>(null);
 
   // Resizable side panels
-  const [leftW, setLeftW] = useState(256);
+  const [leftW, setLeftW] = useState(320);
   const [leftPanel, setLeftPanel] = useState<LeftPanel>("media");
-  const [rightW, setRightW] = useState(304);
+  const [rightW, setRightW] = useState(380);
   const [masterDbL, setMasterDbL] = useState(0);
   const [masterDbR, setMasterDbR] = useState(0);
   const [masterPeakL, setMasterPeakL] = useState(0);

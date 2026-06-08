@@ -69,7 +69,6 @@ const AMBIENCE_SPECS: Record<Exclude<Ambience, "none">, IRSpec & { wet: number }
   lounge:      { duration: 1.8, decay: 2.4, predelay: 0.015, brightness: 0.70, wet: 0.35 }, // Som Lounge
 };
 
-};
 
 /** Gera IR sintético (ruído com decaimento exponencial). */
 export function generateIR(ctx: BaseAudioContext, spec: IRSpec): AudioBuffer {

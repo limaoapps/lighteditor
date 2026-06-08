@@ -131,6 +131,45 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
   const input = ctx.createGain();
   input.gain.value = 1;
 
+  // Position Depth (Frente/Trás)
+  // Frente: Som brilhante (high shelf), menos reverb (dry gain up).
+  // Trás: Som abafado (low pass), mais reverb (wet gain up).
+  const depthFilter = ctx.createBiquadFilter();
+  depthFilter.type = "lowpass";
+  depthFilter.frequency.value = 22000; // start open
+
+  // Mid/Side Matrix for Stereo Width
+  // Mid = (L+R)/2, Side = (L-R)
+  const widthSplitter = ctx.createChannelSplitter(2);
+  const widthMerger = ctx.createChannelMerger(2);
+  const midSum = ctx.createGain(); midSum.gain.value = 0.5;
+  const sideDiff = ctx.createGain(); sideDiff.gain.value = 1;
+  const sideInv = ctx.createGain(); sideInv.gain.value = -1;
+
+  const widthMidGain = ctx.createGain(); // Mid intensity
+  const widthSideGain = ctx.createGain(); // Side intensity
+  
+  // Connections for Width:
+  // L -> midSum, R -> midSum (Mid = (L+R)/2)
+  // L -> sideDiff, R -> sideInv -> sideDiff (Side = L-R)
+  widthSplitter.connect(midSum, 0); 
+  widthSplitter.connect(midSum, 1);
+  widthSplitter.connect(sideDiff, 0);
+  widthSplitter.connect(sideInv, 1);
+  sideInv.connect(sideDiff);
+
+  midSum.connect(widthMidGain);
+  sideDiff.connect(widthSideGain);
+
+  // Re-matrix: L = Mid + Side, R = Mid - Side
+  const widthSideNeg = ctx.createGain(); widthSideNeg.gain.value = -1;
+  widthMidGain.connect(widthMerger, 0, 0); // L <- Mid
+  widthSideGain.connect(widthMerger, 0, 0); // L <- Side
+  widthMidGain.connect(widthMerger, 0, 1); // R <- Mid
+  widthSideGain.connect(widthSideNeg);
+  widthSideNeg.connect(widthMerger, 0, 1); // R <- -Side
+
+
   // EQ 12 bandas: peaking BiquadFilters em série
   const eqNodes: BiquadFilterNode[] = EQ_BANDS.map((f, idx) => {
     const b = ctx.createBiquadFilter();
@@ -184,8 +223,11 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
   const out = ctx.createGain(); out.gain.value = 1;
   const muteGain = ctx.createGain(); muteGain.gain.value = 1;
 
-  // Conexões: input → eq[0..n-1] → splitter/merger → echoIn(dry+delay) → echoMix → revDry+conv → revMix → ambDry+ambConv → ambMix → out → muteGain
-  let prev: AudioNode = input;
+  // Conexões: input → depthFilter → widthSplitter ... widthMerger → eq[0..n-1] → splitter/merger → echoIn(dry+delay) → echoMix → revDry+conv → revMix → ambDry+ambConv → ambMix → out → muteGain
+  input.connect(depthFilter);
+  depthFilter.connect(widthSplitter);
+  
+  let prev: AudioNode = widthMerger;
   for (const b of eqNodes) { prev.connect(b); prev = b; }
   prev.connect(splitter);
   merger.connect(echoDry);
@@ -211,6 +253,24 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
       for (let i = 0; i < eqNodes.length; i++) {
         eqNodes[i].gain.value = fx.eq[i] ?? 0;
       }
+      // Position Depth
+      const depth = fx.positionDepth ?? 0;
+      if (depth > 0) {
+        // Trás: low pass abafa o som
+        depthFilter.type = "lowpass";
+        depthFilter.frequency.value = 20000 - depth * 18000;
+      } else {
+        // Frente: high shelf dá brilho (aproximado)
+        depthFilter.type = "highshelf";
+        depthFilter.frequency.value = 4000;
+        depthFilter.gain.value = Math.abs(depth) * 6;
+      }
+
+      // Stereo Width
+      const widthVal = (fx.stereoWidth ?? 100) / 100;
+      widthMidGain.gain.value = 1; 
+      widthSideGain.gain.value = widthVal;
+
       // Canal (Roteamento conforme regras técnicas)
       const m = fx.channelMode;
       console.log(`[AudioFX] Modo de canal ativo: ${m.toUpperCase()}`);

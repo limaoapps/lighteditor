@@ -3220,19 +3220,19 @@ function Editor() {
             <div className="flex-1" />
             <button onClick={() => splitAt(playhead)} title="Dividir (S / Ctrl+B)"
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs hover:border-primary hover:text-primary">
-              <Scissors className="h-3.5 w-3.5" /> Dividir
+              <Scissors className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Dividir</span>
             </button>
             <button
               onClick={() => setSnapResize(s => !s)}
               title={snapResize ? "Snap ativo — clipes encaixam nas bordas. Clique para desativar." : "Snap desativado — movimentação livre. Clique para ativar."}
               className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors ${snapResize ? "border-primary/60 bg-primary/15 text-primary" : "border-border bg-card text-muted-foreground hover:border-primary hover:text-primary"}`}
             >
-              <Magnet className="h-3.5 w-3.5" /> {snapResize ? "Snap" : "Snap off"}
+              <Magnet className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{snapResize ? "Snap" : "Snap off"}</span>
             </button>
 
             <button onClick={() => selected && deleteItem(selected.id)} disabled={!selected} title="Excluir (Del)"
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs hover:border-destructive hover:text-destructive disabled:opacity-40">
-              <Trash2 className="h-3.5 w-3.5" /> Excluir
+              <Trash2 className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Excluir</span>
             </button>
             <div className="mx-2 h-5 w-px bg-border" />
             <div className="flex items-center gap-2 text-xs text-muted-foreground">

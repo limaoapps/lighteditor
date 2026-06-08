@@ -1456,13 +1456,7 @@ function Editor() {
     try { recorderRef.current?.stop(); } catch { /* ignore */ }
   }, []);
 
-  // Ajuste de escala do item do preview (zoom in/out fora do preview)
-  const adjustPreviewItemScale = useCallback((delta: number) => {
-    const target = (selectedId && items.find(i => i.id === selectedId && i.transform)) || activeV1Video;
-    if (!target || !target.transform) return;
-    setItems(prev => prev.map(i => i.id === target.id && i.transform
-      ? { ...i, transform: { ...i.transform, scale: Math.max(0.05, Math.min(50, i.transform.scale + delta)) } } : i));
-  }, [selectedId, items, activeV1Video, setItems]);
+
 
   const addText = useCallback(() => {
     const videoTracks = tracks.filter(t => t.kind === "video");

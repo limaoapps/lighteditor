@@ -3584,6 +3584,13 @@ function Editor() {
                 }
               }
             }}
+            onScroll={(e) => {
+              if (syncingScroll.current === "sb") { syncingScroll.current = null; return; }
+              if (hScrollRef.current) {
+                syncingScroll.current = "tl";
+                hScrollRef.current.scrollLeft = (e.target as HTMLDivElement).scrollLeft;
+              }
+            }}
             className="no-scrollbar relative h-[280px] min-w-0 flex-1 overflow-auto bg-track">
 
             <div className="relative" style={{ width: labelColW + rulerSpan * zoom, minWidth: "100%" }}>

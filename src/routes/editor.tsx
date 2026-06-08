@@ -3142,19 +3142,19 @@ function Editor() {
 
               <label className="flex items-center gap-2" title="Duplo clique para restaurar">
                 <span className="w-14 text-muted-foreground">Fade In</span>
-                <input type="range" min={0} max={Math.min(5, selected.outPoint - selected.inPoint)} step={0.05} value={selected.fadeIn ?? 0}
-                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: Number(e.target.value) } : i))}
-                  onDoubleClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: 0 } : i))}
+                <input type="range" min={0} max={Math.min(5, selected.outPoint - selected.inPoint)} step={0.05} value={getAudioFadeIn(selected)}
+                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFadeIn: Number(e.target.value) } : i))}
+                  onDoubleClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFadeIn: 0 } : i))}
                   className="flex-1 accent-[color:var(--primary)]" />
-                <span className="w-10 text-right font-mono tabular-nums">{(selected.fadeIn ?? 0).toFixed(2)}s</span>
+                <span className="w-10 text-right font-mono tabular-nums">{getAudioFadeIn(selected).toFixed(2)}s</span>
               </label>
               <label className="flex items-center gap-2" title="Duplo clique para restaurar">
                 <span className="w-14 text-muted-foreground">Fade Out</span>
-                <input type="range" min={0} max={Math.min(5, selected.outPoint - selected.inPoint)} step={0.05} value={selected.fadeOut ?? 0}
-                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeOut: Number(e.target.value) } : i))}
-                  onDoubleClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeOut: 0 } : i))}
+                <input type="range" min={0} max={Math.min(5, selected.outPoint - selected.inPoint)} step={0.05} value={getAudioFadeOut(selected)}
+                  onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFadeOut: Number(e.target.value) } : i))}
+                  onDoubleClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFadeOut: 0 } : i))}
                   className="flex-1 accent-[color:var(--primary)]" />
-                <span className="w-10 text-right font-mono tabular-nums">{(selected.fadeOut ?? 0).toFixed(2)}s</span>
+                <span className="w-10 text-right font-mono tabular-nums">{getAudioFadeOut(selected).toFixed(2)}s</span>
               </label>
             </div>
           )}

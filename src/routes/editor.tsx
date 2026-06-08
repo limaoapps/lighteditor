@@ -2632,7 +2632,7 @@ function Editor() {
                   transform: `translate(-50%,-50%) scale(${tr.scale}) rotate(${tr.rotation}deg)`,
                   border: "1.5px dashed var(--primary)",
                   pointerEvents: "none",
-                  zIndex: trackZ(previewTarget.trackId) + 1,
+                  zIndex: 40,
                 };
                 return (
                   <div key={`sel-${previewTarget.id}`} style={style}>

@@ -412,6 +412,32 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
         ambDry.gain.value = a ? 1 - a.wet * 0.6 : 1;
         ambWet.gain.value = a ? a.wet : 0;
       }
+      // Voice preset
+      const vp: VoicePreset = fx.voicePreset ?? "none";
+      if (vp !== lastVoice) {
+        lastVoice = vp;
+        if (vp === "none") {
+          voiceDry.gain.value = 1; voiceWet.gain.value = 0;
+          ringDepth.gain.value = 0;
+          voiceShaper.curve = makeLinearCurve() as unknown as Float32Array<ArrayBuffer>;
+          voiceHp.frequency.value = 20; voiceLp.frequency.value = 20000;
+          voiceOutGain.gain.value = 1;
+        } else {
+          const s = VOICE_SPECS[vp];
+          voiceWet.gain.value = s.wet;
+          voiceDry.gain.value = 1 - s.wet;
+          ringOsc.frequency.value = Math.max(0.1, s.ringHz || 0.1);
+          ringDepth.gain.value = s.ringDepth;
+          voiceShaper.curve = (s.drive > 0.01
+            ? makeDriveCurve(s.drive)
+            : makeLinearCurve()) as unknown as Float32Array<ArrayBuffer>;
+          voiceHp.frequency.value = Math.max(20, s.lowCutHz);
+          voiceHp.Q.value = s.bandQ;
+          voiceLp.frequency.value = Math.min(20000, s.highCutHz);
+          voiceLp.Q.value = s.bandQ;
+          voiceOutGain.gain.value = dbToGain(s.outGainDb);
+        }
+      }
     },
     setMuted(m: boolean) { muteGain.gain.value = m ? 0 : 1; },
   };

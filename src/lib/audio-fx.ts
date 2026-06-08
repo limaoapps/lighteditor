@@ -9,8 +9,8 @@
 export const EQ_BANDS = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 12000, 14000, 16000];
 export const EQ_BAND_COUNT = EQ_BANDS.length;
 
-export type ReverbPreset = "none" | "room" | "hall" | "plate" | "cathedral";
-export type Ambience = "none" | "room" | "hall" | "cave" | "outdoor" | "underwater" | "lounge";
+export type ReverbPreset = "none" | "room" | "hall" | "plate" | "cathedral" | "auditorium" | "cinema";
+export type Ambience = "none" | "room" | "hall" | "cave" | "outdoor" | "underwater" | "lounge" | "surround_light" | "surround_med" | "surround_strong";
 export type ChannelMode = "stereo" | "mono" | "panned" | "left" | "right" | "invert";
 
 
@@ -24,6 +24,8 @@ export type AudioFx = {
   ambience: Ambience;
   channelMode: ChannelMode;
   pan: number; // -1 (full left) .. 1 (full right)
+  stereoWidth: number; // 0..200 (%)
+  positionDepth: number; // -1 (Frente) .. 1 (Trás)
 };
 
 
@@ -37,6 +39,8 @@ export const DEFAULT_AUDIO_FX: AudioFx = {
   ambience: "none",
   channelMode: "stereo",
   pan: 0,
+  stereoWidth: 100,
+  positionDepth: 0,
 };
 
 
@@ -48,6 +52,8 @@ export function hasAudioFx(fx?: Partial<AudioFx> | null): boolean {
   if ((fx.echoMix ?? 0) > 0.5) return true;
   if (fx.ambience && fx.ambience !== "none") return true;
   if (fx.channelMode && fx.channelMode !== "stereo") return true;
+  if (Math.abs((fx.stereoWidth ?? 100) - 100) > 1) return true;
+  if (Math.abs(fx.positionDepth ?? 0) > 0.01) return true;
   return false;
 }
 
@@ -58,6 +64,8 @@ const REVERB_SPECS: Record<Exclude<ReverbPreset, "none">, IRSpec> = {
   hall:       { duration: 2.2, decay: 2.2, predelay: 0.025, brightness: 0.5 },
   plate:      { duration: 1.5, decay: 2.6, predelay: 0.005, brightness: 0.9 },
   cathedral:  { duration: 4.5, decay: 1.6, predelay: 0.040, brightness: 0.35 },
+  auditorium: { duration: 3.0, decay: 2.0, predelay: 0.030, brightness: 0.4 },
+  cinema:     { duration: 2.5, decay: 2.5, predelay: 0.020, brightness: 0.5 },
 };
 // Ambientes mais pronunciados — caverna bem "cavernosa", subterrâneo bem "abafado".
 const AMBIENCE_SPECS: Record<Exclude<Ambience, "none">, IRSpec & { wet: number }> = {
@@ -66,7 +74,10 @@ const AMBIENCE_SPECS: Record<Exclude<Ambience, "none">, IRSpec & { wet: number }
   cave:        { duration: 5.5, decay: 0.9, predelay: 0.060, brightness: 0.18, wet: 0.75 },
   outdoor:     { duration: 0.35, decay: 4.5, predelay: 0.000, brightness: 0.95, wet: 0.18 },
   underwater:  { duration: 2.2, decay: 1.4, predelay: 0.000, brightness: 0.08, wet: 0.85 },
-  lounge:      { duration: 1.8, decay: 2.4, predelay: 0.015, brightness: 0.70, wet: 0.35 }, // Som Lounge
+  lounge:      { duration: 1.8, decay: 2.4, predelay: 0.015, brightness: 0.70, wet: 0.35 },
+  surround_light:  { duration: 0.1, decay: 1.0, predelay: 0.005, brightness: 0.8, wet: 0.15 },
+  surround_med:    { duration: 0.2, decay: 1.2, predelay: 0.015, brightness: 0.7, wet: 0.30 },
+  surround_strong: { duration: 0.3, decay: 1.5, predelay: 0.025, brightness: 0.6, wet: 0.45 },
 };
 
 

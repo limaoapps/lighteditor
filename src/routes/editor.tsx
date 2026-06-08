@@ -3437,24 +3437,24 @@ function Editor() {
         <div className="flex shrink-0 flex-col select-none">
           <div className="flex items-center gap-3 border-t border-border bg-panel px-4 py-2">
             <div className="flex items-center gap-0.5 sm:gap-2">
-              <button 
-                onClick={() => { 
-                  if (playhead >= totalDuration - 0.05) setPlayhead(0); 
-                  setPlaying(true); 
-                }} 
-                disabled={!items.length} 
-                className="rounded p-1.5 hover:bg-card disabled:opacity-40"
+              <button
+                onClick={() => {
+                  if (playing) { setPlaying(false); return; }
+                  if (playhead >= totalDuration - 0.05) setPlayhead(0);
+                  setPlaying(true);
+                }}
+                disabled={!items.length}
+                title={playing ? "Pausar (Espaço)" : "Reproduzir (Espaço)"}
+                aria-pressed={playing}
+                className={`rounded p-1.5 hover:bg-card disabled:opacity-40 ${playing ? "text-primary animate-pulse" : ""}`}
               >
-                <Play className="h-4 w-4 fill-current" />
+                {playing
+                  ? <Pause className="h-4 w-4 fill-current" />
+                  : <Play className="h-4 w-4 fill-current" />}
               </button>
-              <button onClick={() => setPlaying(false)} className="rounded p-1.5 hover:bg-card">
-                <Pause className="h-4 w-4 fill-current" />
-              </button>
-              <button 
-                onClick={() => { 
-                  setPlaying(false); 
-                  setPlayhead(0); 
-                }} 
+              <button
+                onClick={() => { setPlaying(false); setPlayhead(0); }}
+                title="Voltar ao início"
                 className="rounded p-1.5 hover:bg-card"
               >
                 <RotateCcw className="h-4 w-4" />
@@ -3469,6 +3469,15 @@ function Editor() {
             <button onClick={() => splitAt(playhead)} title="Dividir (S / Ctrl+B)"
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs hover:border-primary hover:text-primary">
               <Scissors className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Dividir</span>
+            </button>
+            <button
+              onClick={() => { void startMicRecording(); }}
+              title={recording ? "Parar gravação do microfone" : "Gravar do microfone"}
+              aria-pressed={recording}
+              className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors ${recording ? "border-destructive bg-destructive/15 text-destructive animate-pulse" : "border-border bg-card hover:border-primary hover:text-primary"}`}
+            >
+              {recording ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+              <span className="hidden sm:inline">{recording ? `Rec ${recElapsed.toFixed(1)}s` : "Gravar"}</span>
             </button>
             <button
               onClick={() => setSnapResize(s => !s)}

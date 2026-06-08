@@ -1069,6 +1069,8 @@ function Editor() {
   const previewBoxRef = useRef<HTMLDivElement>(null);
   const previewShellRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
+  const hScrollRef = useRef<HTMLDivElement>(null);
+  const syncingScroll = useRef<"tl" | "sb" | null>(null);
   const tracksAreaRef = useRef<HTMLDivElement>(null);
   const itemsRef = useRef<TLItem[]>(items);
   const tracksRef = useRef<Track[]>(tracks);

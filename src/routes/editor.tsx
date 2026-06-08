@@ -2527,7 +2527,7 @@ function Editor() {
                   filter: cssFilter(fx),
                 } : {};
                 const zV = activeV1Video ? trackZ(activeV1Video.trackId) : 2;
-                return <video ref={videoElRef} className="absolute inset-0 h-full w-full pointer-events-none" muted={false} playsInline style={{ ...style, objectFit: mainObjectFit(fx), zIndex: zV }} />;
+                return <video ref={videoElRef} crossOrigin="anonymous" className="absolute inset-0 h-full w-full pointer-events-none" muted={false} playsInline style={{ ...style, objectFit: mainObjectFit(fx), zIndex: zV }} />;
               })()}
 
               {/* Vignette overlay for V1 video */}
@@ -3980,7 +3980,7 @@ function Editor() {
                 )}
 
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3 mt-4">
                   <button onClick={() => { splitAt(playhead, selected.id); setShowMobileInspector(false); }}
                     className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 shadow-sm active:bg-accent transition-colors">
                     <Scissors className="h-5 w-5 text-primary" />
@@ -3992,6 +3992,7 @@ function Editor() {
                     <span className="text-xs font-bold">Excluir</span>
                   </button>
                 </div>
+
               </div>
             )}
           </div>

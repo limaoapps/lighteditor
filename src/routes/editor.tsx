@@ -3241,8 +3241,8 @@ function Editor() {
                 onChange={(e) => { if (videoElRef.current) videoElRef.current.volume = Number(e.target.value); }}
                 className="w-24 accent-[color:var(--primary)]" />
             </div>
-            <div className="mx-2 h-5 w-px bg-border" />
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <div className="hidden mx-2 h-5 w-px bg-border sm:block" />
+            <div className="flex items-center gap-1 sm:gap-1.5 text-xs text-muted-foreground">
               <button onClick={() => setZoom(z => Math.max(minZoom, z - 10))} className="rounded p-1 hover:bg-card"><ZoomOut className="h-3.5 w-3.5" /></button>
               <input type="range" min={minZoom} max={Math.max(minZoom + 10, 200)} step={1} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="w-28 accent-[color:var(--primary)]" />
               <button onClick={() => setZoom(z => Math.min(200, z + 10))} className="rounded p-1 hover:bg-card"><ZoomIn className="h-3.5 w-3.5" /></button>

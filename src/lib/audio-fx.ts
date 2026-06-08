@@ -11,7 +11,7 @@ export const EQ_BAND_COUNT = EQ_BANDS.length;
 
 export type ReverbPreset = "none" | "room" | "hall" | "plate" | "cathedral";
 export type Ambience = "none" | "room" | "hall" | "cave" | "outdoor" | "underwater" | "lounge";
-export type ChannelMode = "stereo" | "mono" | "panned";
+export type ChannelMode = "stereo" | "mono" | "panned" | "left" | "right" | "invert";
 
 
 export type AudioFx = {
@@ -205,13 +205,20 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
       console.log(`[AudioFX] Modo de canal ativo: ${m.toUpperCase()}`);
       
       if (m === "mono") {
-        // M = (L + R) / 2
         gLL.gain.value = 0.5; gLR.gain.value = 0.5;
         gRL.gain.value = 0.5; gRR.gain.value = 0.5;
+      } else if (m === "left") {
+        gLL.gain.value = 1; gLR.gain.value = 0;
+        gRL.gain.value = 1; gRR.gain.value = 0;
+      } else if (m === "right") {
+        gLL.gain.value = 0; gLR.gain.value = 1;
+        gRL.gain.value = 0; gRR.gain.value = 1;
+      } else if (m === "invert") {
+        gLL.gain.value = 0; gLR.gain.value = 1;
+        gRL.gain.value = 1; gRR.gain.value = 0;
       } else {
-        // Estéreo ou Panned (Controle gradual de balanço)
+        // Estéreo ou Panned
         const p = fx.pan ?? 0;
-        // Ganho de potência constante
         const angle = (p + 1) * (Math.PI / 4);
         gLL.gain.value = Math.cos(angle); 
         gLR.gain.value = 0;

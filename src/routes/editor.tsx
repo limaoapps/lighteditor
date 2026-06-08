@@ -3088,14 +3088,20 @@ function Editor() {
                               : `D ${Math.round(afx.pan * 100)}%`}
                         </span>
                       </div>
-                      <input 
-                        type="range" min="-1" max="1" step="0.01" 
-                        value={afx.pan ?? 0}
-                        onChange={(e) => patchAfx({ pan: Number(e.target.value), channelMode: "panned" })}
-                        onDoubleClick={() => patchAfx({ pan: 0, channelMode: "stereo" })}
-                        className="w-full h-1 rounded bg-muted appearance-none cursor-pointer accent-primary" 
-                        title="Balanço (Pan) - Duplo clique para centralizar"
-                      />
+                      <div className="flex flex-col gap-2">
+                        <input 
+                          type="range" min="-1" max="1" step="0.01" 
+                          value={afx.pan ?? 0}
+                          onChange={(e) => patchAfx({ pan: Number(e.target.value), channelMode: "panned" })}
+                          onDoubleClick={() => patchAfx({ pan: 0, channelMode: "stereo" })}
+                          className="w-full h-1 rounded bg-muted appearance-none cursor-pointer accent-primary" 
+                          title="Balanço (Pan) - Duplo clique para centralizar"
+                        />
+                        <div className="grid grid-cols-2 gap-4 px-0.5">
+                          <ChannelMeter peak={panPeaks.L} label="E" />
+                          <ChannelMeter peak={panPeaks.R} label="D" />
+                        </div>
+                      </div>
                     </div>
                   </div>
 

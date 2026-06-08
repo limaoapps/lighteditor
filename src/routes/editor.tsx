@@ -1379,6 +1379,91 @@ function Editor() {
     setSelectedId(it.id);
   }, [items, tracks, ensureTrack, createTLFromMedia, setItems]);
 
+  // ---- Microphone recording ----
+  const stopMicRecording = useCallback(() => {
+    const mr = recorderRef.current;
+    if (mr && mr.state !== "inactive") {
+      try { mr.stop(); } catch { /* ignore */ }
+    }
+    if (recordTimerRef.current != null) {
+      window.clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+    setRecording(false);
+  }, []);
+
+  const startMicRecording = useCallback(async () => {
+    if (recording) { stopMicRecording(); return; }
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setError("Microfone não suportado neste navegador.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      recordStreamRef.current = stream;
+      const mimeCandidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+      const mime = mimeCandidates.find(m => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(m)) || "";
+      const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      recordChunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) recordChunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        try {
+          const type = mr.mimeType || "audio/webm";
+          const blob = new Blob(recordChunksRef.current, { type });
+          const ext = type.includes("mp4") ? "m4a" : "webm";
+          const file = new File([blob], `Gravacao-${Date.now()}.${ext}`, { type });
+          const url = URL.createObjectURL(blob);
+          const dur = Math.max(0.1, (Date.now() - (recordStartRef.current?.time ?? Date.now())) / 1000);
+          const startAt = recordStartRef.current?.playhead ?? 0;
+          const asset: MediaAsset = {
+            id: crypto.randomUUID(),
+            kind: "audio",
+            name: file.name,
+            file, url,
+            duration: dur,
+          };
+          setMedia(prev => [...prev, asset]);
+          addAssetToTimeline(asset, { start: startAt, duration: dur });
+        } catch (err) {
+          setError("Falha ao salvar gravação: " + (err instanceof Error ? err.message : String(err)));
+        } finally {
+          recordStreamRef.current?.getTracks().forEach(t => t.stop());
+          recordStreamRef.current = null;
+          recordChunksRef.current = [];
+          recorderRef.current = null;
+          recordStartRef.current = null;
+        }
+      };
+      recordStartRef.current = { playhead, time: Date.now() };
+      setRecElapsed(0);
+      recordTimerRef.current = window.setInterval(() => {
+        const t = recordStartRef.current?.time;
+        if (t) setRecElapsed((Date.now() - t) / 1000);
+      }, 100);
+      mr.start(100);
+      recorderRef.current = mr;
+      setRecording(true);
+    } catch (err) {
+      setError("Não foi possível acessar o microfone: " + (err instanceof Error ? err.message : String(err)));
+      setRecording(false);
+    }
+  }, [recording, stopMicRecording, playhead, addAssetToTimeline]);
+
+  // Cleanup ao desmontar
+  useEffect(() => () => {
+    if (recordTimerRef.current != null) window.clearInterval(recordTimerRef.current);
+    recordStreamRef.current?.getTracks().forEach(t => t.stop());
+    try { recorderRef.current?.stop(); } catch { /* ignore */ }
+  }, []);
+
+  // Ajuste de escala do item do preview (zoom in/out fora do preview)
+  const adjustPreviewItemScale = useCallback((delta: number) => {
+    const target = (selectedId && items.find(i => i.id === selectedId && i.transform)) || activeV1Video;
+    if (!target || !target.transform) return;
+    setItems(prev => prev.map(i => i.id === target.id && i.transform
+      ? { ...i, transform: { ...i.transform, scale: Math.max(0.05, Math.min(50, i.transform.scale + delta)) } } : i));
+  }, [selectedId, items, activeV1Video, setItems]);
+
   const addText = useCallback(() => {
     const videoTracks = tracks.filter(t => t.kind === "video");
     // trilha de vídeo mais acima (topo da timeline)

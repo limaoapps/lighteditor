@@ -21,6 +21,7 @@ import {
 } from "@/lib/audio-fx";
 import { computeItemBounds } from "@/lib/scene-geometry";
 import { PreviewCanvas } from "@/components/editor/PreviewCanvas";
+import { Waveform } from "@/components/editor/Waveform";
 import type { SceneItem } from "@/lib/scene-renderer";
 import type { CachedMediaItem } from "@/lib/media-cache";
 

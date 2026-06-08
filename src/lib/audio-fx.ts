@@ -206,25 +206,19 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
       
       if (m === "mono") {
         // M = (L + R) / 2
-        gLL.gain.value = 0.5; gLR.gain.value = 0.5; // Saída L recebe L e R
-        gRL.gain.value = 0.5; gRR.gain.value = 0.5; // Saída R recebe L e R
-      } else if (m === "left") {
-        // L = L_original, R = L_original
-        gLL.gain.value = 1; gLR.gain.value = 0;
-        gRL.gain.value = 1; gRR.gain.value = 0;
-      } else if (m === "right") {
-        // L = R_original, R = R_original
-        gLL.gain.value = 0; gLR.gain.value = 1;
-        gRL.gain.value = 0; gRR.gain.value = 1;
-      } else if (m === "swap") {
-        // L = R_original, R = L_original
-        gLL.gain.value = 0; gLR.gain.value = 1;
-        gRL.gain.value = 1; gRR.gain.value = 0;
+        gLL.gain.value = 0.5; gLR.gain.value = 0.5;
+        gRL.gain.value = 0.5; gRR.gain.value = 0.5;
       } else {
-        // Estéreo: L = L, R = R
-        gLL.gain.value = 1; gLR.gain.value = 0;
-        gRL.gain.value = 0; gRR.gain.value = 1;
+        // Estéreo ou Panned (Controle gradual de balanço)
+        const p = fx.pan ?? 0;
+        // Ganho de potência constante
+        const angle = (p + 1) * (Math.PI / 4);
+        gLL.gain.value = Math.cos(angle); 
+        gLR.gain.value = 0;
+        gRL.gain.value = 0; 
+        gRR.gain.value = Math.sin(angle);
       }
+
 
       // Echo
       const eMix = Math.max(0, Math.min(1, (fx.echoMix ?? 0) / 100));

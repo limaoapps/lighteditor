@@ -1711,17 +1711,18 @@ function Editor() {
     if (v.src !== wanted) v.src = wanted;
     const target = activeV1Video.inPoint + (playhead - activeV1Video.start);
     if (Math.abs(v.currentTime - target) > 0.25) v.currentTime = target;
-    v.muted = !!trackMuted[activeV1Video.trackId];
+    v.muted = !!trackMuted[activeV1Video.trackId] || !!activeV1Video.silenced;
     // Encaminha pelo grafo WebAudio para permitir ganho >0dB e FX.
     const g = attachGraph(activeV1Video.id, v, activeV1Video);
     if (g) {
       v.volume = 1;
-      g.nodes.setMuted(!!trackMuted[activeV1Video.trackId]);
+      const muted = !!trackMuted[activeV1Video.trackId] || !!activeV1Video.silenced;
+      g.nodes.setMuted(muted);
       if (activeV1Video.audioFx) g.nodes.setFx(activeV1Video.audioFx);
-      g.nodes.setGain(computeAudioGainDb(activeV1Video, playhead));
+      g.nodes.setGain(activeV1Video.silenced ? -120 : computeAudioGainDb(activeV1Video, playhead));
     } else {
       // fallback se WebAudio falhou
-      v.volume = Math.min(1, computeAudioGain(activeV1Video, playhead));
+      v.volume = activeV1Video.silenced ? 0 : Math.min(1, computeAudioGain(activeV1Video, playhead));
     }
     if (playing) {
       v.play().catch((err) => {

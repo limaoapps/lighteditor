@@ -765,6 +765,8 @@ function CornerHandles({ id, tr, onStartScale }: { id: string; tr: Transform; on
 }
 
 function Editor() {
+  const [showMobilePanel, setShowMobilePanel] = useState(false);
+  const [showMobileInspector, setShowMobileInspector] = useState(false);
   // Carrega todas as Google Fonts uma única vez
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -2198,64 +2200,73 @@ function Editor() {
             <div className="grid h-7 w-7 place-items-center rounded-md bg-primary text-primary-foreground">
               <Film className="h-3.5 w-3.5" />
             </div>
-            <span className="font-display text-sm font-semibold">VIDEO LITE EDITOR</span>
+            <span className="hidden font-display text-sm font-semibold sm:inline">VIDEO LITE EDITOR</span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={undo} title="Desfazer (Ctrl+Z)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Undo2 className="h-4 w-4" /></button>
-          <button onClick={redo} title="Refazer (Ctrl+Y)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Redo2 className="h-4 w-4" /></button>
-          <button onClick={togglePreviewFullscreen} title="Tela cheia do preview (F)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Maximize2 className="h-4 w-4" /></button>
-          <button
-            onClick={() => setUseCanvasPreview(v => !v)}
-            title={useCanvasPreview ? "WYSIWYG ligado — preview = export. Clique para usar preview clássico." : "WYSIWYG desligado — preview em DOM. Clique para usar o motor de render."}
-            className={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${useCanvasPreview ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-card hover:text-foreground"}`}
-          >
-            WYSIWYG
-          </button>
-          <div className="mx-2 h-6 w-px bg-border" />
-          <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Proporção</label>
-          <select value={aspectKey} onChange={(e) => setProjectAspect(e.target.value as AspectKey)}
-            className="rounded-md border border-border bg-card px-2 py-1.5 text-xs">
-            {(Object.keys(ASPECTS) as AspectKey[]).map(k => <option key={k} value={k}>{ASPECTS[k].label}</option>)}
-          </select>
-          {aspectKey === "custom" && (
-            <div className="flex items-center gap-1 text-xs">
-              <input type="number" min={1} value={customAR.w} onChange={(e) => { setCustomAR(s => ({ ...s, w: Math.max(1, Number(e.target.value) || 1) })); setExportPreset("custom"); }}
-                className="w-14 rounded border border-border bg-card px-1.5 py-1" />
-              <span className="text-muted-foreground">:</span>
-              <input type="number" min={1} value={customAR.h} onChange={(e) => { setCustomAR(s => ({ ...s, h: Math.max(1, Number(e.target.value) || 1) })); setExportPreset("custom"); }}
-                className="w-14 rounded border border-border bg-card px-1.5 py-1" />
-            </div>
-          )}
-          <div className="mx-2 h-6 w-px bg-border" />
-          <select value={quality} onChange={(e) => {
-            const nextQuality = e.target.value as Quality;
-            setQuality(nextQuality);
-            const matching = (Object.keys(EXPORT_PRESETS) as ExportPresetKey[]).find(k => {
-              const p = EXPORT_PRESETS[k];
-              return k !== "custom" && p.aspect === aspectKey && p.quality === nextQuality;
-            });
-            setExportPreset(matching ?? "custom");
-          }}
-            className="rounded-md border border-border bg-card px-2 py-1.5 text-xs">
-            <option value="720">720p</option><option value="1080">1080p</option><option value="2160">4K</option>
-          </select>
+        <div className="flex items-center gap-1 sm:gap-2">
+          <div className="hidden items-center gap-2 sm:flex">
+            <button onClick={undo} title="Desfazer (Ctrl+Z)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Undo2 className="h-4 w-4" /></button>
+            <button onClick={redo} title="Refazer (Ctrl+Y)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Redo2 className="h-4 w-4" /></button>
+            <button onClick={togglePreviewFullscreen} title="Tela cheia do preview (F)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Maximize2 className="h-4 w-4" /></button>
+            <button
+              onClick={() => setUseCanvasPreview(v => !v)}
+              title={useCanvasPreview ? "WYSIWYG ligado — preview = export. Clique para usar preview clássico." : "WYSIWYG desligado — preview em DOM. Clique para usar o motor de render."}
+              className={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${useCanvasPreview ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-card hover:text-foreground"}`}
+            >
+              WYSIWYG
+            </button>
+            <div className="mx-2 h-6 w-px bg-border" />
+          </div>
+          
+          <div className="flex items-center gap-1.5">
+            <label className="hidden text-[10px] uppercase tracking-wider text-muted-foreground md:inline">Proporção</label>
+            <select value={aspectKey} onChange={(e) => setProjectAspect(e.target.value as AspectKey)}
+              className="rounded-md border border-border bg-card px-2 py-1.5 text-[11px] sm:text-xs">
+              {(Object.keys(ASPECTS) as AspectKey[]).map(k => <option key={k} value={k}>{ASPECTS[k].label}</option>)}
+            </select>
+            {aspectKey === "custom" && (
+              <div className="hidden items-center gap-1 text-xs sm:flex">
+                <input type="number" min={1} value={customAR.w} onChange={(e) => { setCustomAR(s => ({ ...s, w: Math.max(1, Number(e.target.value) || 1) })); setExportPreset("custom"); }}
+                  className="w-14 rounded border border-border bg-card px-1.5 py-1" />
+                <span className="text-muted-foreground">:</span>
+                <input type="number" min={1} value={customAR.h} onChange={(e) => { setCustomAR(s => ({ ...s, h: Math.max(1, Number(e.target.value) || 1) })); setExportPreset("custom"); }}
+                  className="w-14 rounded border border-border bg-card px-1.5 py-1" />
+              </div>
+            )}
+          </div>
+
+          <div className="hidden items-center gap-2 sm:flex">
+            <div className="mx-2 h-6 w-px bg-border" />
+            <select value={quality} onChange={(e) => {
+              const nextQuality = e.target.value as Quality;
+              setQuality(nextQuality);
+              const matching = (Object.keys(EXPORT_PRESETS) as ExportPresetKey[]).find(k => {
+                const p = EXPORT_PRESETS[k];
+                return k !== "custom" && p.aspect === aspectKey && p.quality === nextQuality;
+              });
+              setExportPreset(matching ?? "custom");
+            }}
+              className="rounded-md border border-border bg-card px-2 py-1.5 text-xs">
+              <option value="720">720p</option><option value="1080">1080p</option><option value="2160">4K</option>
+            </select>
+          </div>
+
           <button
             onClick={() => {
               if (!gpuInfoRef.current) gpuInfoRef.current = detectGpu();
               setShowExportSettings(true);
             }}
             disabled={exporting || !items.length}
-            className="glow-primary inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50">
+            className="glow-primary inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-[11px] font-medium text-primary-foreground disabled:opacity-50 sm:text-xs">
             {exporting || ffLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-            {exporting ? "Exportando" : ffLoading ? "Carregando" : ffLoadError ? "Tentar exportar" : "Exportar"}
+            <span>{exporting ? "Export" : "Exportar"}</span>
           </button>
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex min-h-0 flex-1">
-        <aside className="flex shrink-0 border-r border-border bg-panel select-none" style={{ width: leftW }}>
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <aside className="hidden shrink-0 border-r border-border bg-panel select-none md:flex" style={{ width: leftW }}>
           <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-border bg-background/30 py-2">
             {([
               { id: "media" as LeftPanel, icon: Film, label: "Mídia" },
@@ -2439,7 +2450,7 @@ function Editor() {
         </aside>
         <div
           onMouseDown={(e) => { sideDragRef.current = { side: "L", startX: e.clientX, startW: leftW }; document.body.style.cursor = "ew-resize"; }}
-          className="w-1 shrink-0 cursor-ew-resize bg-border hover:bg-primary/40"
+          className="hidden w-1 shrink-0 cursor-ew-resize bg-border hover:bg-primary/40 md:block"
           title="Arraste para redimensionar"
         />
 
@@ -2664,10 +2675,10 @@ function Editor() {
         </main>
         <div
           onMouseDown={(e) => { sideDragRef.current = { side: "R", startX: e.clientX, startW: rightW }; document.body.style.cursor = "ew-resize"; }}
-          className="w-1 shrink-0 cursor-ew-resize bg-border hover:bg-primary/40"
+          className="hidden w-1 shrink-0 cursor-ew-resize bg-border hover:bg-primary/40 md:block"
           title="Arraste para redimensionar"
         />
-        <aside className="flex shrink-0 flex-col gap-2 overflow-y-auto border-l border-border bg-panel p-3 select-none" style={{ width: rightW }}>
+        <aside className="hidden shrink-0 flex-col gap-2 overflow-y-auto border-l border-border bg-panel p-3 select-none md:flex" style={{ width: rightW }}>
           <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             <Sparkles className="h-3 w-3 text-primary" /> Inspetor
           </div>
@@ -3196,38 +3207,44 @@ function Editor() {
 
         <div className="flex shrink-0 flex-col select-none">
           <div className="flex items-center gap-3 border-t border-border bg-panel px-4 py-2">
-            <button onClick={() => { if (playhead >= totalDuration - 0.05) setPlayhead(0); setPlaying(true); }} disabled={!items.length} className="rounded p-1.5 hover:bg-card disabled:opacity-40"><Play className="h-4 w-4" /></button>
-            <button onClick={() => setPlaying(false)} className="rounded p-1.5 hover:bg-card"><Pause className="h-4 w-4" /></button>
-            <button onClick={() => { setPlaying(false); setPlayhead(0); }} className="rounded p-1.5 hover:bg-card"><Square className="h-4 w-4" /></button>
-            <div className="ml-2 font-mono text-xs tabular-nums text-muted-foreground">{fmt(playhead)} / {fmt(totalDuration)}</div>
+            <div className="flex items-center gap-0.5 sm:gap-2">
+              <button onClick={() => { if (playhead >= totalDuration - 0.05) setPlayhead(0); setPlaying(true); }} disabled={!items.length} className="rounded p-1.5 hover:bg-card disabled:opacity-40"><Play className="h-4 w-4" /></button>
+              <button onClick={() => setPlaying(false)} className="rounded p-1.5 hover:bg-card"><Pause className="h-4 w-4" /></button>
+              <button onClick={() => { setPlaying(false); setPlayhead(0); }} className="rounded p-1.5 hover:bg-card"><RotateCcw className="h-4 w-4" /></button>
+            </div>
+            <div className="ml-2 flex items-center gap-1 font-mono text-[11px] tabular-nums text-primary sm:text-xs">
+              <span className="font-bold">{fmt(playhead)}</span>
+              <span className="text-muted-foreground">/</span>
+              <span>{fmt(totalDuration)}</span>
+            </div>
             <div className="flex-1" />
             <button onClick={() => splitAt(playhead)} title="Dividir (S / Ctrl+B)"
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs hover:border-primary hover:text-primary">
-              <Scissors className="h-3.5 w-3.5" /> Dividir
+              <Scissors className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Dividir</span>
             </button>
             <button
               onClick={() => setSnapResize(s => !s)}
               title={snapResize ? "Snap ativo — clipes encaixam nas bordas. Clique para desativar." : "Snap desativado — movimentação livre. Clique para ativar."}
               className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors ${snapResize ? "border-primary/60 bg-primary/15 text-primary" : "border-border bg-card text-muted-foreground hover:border-primary hover:text-primary"}`}
             >
-              <Magnet className="h-3.5 w-3.5" /> {snapResize ? "Snap" : "Snap off"}
+              <Magnet className="h-3.5 w-3.5" /> <span className="hidden sm:inline">{snapResize ? "Snap" : "Snap off"}</span>
             </button>
 
             <button onClick={() => selected && deleteItem(selected.id)} disabled={!selected} title="Excluir (Del)"
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs hover:border-destructive hover:text-destructive disabled:opacity-40">
-              <Trash2 className="h-3.5 w-3.5" /> Excluir
+              <Trash2 className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Excluir</span>
             </button>
-            <div className="mx-2 h-5 w-px bg-border" />
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="hidden mx-2 h-5 w-px bg-border sm:block" />
+            <div className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
               <Volume2 className="h-3.5 w-3.5" />
               <input type="range" min={0} max={1} step={0.05} defaultValue={1}
                 onChange={(e) => { if (videoElRef.current) videoElRef.current.volume = Number(e.target.value); }}
                 className="w-24 accent-[color:var(--primary)]" />
             </div>
-            <div className="mx-2 h-5 w-px bg-border" />
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <div className="hidden mx-2 h-5 w-px bg-border sm:block" />
+            <div className="flex items-center gap-1 sm:gap-1.5 text-xs text-muted-foreground">
               <button onClick={() => setZoom(z => Math.max(minZoom, z - 10))} className="rounded p-1 hover:bg-card"><ZoomOut className="h-3.5 w-3.5" /></button>
-              <input type="range" min={minZoom} max={Math.max(minZoom + 10, 200)} step={1} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="w-28 accent-[color:var(--primary)]" />
+              <input type="range" min={minZoom} max={Math.max(minZoom + 10, 200)} step={1} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="w-16 sm:w-28 accent-[color:var(--primary)]" />
               <button onClick={() => setZoom(z => Math.min(200, z + 10))} className="rounded p-1 hover:bg-card"><ZoomIn className="h-3.5 w-3.5" /></button>
             </div>
 
@@ -3236,6 +3253,17 @@ function Editor() {
 
           <div className="flex border-t border-border">
           <div ref={timelineRef} onMouseDown={onTimelineMouseDown}
+            onTouchStart={(e) => {
+              if (e.touches.length === 1) {
+                const touch = e.touches[0];
+                const rect = timelineRef.current?.getBoundingClientRect();
+                if (rect) {
+                  const x = touch.clientX - rect.left + timelineRef.current!.scrollLeft - labelColW;
+                  setPlayhead(Math.max(0, x / zoom));
+                  dragRef.current = { type: "playhead" };
+                }
+              }
+            }}
             className="no-scrollbar relative h-[280px] min-w-0 flex-1 overflow-auto bg-track">
 
             <div className="relative" style={{ width: labelColW + rulerSpan * zoom, minWidth: "100%" }}>
@@ -3375,7 +3403,13 @@ function Editor() {
                                 dragRef.current = { type: "move", id: i.id, offsetSec: xPx / zoom - i.start, origTrackId: i.trackId };
                               }}
                               className={`group/clip absolute top-1 flex h-[calc(100%-8px)] items-center overflow-hidden rounded-md text-[10px] text-white shadow ${active ? "ring-2 ring-primary" : "ring-1 ring-black/30"}`}
-                              style={{ left: i.start * zoom, width: w, background: color, cursor: locked ? "not-allowed" : "grab" }}>
+                              style={{ left: i.start * zoom, width: w, background: color, cursor: locked ? "not-allowed" : "grab" }}
+                              onTouchStart={(e) => {
+                                // Simple touch selection for mobile
+                                if (locked) return;
+                                setSelectedId(i.id);
+                              }}
+                            >
                               {fiW > 0 && (
                                 <div className="pointer-events-none absolute inset-y-0 left-0" style={{ width: fiW, background: "linear-gradient(to right, rgba(0,0,0,0.55), transparent)" }} />
                               )}
@@ -3453,11 +3487,36 @@ function Editor() {
               </div>
             </div>
           </div>
-          <div className="flex h-[280px] shrink-0 items-stretch gap-2 border-l border-border bg-panel px-3 py-2">
+          <div className="hidden h-[280px] shrink-0 items-stretch gap-2 border-l border-border bg-panel px-3 py-2 md:flex">
             <MasterFader label="L" db={masterDbL} setDb={setMasterDbL} peak={masterPeakL} clip={masterClipL} onClearClip={() => setMasterClipL(false)} />
             <MasterFader label="R" db={masterDbR} setDb={setMasterDbR} peak={masterPeakR} clip={masterClipR} onClearClip={() => setMasterClipR(false)} />
           </div>
           </div>
+        </div>
+        
+        {/* Mobile Bottom Navigation Bar (CapCut style) */}
+        <div className="flex h-16 shrink-0 items-center justify-around border-t border-border bg-panel px-2 md:hidden">
+          {[
+            { id: "media" as LeftPanel, icon: Film, label: "Mídia" },
+            { id: "titles" as LeftPanel, icon: TypeIcon, label: "Texto" },
+            { id: "transitions" as LeftPanel, icon: RefreshCw, label: "Transições" },
+            { id: "effects" as LeftPanel, icon: Wand2, label: "Efeitos" },
+          ].map(tab => {
+            const Icon = tab.icon;
+            const active = leftPanel === tab.id;
+            return (
+              <button key={tab.id} onClick={() => { setLeftPanel(tab.id); setShowMobilePanel(true); }}
+                className={`flex flex-col items-center gap-1 rounded-md px-2 py-1 transition ${active ? "text-primary" : "text-muted-foreground"}`}>
+                <Icon className="h-5 w-5" />
+                <span className="text-[10px] font-medium">{tab.label}</span>
+              </button>
+            );
+          })}
+          <button onClick={() => { setShowMobileInspector(true); }}
+            className={`flex flex-col items-center gap-1 rounded-md px-2 py-1 transition ${selected ? "text-primary" : "text-muted-foreground"}`}>
+            <Sliders className="h-5 w-5" />
+            <span className="text-[10px] font-medium">Ajustes</span>
+          </button>
         </div>
       </div>
 
@@ -3554,6 +3613,139 @@ function Editor() {
           </div>
         );
       })()}
+
+      {/* Mobile Panels */}
+      {showMobilePanel && (
+        <div className="fixed inset-0 z-[1100] flex flex-col bg-background md:hidden">
+          <div className="flex items-center justify-between border-b border-border p-4">
+            <h3 className="font-semibold uppercase tracking-wider text-muted-foreground">{leftPanel}</h3>
+            <button onClick={() => setShowMobilePanel(false)} className="rounded-full bg-muted p-2">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 pb-10">
+            {leftPanel === "media" && (
+              <div className="space-y-4">
+                <button onClick={() => fileInputRef.current?.click()}
+                  className="glow-primary flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-4 text-sm font-bold text-primary-foreground shadow-lg active:scale-95 transition-transform">
+                  <Plus className="h-5 w-5" /> Adicionar Mídia
+                </button>
+                <div className="grid grid-cols-2 gap-3">
+                  {media.map(a => {
+                    const Icon = a.kind === "audio" ? Music2 : a.kind === "image" ? ImageIcon : VideoIcon;
+                    return (
+                      <div key={a.id} onClick={() => { addAssetToTimeline(a); setShowMobilePanel(false); }}
+                        className="flex flex-col gap-2 rounded-xl border border-border bg-card p-2 text-xs shadow-sm active:bg-accent transition-colors">
+                        <div className="aspect-video w-full rounded-lg bg-muted flex items-center justify-center">
+                          <Icon className="h-8 w-8 text-primary/60" />
+                        </div>
+                        <span className="px-1 truncate font-medium">{a.name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {!media.length && <div className="p-10 text-center text-muted-foreground">Nenhuma mídia encontrada.</div>}
+              </div>
+            )}
+            {leftPanel === "titles" && (
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={() => { addText(); setShowMobilePanel(false); }} className="flex flex-col items-center gap-3 rounded-xl border border-border bg-card p-6 shadow-sm active:bg-accent transition-colors">
+                  <div className="rounded-full bg-primary/10 p-3"><TypeIcon className="h-6 w-6 text-primary" /></div>
+                  <span className="font-semibold">Título</span>
+                </button>
+                <button onClick={() => { addCredits(); setShowMobilePanel(false); }} className="flex flex-col items-center gap-3 rounded-xl border border-border bg-card p-6 shadow-sm active:bg-accent transition-colors">
+                  <div className="rounded-full bg-primary/10 p-3"><FileText className="h-6 w-6 text-primary" /></div>
+                  <span className="font-semibold">Créditos</span>
+                </button>
+              </div>
+            )}
+            {leftPanel === "transitions" && (
+              <div className="grid grid-cols-2 gap-3">
+                {TRANSITION_GROUPS.flatMap(g => g.items).map(t => (
+                  <button key={t.id} onClick={() => { if (selected) setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: t.dur, fadeOut: t.dur, transition: t.id } : i)); setShowMobilePanel(false); }}
+                    className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 shadow-sm active:bg-accent transition-colors">
+                    <span className="text-2xl">{t.icon}</span>
+                    <span className="text-[11px] font-medium">{t.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {leftPanel === "effects" && (
+              <div className="grid grid-cols-1 gap-3">
+                {TIMELINE_EFFECTS.map(effect => (
+                  <button key={effect.id} onClick={() => { if (selected) applyTimelineEffect(selected.id, effect.id); setShowMobilePanel(false); }}
+                    className="flex items-center gap-4 rounded-xl border border-border bg-card p-4 shadow-sm active:bg-accent transition-colors">
+                    <div className="rounded-full bg-primary/10 p-3"><Wand2 className="h-6 w-6 text-primary" /></div>
+                    <div>
+                      <div className="font-bold text-sm">{effect.label}</div>
+                      <div className="text-[11px] text-muted-foreground">{effect.hint}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showMobileInspector && (
+        <div className="fixed inset-0 z-[1100] flex flex-col bg-background md:hidden">
+          <div className="flex items-center justify-between border-b border-border p-4">
+            <h3 className="font-semibold uppercase tracking-wider text-muted-foreground">Ajustes do Clip</h3>
+            <button onClick={() => setShowMobileInspector(false)} className="rounded-full bg-muted p-2">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 pb-10">
+            {!selected ? (
+              <div className="p-20 text-center">
+                <Sliders className="mx-auto h-12 w-12 text-muted-foreground opacity-20" />
+                <p className="mt-4 text-muted-foreground">Selecione um clipe na timeline para ver os ajustes.</p>
+              </div>
+            ) : (
+              <div className="space-y-8">
+                <div className="flex items-center gap-3 p-2">
+                  <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                    {selected.kind === "video" ? <VideoIcon className="text-primary" /> : selected.kind === "audio" ? <Music2 className="text-primary" /> : <ImageIcon className="text-primary" />}
+                  </div>
+                  <div>
+                    <div className="font-bold">{selected.name}</div>
+                    <div className="text-xs text-muted-foreground uppercase">{selected.kind}</div>
+                  </div>
+                </div>
+
+                <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold">Volume / Ganho</span>
+                    <span className="font-mono text-primary font-bold">{(selected.gainDb ?? 0).toFixed(1)} dB</span>
+                  </div>
+                  <input type="range" min="-30" max="30" step="0.5" value={selected.gainDb ?? 0}
+                    onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, gainDb: Number(e.target.value) } : i))}
+                    className="w-full h-2 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
+                  <div className="flex justify-between text-[10px] text-muted-foreground uppercase font-bold px-1">
+                    <span>-30dB</span>
+                    <span>0dB</span>
+                    <span>+30dB</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button onClick={() => { splitAt(playhead, selected.id); setShowMobileInspector(false); }}
+                    className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 shadow-sm active:bg-accent transition-colors">
+                    <Scissors className="h-5 w-5 text-primary" />
+                    <span className="text-xs font-bold">Dividir</span>
+                  </button>
+                  <button onClick={() => { deleteItem(selected.id); setShowMobileInspector(false); }}
+                    className="flex flex-col items-center gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-destructive shadow-sm active:bg-destructive/10 transition-colors">
+                    <Trash2 className="h-5 w-5" />
+                    <span className="text-xs font-bold">Excluir</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Context menu */}
 

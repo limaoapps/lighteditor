@@ -3962,8 +3962,8 @@ function Editor() {
                         <SettingsIcon className="h-4 w-4 text-primary" />
                         <span className="text-sm font-semibold">Modo de Canal</span>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
                       <div className="grid grid-cols-3 gap-2">
+
                         {(["stereo", "mono"] as ChannelMode[]).map((m) => {
                           const labels: Record<string, string> = {
                             stereo: "Estéreo",

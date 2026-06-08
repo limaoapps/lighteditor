@@ -211,6 +211,8 @@ type TLItem = {
   text?: TextProps;
   fadeIn?: number;
   fadeOut?: number;
+  audioFadeIn?: number;
+  audioFadeOut?: number;
   transition?: string;
   gainDb?: number;
   audioFx?: AudioFx;
@@ -716,6 +718,16 @@ function computeVisualOpacity(i: TLItem, t: number): number {
   if (i.fadeIn && local < i.fadeIn) v *= Math.max(0, local / i.fadeIn);
   if (i.fadeOut && local > dur - i.fadeOut) v *= Math.max(0, (dur - local) / i.fadeOut);
   return Math.max(0, Math.min(1, v));
+}
+
+function getAudioFadeIn(i: TLItem): number {
+  if (typeof i.audioFadeIn === "number") return i.audioFadeIn;
+  return i.kind === "audio" ? (i.fadeIn ?? 0) : 0;
+}
+
+function getAudioFadeOut(i: TLItem): number {
+  if (typeof i.audioFadeOut === "number") return i.audioFadeOut;
+  return i.kind === "audio" ? (i.fadeOut ?? 0) : 0;
 }
 
 function computeZoomScale(fx: Fx | undefined, localT: number, dur: number): number {

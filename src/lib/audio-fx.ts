@@ -10,8 +10,9 @@ export const EQ_BANDS = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 12000, 1
 export const EQ_BAND_COUNT = EQ_BANDS.length;
 
 export type ReverbPreset = "none" | "room" | "hall" | "plate" | "cathedral";
-export type Ambience = "none" | "room" | "hall" | "cave" | "outdoor" | "underwater";
-export type ChannelMode = "stereo" | "mono" | "left" | "right" | "swap";
+export type Ambience = "none" | "room" | "hall" | "cave" | "outdoor" | "underwater" | "lounge";
+export type ChannelMode = "stereo" | "mono" | "panned";
+
 
 export type AudioFx = {
   eq: number[]; // 12 bands, dB (-18 .. +18 typical)
@@ -22,7 +23,9 @@ export type AudioFx = {
   echoFeedback: number; // 0..95 (%)
   ambience: Ambience;
   channelMode: ChannelMode;
+  pan: number; // -1 (full left) .. 1 (full right)
 };
+
 
 export const DEFAULT_AUDIO_FX: AudioFx = {
   eq: new Array(EQ_BAND_COUNT).fill(0),
@@ -33,7 +36,9 @@ export const DEFAULT_AUDIO_FX: AudioFx = {
   echoFeedback: 30,
   ambience: "none",
   channelMode: "stereo",
+  pan: 0,
 };
+
 
 export function dbToGain(db: number) { return Math.pow(10, db / 20); }
 export function hasAudioFx(fx?: Partial<AudioFx> | null): boolean {
@@ -61,7 +66,9 @@ const AMBIENCE_SPECS: Record<Exclude<Ambience, "none">, IRSpec & { wet: number }
   cave:        { duration: 5.5, decay: 0.9, predelay: 0.060, brightness: 0.18, wet: 0.75 },
   outdoor:     { duration: 0.35, decay: 4.5, predelay: 0.000, brightness: 0.95, wet: 0.18 },
   underwater:  { duration: 2.2, decay: 1.4, predelay: 0.000, brightness: 0.08, wet: 0.85 },
+  lounge:      { duration: 1.8, decay: 2.4, predelay: 0.015, brightness: 0.70, wet: 0.35 }, // Som Lounge
 };
+
 
 /** Gera IR sintético (ruído com decaimento exponencial). */
 export function generateIR(ctx: BaseAudioContext, spec: IRSpec): AudioBuffer {
@@ -199,25 +206,19 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
       
       if (m === "mono") {
         // M = (L + R) / 2
-        gLL.gain.value = 0.5; gLR.gain.value = 0.5; // Saída L recebe L e R
-        gRL.gain.value = 0.5; gRR.gain.value = 0.5; // Saída R recebe L e R
-      } else if (m === "left") {
-        // L = L_original, R = L_original
-        gLL.gain.value = 1; gLR.gain.value = 0;
-        gRL.gain.value = 1; gRR.gain.value = 0;
-      } else if (m === "right") {
-        // L = R_original, R = R_original
-        gLL.gain.value = 0; gLR.gain.value = 1;
-        gRL.gain.value = 0; gRR.gain.value = 1;
-      } else if (m === "swap") {
-        // L = R_original, R = L_original
-        gLL.gain.value = 0; gLR.gain.value = 1;
-        gRL.gain.value = 1; gRR.gain.value = 0;
+        gLL.gain.value = 0.5; gLR.gain.value = 0.5;
+        gRL.gain.value = 0.5; gRR.gain.value = 0.5;
       } else {
-        // Estéreo: L = L, R = R
-        gLL.gain.value = 1; gLR.gain.value = 0;
-        gRL.gain.value = 0; gRR.gain.value = 1;
+        // Estéreo ou Panned (Controle gradual de balanço)
+        const p = fx.pan ?? 0;
+        // Ganho de potência constante
+        const angle = (p + 1) * (Math.PI / 4);
+        gLL.gain.value = Math.cos(angle); 
+        gLR.gain.value = 0;
+        gRL.gain.value = 0; 
+        gRR.gain.value = Math.sin(angle);
       }
+
 
       // Echo
       const eMix = Math.max(0, Math.min(1, (fx.echoMix ?? 0) / 100));
@@ -260,9 +261,14 @@ export function buildAudioFilterChain(
   const out: string[] = [];
   // Canal primeiro (para reverb/echo já trabalharem na config final)
   if (fx?.channelMode === "mono") out.push("pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1");
-  else if (fx?.channelMode === "left") out.push("pan=stereo|c0=c0|c1=c0");
-  else if (fx?.channelMode === "right") out.push("pan=stereo|c0=c1|c1=c1");
-  else if (fx?.channelMode === "swap") out.push("pan=stereo|c0=c1|c1=c0");
+  else if (fx && Math.abs(fx.pan ?? 0) > 0.01) {
+    const p = fx.pan!;
+    // Aproximação linear do pan para FFmpeg
+    const gl = (1 - p) / 2;
+    const gr = (1 + p) / 2;
+    out.push(`pan=stereo|c0=${gl.toFixed(3)}*c0|c1=${gr.toFixed(3)}*c1`);
+  }
+
 
   // EQ 12 bandas
   if (fx?.eq) {
@@ -303,7 +309,9 @@ export function buildAudioFilterChain(
       hall:       { delays: "80|180|260|360",         decays: "0.55|0.4|0.3|0.2",     gain: 0.8 },
       cave:       { delays: "120|260|450|720|1000|1400", decays: "0.7|0.6|0.5|0.4|0.3|0.2", gain: 0.95 },
       outdoor:    { delays: "20",                     decays: "0.1",                  gain: 0.6 },
-      underwater: { delays: "60|140|220|320",         decays: "0.7|0.55|0.4|0.3",     gain: 0.9 },
+    underwater: { delays: "60|140|220|320",         decays: "0.7|0.55|0.4|0.3",     gain: 0.9 },
+    lounge:     { delays: "40|80",                  decays: "0.45|0.35",            gain: 0.8 },
+
     };
     const p = ambMap[fx.ambience];
     if (p) out.push(`aecho=0.8:${p.gain.toFixed(2)}:${p.delays}:${p.decays}`);

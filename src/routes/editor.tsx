@@ -3028,25 +3028,41 @@ function Editor() {
                 <div className="border-t border-border pt-2">
                   <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Ambiente</div>
                   <div className="grid grid-cols-3 gap-1">
-                    {(["none","room","hall","cave","outdoor","underwater"] as Ambience[]).map(a => (
+                    {(["none","room","hall","cave","outdoor","underwater", "lounge"] as Ambience[]).map(a => (
                       <button key={a} onClick={() => patchAfx({ ambience: a })}
                         className={`rounded-md border px-1.5 py-1 text-[10px] capitalize ${afx.ambience === a ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
-                        {a === "none" ? "off" : a === "underwater" ? "submerso" : a === "outdoor" ? "ext." : a === "room" ? "sala" : a === "hall" ? "salão" : a === "cave" ? "caverna" : a}
+                        {a === "none" ? "off" : a === "underwater" ? "submerso" : a === "outdoor" ? "ext." : a === "room" ? "sala" : a === "hall" ? "salão" : a === "cave" ? "caverna" : a === "lounge" ? "lounge" : a}
                       </button>
                     ))}
+
                   </div>
                 </div>
 
                 <div className="border-t border-border pt-2">
                   <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Canais</div>
-                  <div className="grid grid-cols-5 gap-1">
-                    {(["stereo","mono","left","right","swap"] as ChannelMode[]).map(m => (
-                      <button key={m} onClick={() => patchAfx({ channelMode: m })}
-                        className={`rounded-md border px-1.5 py-1 text-[10px] capitalize ${afx.channelMode === m ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
-                        {m === "left" ? "L" : m === "right" ? "R" : m === "swap" ? "L↔R" : m}
-                      </button>
-                    ))}
+                  <div className="flex flex-col gap-2">
+                    <div className="grid grid-cols-2 gap-1">
+                      {(["stereo","mono"] as ChannelMode[]).map(m => (
+                        <button key={m} onClick={() => patchAfx({ channelMode: m })}
+                          className={`rounded-md border px-1.5 py-1 text-[10px] capitalize ${afx.channelMode === m ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                          {m === "stereo" ? "Estéreo" : "Mono"}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[8px] font-bold text-muted-foreground uppercase">
+                        <span>Balanço</span>
+                        <span>{afx.pan === 0 || !afx.pan ? "C" : afx.pan < 0 ? "L" : "R"}</span>
+                      </div>
+                      <input 
+                        type="range" min="-1" max="1" step="0.1" 
+                        value={afx.pan ?? 0}
+                        onChange={(e) => patchAfx({ pan: Number(e.target.value), channelMode: "panned" })}
+                        className="w-full h-1 rounded bg-muted appearance-none cursor-pointer accent-primary" 
+                      />
+                    </div>
                   </div>
+
                 </div>
               </div>
             );
@@ -3946,14 +3962,12 @@ function Editor() {
                         <SettingsIcon className="h-4 w-4 text-primary" />
                         <span className="text-sm font-semibold">Modo de Canal</span>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {(["stereo", "mono", "left", "right", "swap"] as ChannelMode[]).map((m) => {
-                          const labels: Record<ChannelMode, string> = {
+                      <div className="grid grid-cols-3 gap-2">
+
+                        {(["stereo", "mono"] as ChannelMode[]).map((m) => {
+                          const labels: Record<string, string> = {
                             stereo: "Estéreo",
                             mono: "Mono",
-                            left: "Esquerdo",
-                            right: "Direito",
-                            swap: "Inverter",
                           };
                           return (
                             <button
@@ -3973,7 +3987,55 @@ function Editor() {
                             </button>
                           );
                         })}
+                        <button
+                          onClick={() => {
+                            const isLounge = selected.audioFx?.ambience === "lounge";
+                            const nextAmb = isLounge ? "none" : "lounge";
+                            setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), ambience: nextAmb } } : i));
+                            if (mediaGraphRef.current[selected.id]) {
+                              mediaGraphRef.current[selected.id].nodes.setFx({
+                                ...(selected.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }),
+                                ambience: nextAmb
+                              });
+                            }
+                          }}
+                          className={`rounded-lg border py-2 text-xs font-medium transition-colors ${selected.audioFx?.ambience === "lounge" ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:bg-accent"}`}
+                        >
+                          Som Lounge
+                        </button>
+                      </div>
 
+
+                      {/* Gradual Balance Control (Centro -> Esquerda/Direita) */}
+                      <div className="space-y-2 mt-4">
+                        <div className="flex justify-between items-center">
+                          <label className="text-[10px] uppercase font-bold text-muted-foreground">Balanço (Pan)</label>
+                          <span className="text-[10px] font-mono text-primary">
+                            {selected.audioFx?.pan === 0 || !selected.audioFx?.pan ? "CENTRO" : 
+                             selected.audioFx.pan < 0 ? `${Math.abs(selected.audioFx.pan * 100).toFixed(0)}% ESQ` : 
+                             `${(selected.audioFx.pan * 100).toFixed(0)}% DIR`}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-[10px] font-bold text-muted-foreground">L</span>
+                          <input 
+                            type="range" min="-1" max="1" step="0.01" 
+                            value={selected.audioFx?.pan ?? 0}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), pan: val, channelMode: "panned" } } : i));
+                              if (mediaGraphRef.current[selected.id]) {
+                                mediaGraphRef.current[selected.id].nodes.setFx({
+                                  ...(selected.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }),
+                                  pan: val,
+                                  channelMode: "panned"
+                                });
+                              }
+                            }}
+                            className="flex-1 h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" 
+                          />
+                          <span className="text-[10px] font-bold text-muted-foreground">R</span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -3998,6 +4060,7 @@ function Editor() {
           </div>
         </div>
       )}
+
 
       {/* Context menu */}
 

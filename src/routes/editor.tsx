@@ -2632,7 +2632,6 @@ function Editor() {
         <main className="flex min-w-0 flex-1 flex-col select-none">
           <div ref={previewShellRef} className="relative flex min-h-0 flex-1 items-center justify-center bg-black/40 p-6 select-none">
             <div ref={previewBoxRef} className="group/preview relative isolate overflow-hidden rounded-lg shadow-2xl select-none"
-              onWheel={onPreviewWheel}
               style={{
                 aspectRatio: `${aspect.w} / ${aspect.h}`,
                 maxHeight: "100%", maxWidth: "100%",

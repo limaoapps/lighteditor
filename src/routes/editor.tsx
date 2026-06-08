@@ -3234,7 +3234,7 @@ function Editor() {
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs hover:border-destructive hover:text-destructive disabled:opacity-40">
               <Trash2 className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Excluir</span>
             </button>
-            <div className="mx-2 h-5 w-px bg-border" />
+            <div className="hidden mx-2 h-5 w-px bg-border sm:block" />
             <div className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
               <Volume2 className="h-3.5 w-3.5" />
               <input type="range" min={0} max={1} step={0.05} defaultValue={1}

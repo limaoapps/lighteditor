@@ -3247,6 +3247,17 @@ function Editor() {
 
           <div className="flex border-t border-border">
           <div ref={timelineRef} onMouseDown={onTimelineMouseDown}
+            onTouchStart={(e) => {
+              if (e.touches.length === 1) {
+                const touch = e.touches[0];
+                const rect = timelineRef.current?.getBoundingClientRect();
+                if (rect) {
+                  const x = touch.clientX - rect.left + timelineRef.current!.scrollLeft - labelColW;
+                  setPlayhead(Math.max(0, x / zoom));
+                  dragRef.current = { type: "playhead" };
+                }
+              }
+            }}
             className="no-scrollbar relative h-[280px] min-w-0 flex-1 overflow-auto bg-track">
 
             <div className="relative" style={{ width: labelColW + rulerSpan * zoom, minWidth: "100%" }}>

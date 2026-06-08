@@ -3901,7 +3901,7 @@ function Editor() {
                   timelineRef.current.scrollLeft = (e.target as HTMLDivElement).scrollLeft;
                 }
               }}
-              className="h-4 w-full overflow-x-auto overflow-y-hidden border-t border-border bg-panel"
+              className="app-scrollbar h-3 w-full overflow-x-auto overflow-y-hidden border-t border-border bg-panel"
               title="Rolar timeline"
             >
               <div style={{ width: labelColW + rulerSpan * zoom, height: 1 }} />

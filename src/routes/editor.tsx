@@ -3235,7 +3235,7 @@ function Editor() {
               <Trash2 className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Excluir</span>
             </button>
             <div className="mx-2 h-5 w-px bg-border" />
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
               <Volume2 className="h-3.5 w-3.5" />
               <input type="range" min={0} max={1} step={0.05} defaultValue={1}
                 onChange={(e) => { if (videoElRef.current) videoElRef.current.volume = Number(e.target.value); }}

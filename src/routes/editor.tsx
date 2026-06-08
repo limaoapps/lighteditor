@@ -1520,7 +1520,16 @@ function Editor() {
       // fallback se WebAudio falhou
       v.volume = Math.min(1, computeVol(activeV1Video, playhead));
     }
-    if (playing) v.play().catch(() => {}); else v.pause();
+    if (playing) {
+      v.play().catch((err) => {
+        if (err.name === "NotAllowedError") {
+          console.warn("Reprodução automática bloqueada pelo navegador. Interação do usuário necessária.");
+          setPlaying(false);
+        }
+      });
+    } else {
+      v.pause();
+    }
   }, [activeV1Video, playing, playhead, trackMuted, attachGraph]);
 
 
@@ -1535,7 +1544,11 @@ function Editor() {
     const target = activeV1Video.inPoint + (playhead - activeV1Video.start);
     if (Math.abs(bg.currentTime - target) > 0.25) bg.currentTime = target;
     bg.muted = true;
-    if (playing) bg.play().catch(() => {}); else bg.pause();
+    if (playing) {
+      bg.play().catch(() => {});
+    } else {
+      bg.pause();
+    }
   }, [activeV1Video, playing, playhead]);
 
   useEffect(() => {
@@ -1565,7 +1578,9 @@ function Editor() {
       if (inRange) {
         const target = a.inPoint + (playhead - a.start);
         if (Math.abs(el.currentTime - target) > 0.25) el.currentTime = target;
-        if (playing && el.paused) el.play().catch(() => {});
+        if (playing && el.paused) {
+          el.play().catch(() => {});
+        }
         if (!playing && !el.paused) el.pause();
       } else if (!el.paused) el.pause();
     }
@@ -1667,6 +1682,7 @@ function Editor() {
       dragRef.current = { type: "playhead" };
       const x = e.clientX - rect.left + (timelineRef.current?.scrollLeft ?? 0) - labelColW;
       setPlayhead(snapTime(Math.max(0, x / zoom)));
+      if (playing) setPlaying(false);
     }
   };
 
@@ -1678,7 +1694,10 @@ function Editor() {
       const tSec = getTimelineTimeFromClientX(clientX, pointerOffsetPx);
       if (tSec == null) return;
       skipHistory.current = true;
-      if (d.type === "playhead") setPlayhead(snapTimeRef.current(tSec));
+      if (d.type === "playhead") {
+        setPlayhead(snapTimeRef.current(tSec));
+        if (playing) setPlaying(false);
+      }
       else if (d.type === "move") {
         const newStart = snapTimeRef.current(Math.max(0, tSec - d.offsetSec), d.id);
         const tracksRect = tracksAreaRef.current?.getBoundingClientRect();
@@ -3405,8 +3424,8 @@ function Editor() {
                               className={`group/clip absolute top-1 flex h-[calc(100%-8px)] items-center overflow-hidden rounded-md text-[10px] text-white shadow ${active ? "ring-2 ring-primary" : "ring-1 ring-black/30"}`}
                               style={{ left: i.start * zoom, width: w, background: color, cursor: locked ? "not-allowed" : "grab" }}
                               onTouchStart={(e) => {
-                                // Simple touch selection for mobile
                                 if (locked) return;
+                                e.stopPropagation();
                                 setSelectedId(i.id);
                               }}
                             >
@@ -3481,7 +3500,8 @@ function Editor() {
                 <div data-role="playhead"
                   className="pointer-events-auto absolute top-0 z-30 w-0.5 cursor-ew-resize bg-primary"
                   style={{ left: labelColW + playhead * zoom, height: tracks.length * trackHeight }}
-                  onMouseDown={(e) => { e.stopPropagation(); dragRef.current = { type: "playhead" }; }}>
+                  onMouseDown={(e) => { e.stopPropagation(); dragRef.current = { type: "playhead" }; if (playing) setPlaying(false); }}
+                  onTouchStart={(e) => { e.stopPropagation(); dragRef.current = { type: "playhead" }; if (playing) setPlaying(false); }}>
                   <div className="absolute -left-1.5 -top-1 h-3 w-3.5 rounded-sm bg-primary shadow" />
                 </div>
               </div>

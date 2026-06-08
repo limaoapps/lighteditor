@@ -1312,9 +1312,9 @@ function Editor() {
       width: asset.width, height: asset.height,
       transform: asset.kind === "image" || asset.kind === "video" ? { xPct: 50, yPct: 50, scale: 1, rotation: 0 } : undefined,
       fadeIn: 0, fadeOut: 0,
-      gainDb: asset.kind === "audio" || asset.kind === "video" ? 0 : undefined,
-      audioFx: asset.kind === "audio" || asset.kind === "video" ? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] } : undefined,
-      fx: asset.kind === "image" || asset.kind === "video" ? { ...DEFAULT_FX } : undefined,
+      gainDb: (asset.kind === "audio" || asset.kind === "video") ? 0 : undefined,
+      audioFx: (asset.kind === "audio" || asset.kind === "video") ? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] } : undefined,
+      fx: (asset.kind === "image" || asset.kind === "video") ? { ...DEFAULT_FX } : undefined,
     };
   }, []);
 
@@ -3137,6 +3137,8 @@ function Editor() {
                   })()}
 
                   <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Canais</div>
+
+
                   <div className="flex flex-col gap-2">
                     <div className="grid grid-cols-2 gap-1">
                       {(["stereo","mono"] as ChannelMode[]).map(m => (

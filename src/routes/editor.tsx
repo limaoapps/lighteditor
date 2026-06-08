@@ -2866,6 +2866,41 @@ function Editor() {
               </div>
             </div>
           </div>
+          {/* Zoom do item do preview (fora da área do preview, área central) */}
+          <div className="flex shrink-0 items-center justify-center gap-2 border-t border-border bg-panel/60 px-3 py-1.5 text-xs text-muted-foreground">
+            <button
+              onClick={() => adjustPreviewItemScale(-0.1)}
+              title="Diminuir item do preview"
+              className="rounded p-1 hover:bg-card hover:text-foreground"
+            >
+              <ZoomOut className="h-3.5 w-3.5" />
+            </button>
+            <span className="font-mono tabular-nums">
+              {(() => {
+                const t = (selected && selected.transform) ? selected : activeV1Video;
+                return t?.transform ? `${Math.round(t.transform.scale * 100)}%` : "—";
+              })()}
+            </span>
+            <button
+              onClick={() => adjustPreviewItemScale(0.1)}
+              title="Aumentar item do preview"
+              className="rounded p-1 hover:bg-card hover:text-foreground"
+            >
+              <ZoomIn className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => {
+                const target = (selected && selected.transform) ? selected : activeV1Video;
+                if (!target || !target.transform) return;
+                setItems(prev => prev.map(i => i.id === target.id && i.transform
+                  ? { ...i, transform: { ...i.transform, scale: 1, xPct: 50, yPct: 50 } } : i));
+              }}
+              title="Centralizar e resetar zoom"
+              className="ml-1 rounded p-1 hover:bg-card hover:text-foreground"
+            >
+              <AlignCenter className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </main>
         <div
           onMouseDown={(e) => { sideDragRef.current = { side: "R", startX: e.clientX, startW: rightW }; document.body.style.cursor = "ew-resize"; }}

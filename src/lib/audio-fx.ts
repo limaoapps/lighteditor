@@ -244,7 +244,7 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
   let lastAmb: Ambience = "none";
 
   const api: AudioFxNodes = {
-    input, output: muteGain,
+    input, output: muteGain, splitter,
     setGain(db: number) {
       // sem clamp — permite estouro proposital
       out.gain.value = dbToGain(db);

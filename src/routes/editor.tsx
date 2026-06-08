@@ -1726,7 +1726,7 @@ function Editor() {
         g.nodes.setMuted(!!trackMuted[a.trackId]);
         if (a.audioFx) g.nodes.setFx(a.audioFx);
         const fade = computeVol(a, playhead);
-        g.nodes.setGain(((a.gainDb ?? 0) + (fade < 0.999 ? 20 * Math.log10(Math.max(0.0001, fade)) : 0)));
+        g.nodes.setGain((a.gainDb ?? 0) * fade);
       } else {
         el.muted = !!trackMuted[a.trackId];
         el.volume = Math.min(1, computeVol(a, playhead));

@@ -12,6 +12,19 @@ export const EQ_BAND_COUNT = EQ_BANDS.length;
 export type ReverbPreset = "none" | "room" | "hall" | "plate" | "cathedral" | "auditorium" | "cinema";
 export type Ambience = "none" | "room" | "hall" | "cave" | "outdoor" | "underwater" | "lounge" | "surround_light" | "surround_med" | "surround_strong";
 export type ChannelMode = "stereo" | "mono" | "panned" | "left" | "right" | "invert";
+export type VoicePreset =
+  | "none"
+  | "robot"
+  | "monster"
+  | "alien"
+  | "megaphone"
+  | "telephone"
+  | "radio"
+  | "whisper"
+  | "chipmunk"
+  | "demon"
+  | "underwater"
+  | "ghost";
 
 
 export type AudioFx = {
@@ -26,7 +39,9 @@ export type AudioFx = {
   pan: number; // -1 (full left) .. 1 (full right)
   stereoWidth: number; // 0..200 (%)
   positionDepth: number; // -1 (Frente) .. 1 (Trás)
+  voicePreset?: VoicePreset; // efeito de voz
 };
+
 
 
 export const DEFAULT_AUDIO_FX: AudioFx = {

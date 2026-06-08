@@ -22,6 +22,7 @@ import {
 import { computeItemBounds } from "@/lib/scene-geometry";
 import { PreviewCanvas } from "@/components/editor/PreviewCanvas";
 import { Waveform } from "@/components/editor/Waveform";
+import { VideoFilmstrip } from "@/components/editor/VideoFilmstrip";
 import type { SceneItem } from "@/lib/scene-renderer";
 import type { CachedMediaItem } from "@/lib/media-cache";
 
@@ -219,6 +220,8 @@ type TLItem = {
   gainDb?: number;
   audioFx?: AudioFx;
   fx?: Fx;
+  /** Vídeo silenciado (áudio foi separado em uma trilha de áudio paralela). */
+  silenced?: boolean;
 };
 
 type Track = { id: string; kind: TrackKind; label: string };

@@ -544,6 +544,24 @@ export function buildAudioFilterChain(
       out.push("equalizer=f=180:width_type=o:width=1.4:g=4");
     }
   }
+  // Voice preset (aproximação FFmpeg: highpass + lowpass + ganho + tremolo p/ ring)
+  const vp = fx?.voicePreset;
+  if (vp && vp !== "none") {
+    const s = VOICE_SPECS[vp];
+    if (s.lowCutHz > 25) out.push(`highpass=f=${Math.round(s.lowCutHz)}`);
+    if (s.highCutHz < 19000) out.push(`lowpass=f=${Math.round(s.highCutHz)}`);
+    if (s.ringDepth > 0.01 && s.ringHz > 0.1) {
+      // tremolo aproxima AM/ring para taxas baixas; para taxas altas, vibrato/distorção
+      if (s.ringHz <= 20) out.push(`tremolo=f=${s.ringHz.toFixed(2)}:d=${s.ringDepth.toFixed(2)}`);
+      else out.push(`vibrato=f=${Math.min(20, s.ringHz/8).toFixed(2)}:d=${Math.min(1, s.ringDepth).toFixed(2)}`);
+    }
+    if (s.drive > 0.05) {
+      // distorção via acrusher leve
+      const lvl = (1 - s.drive * 0.6).toFixed(2);
+      out.push(`acrusher=level_in=1:level_out=${lvl}:bits=8:mode=log:mix=${s.drive.toFixed(2)}`);
+    }
+    if (Math.abs(s.outGainDb) > 0.01) out.push(`volume=${dbToGain(s.outGainDb).toFixed(4)}`);
+  }
   // Ganho (>0 dB permitido — até +30dB ou mais)
   const g = dbToGain(gainDb || 0);
   if (Math.abs(gainDb) > 0.01) out.push(`volume=${g.toFixed(4)}`);

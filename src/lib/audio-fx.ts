@@ -193,20 +193,32 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
       for (let i = 0; i < eqNodes.length; i++) {
         eqNodes[i].gain.value = fx.eq[i] ?? 0;
       }
-      // Canal
+      // Canal (Roteamento conforme regras técnicas)
       const m = fx.channelMode;
+      console.log(`[AudioFX] Modo de canal ativo: ${m.toUpperCase()}`);
+      
       if (m === "mono") {
-        gLL.gain.value = 0.5; gLR.gain.value = 0.5;
-        gRL.gain.value = 0.5; gRR.gain.value = 0.5;
+        // M = (L + R) / 2
+        gLL.gain.value = 0.5; gLR.gain.value = 0.5; // Saída L recebe L e R
+        gRL.gain.value = 0.5; gRR.gain.value = 0.5; // Saída R recebe L e R
       } else if (m === "left") {
-        gLL.gain.value = 1; gLR.gain.value = 0; gRL.gain.value = 1; gRR.gain.value = 0;
+        // L = L_original, R = L_original
+        gLL.gain.value = 1; gLR.gain.value = 0;
+        gRL.gain.value = 1; gRR.gain.value = 0;
       } else if (m === "right") {
-        gLL.gain.value = 0; gLR.gain.value = 1; gRL.gain.value = 0; gRR.gain.value = 1;
+        // L = R_original, R = R_original
+        gLL.gain.value = 0; gLR.gain.value = 1;
+        gRL.gain.value = 0; gRR.gain.value = 1;
       } else if (m === "swap") {
-        gLL.gain.value = 0; gLR.gain.value = 1; gRL.gain.value = 1; gRR.gain.value = 0;
+        // L = R_original, R = L_original
+        gLL.gain.value = 0; gLR.gain.value = 1;
+        gRL.gain.value = 1; gRR.gain.value = 0;
       } else {
-        gLL.gain.value = 1; gLR.gain.value = 0; gRL.gain.value = 0; gRR.gain.value = 1;
+        // Estéreo: L = L, R = R
+        gLL.gain.value = 1; gLR.gain.value = 0;
+        gRL.gain.value = 0; gRR.gain.value = 1;
       }
+
       // Echo
       const eMix = Math.max(0, Math.min(1, (fx.echoMix ?? 0) / 100));
       echoDry.gain.value = 1 - eMix * 0.5;
@@ -251,6 +263,7 @@ export function buildAudioFilterChain(
   else if (fx?.channelMode === "left") out.push("pan=stereo|c0=c0|c1=c0");
   else if (fx?.channelMode === "right") out.push("pan=stereo|c0=c1|c1=c1");
   else if (fx?.channelMode === "swap") out.push("pan=stereo|c0=c1|c1=c0");
+
   // EQ 12 bandas
   if (fx?.eq) {
     for (let i = 0; i < EQ_BANDS.length; i++) {

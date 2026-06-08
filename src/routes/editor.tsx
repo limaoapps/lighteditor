@@ -3839,6 +3839,11 @@ function Editor() {
                                 // mantém até (100% - foPct), volta a 0dB no final.
                                 return (
                                   <>
+                                    {i.url && (
+                                      <div className="pointer-events-none absolute inset-0 z-[5] overflow-hidden opacity-70">
+                                        <Waveform url={i.url} inPoint={i.inPoint} outPoint={i.outPoint} color={i.kind === "audio" ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.45)"} />
+                                      </div>
+                                    )}
                                     <svg className="pointer-events-none absolute inset-0 z-10 h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
                                       <polyline
                                         points={`0,50 ${fiPct},${gainTopPct} ${100 - foPct},${gainTopPct} 100,50`}

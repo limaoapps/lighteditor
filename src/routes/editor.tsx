@@ -3809,6 +3809,11 @@ function Editor() {
                                 setSelectedId(i.id);
                               }}
                             >
+                              {showFilmstrip && i.url && (
+                                <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden opacity-95">
+                                  <VideoFilmstrip url={i.url} inPoint={i.inPoint} outPoint={i.outPoint} />
+                                </div>
+                              )}
                               {hasVisual && visualFiW > 0 && (
                                 <div className="pointer-events-none absolute inset-y-0 left-0" style={{ width: visualFiW, background: "linear-gradient(to right, rgba(0,0,0,0.55), transparent)" }} />
                               )}

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   Film, Plus, Scissors, Trash2, Play, Pause, Square, Download, ArrowLeft,
   Loader2, X, Volume2, VolumeX, ZoomIn, ZoomOut, Type as TypeIcon, Music2,
@@ -980,6 +980,7 @@ function Editor() {
   // WebAudio: contexto + grafo por elemento (permite ganho > 0dB e FX)
   const audioCtxRef = useRef<AudioContext | null>(null);
   const mediaGraphRef = useRef<Record<string, { src: MediaElementAudioSourceNode; nodes: AudioFxNodes }>>({});
+  const mediaGraphByElementRef = useRef<WeakMap<HTMLMediaElement, { src: MediaElementAudioSourceNode; nodes: AudioFxNodes }>>(new WeakMap());
   const ensureAudioCtx = useCallback(() => {
     if (typeof window === "undefined") return null;
     if (!audioCtxRef.current) {
@@ -1020,6 +1021,13 @@ function Editor() {
     if (!ctx) return null;
     let entry = mediaGraphRef.current[id];
     if (!entry) {
+      const existingForElement = mediaGraphByElementRef.current.get(el);
+      if (existingForElement) {
+        mediaGraphRef.current[id] = existingForElement;
+        entry = existingForElement;
+      }
+    }
+    if (!entry) {
       try {
         const src = ctx.createMediaElementSource(el);
         const nodes = buildAudioFxGraph(ctx, { initialFx: item.audioFx, initialGainDb: item.gainDb ?? 0 });
@@ -1028,6 +1036,7 @@ function Editor() {
         nodes.output.connect(master.input);
         entry = { src, nodes };
         mediaGraphRef.current[id] = entry;
+        mediaGraphByElementRef.current.set(el, entry);
       } catch { return null; }
     }
     return entry;
@@ -1652,20 +1661,18 @@ function Editor() {
     ) ?? null;
   }, [items, playhead, firstVideoTrackId]);
 
-  const computeVol = (i: TLItem, t: number) => {
+  const computeAudioGainDb = (i: TLItem, t: number) => {
     const local = t - i.start;
     const dur = i.outPoint - i.inPoint;
-    let v = 1;
+    if (local < 0 || local > dur) return 0;
     const audioFadeIn = getAudioFadeIn(i);
     const audioFadeOut = getAudioFadeOut(i);
-    if (audioFadeIn && local < audioFadeIn) v *= Math.max(0, local / audioFadeIn);
-    if (audioFadeOut && local > dur - audioFadeOut) v *= Math.max(0, (dur - local) / audioFadeOut);
-    // SEM clamp em 1 — o ganho até +30dB precisa estourar quando o usuário pedir.
-    // Multiplicador de fade (0..1) é aplicado depois pelo grafo WebAudio junto ao gainDb.
-    return Math.max(0, v);
+    let line = 1;
+    if (audioFadeIn > 0.001 && local < audioFadeIn) line = Math.min(line, Math.max(0, local / audioFadeIn));
+    if (audioFadeOut > 0.001 && local > dur - audioFadeOut) line = Math.min(line, Math.max(0, (dur - local) / audioFadeOut));
+    return (i.gainDb ?? 0) * line;
   };
-  const computeAudioGainDb = (i: TLItem, t: number) => (i.gainDb ?? 0) * computeVol(i, t);
-  const fxGainFor = (i: TLItem, t: number) => computeVol(i, t) * Math.pow(10, (i.gainDb ?? 0) / 20);
+  const computeAudioGain = (i: TLItem, t: number) => Math.pow(10, computeAudioGainDb(i, t) / 20);
 
 
   useEffect(() => {
@@ -1687,7 +1694,7 @@ function Editor() {
       g.nodes.setGain(computeAudioGainDb(activeV1Video, playhead));
     } else {
       // fallback se WebAudio falhou
-      v.volume = Math.min(1, computeVol(activeV1Video, playhead));
+      v.volume = Math.min(1, computeAudioGain(activeV1Video, playhead));
     }
     if (playing) {
       v.play().catch((err) => {
@@ -1741,7 +1748,7 @@ function Editor() {
         g.nodes.setGain(computeAudioGainDb(a, playhead));
       } else {
         el.muted = !!trackMuted[a.trackId];
-        el.volume = Math.min(1, computeVol(a, playhead));
+        el.volume = Math.min(1, computeAudioGain(a, playhead));
       }
       if (inRange) {
         const target = a.inPoint + (playhead - a.start);
@@ -3572,6 +3579,7 @@ function Editor() {
           </div>
 
           <div className="flex border-t border-border">
+          <div className="min-w-0 flex-1">
           <div ref={timelineRef} onMouseDown={onTimelineMouseDown}
             onTouchStart={(e) => {
               if (e.touches.length === 1) {
@@ -3849,22 +3857,23 @@ function Editor() {
                   onMouseDown={(e) => { e.stopPropagation(); dragRef.current = { type: "playhead" }; if (playing) setPlaying(false); }}
                   onTouchStart={(e) => { e.stopPropagation(); dragRef.current = { type: "playhead" }; if (playing) setPlaying(false); }}>
                   <div className="absolute -left-1.5 -top-1 h-3 w-3.5 rounded-sm bg-primary shadow" />
+                </div>
+              </div>
+            </div>
           </div>
-          <div
-            ref={hScrollRef}
-            onScroll={(e) => {
-              if (syncingScroll.current === "tl") { syncingScroll.current = null; return; }
-              if (timelineRef.current) {
-                syncingScroll.current = "sb";
-                timelineRef.current.scrollLeft = (e.target as HTMLDivElement).scrollLeft;
-              }
-            }}
-            className="h-3 w-full overflow-x-auto overflow-y-hidden border-t border-border bg-panel"
-            title="Rolar timeline"
-          >
-            <div style={{ width: labelColW + rulerSpan * zoom, height: 1 }} />
-          </div>
-        </div>
+            <div
+              ref={hScrollRef}
+              onScroll={(e) => {
+                if (syncingScroll.current === "tl") { syncingScroll.current = null; return; }
+                if (timelineRef.current) {
+                  syncingScroll.current = "sb";
+                  timelineRef.current.scrollLeft = (e.target as HTMLDivElement).scrollLeft;
+                }
+              }}
+              className="h-4 w-full overflow-x-auto overflow-y-hidden border-t border-border bg-panel"
+              title="Rolar timeline"
+            >
+              <div style={{ width: labelColW + rulerSpan * zoom, height: 1 }} />
             </div>
           </div>
           <div className="hidden h-[280px] shrink-0 items-stretch gap-2 border-l border-border bg-panel px-3 py-2 md:flex">
@@ -4151,7 +4160,7 @@ function Editor() {
                                   }));
                                 }}
                                 className="absolute inset-0 z-10 w-full h-full opacity-0 cursor-pointer orientation-vertical"
-                                style={{ WebkitAppearance: "slider-vertical" as any }}
+                                style={{ WebkitAppearance: "slider-vertical" } as CSSProperties}
                               />
                             </div>
                             <span className="text-[8px] text-muted-foreground font-mono">

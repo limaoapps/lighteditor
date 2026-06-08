@@ -3051,8 +3051,12 @@ function Editor() {
                     const nodes = entry.nodes;
                     
                     // Connect nodes.splitter (which we just added to AudioFxNodes) to our local analyzers
-                    nodes.splitter.connect(L, 0);
-                    nodes.splitter.connect(R, 1);
+                    try {
+                      nodes.splitter.connect(L, 0);
+                      nodes.splitter.connect(R, 1);
+                    } catch (e) {
+                      console.warn("Failed to connect pan meters:", e);
+                    }
 
                     const buf = new Float32Array(L.fftSize);
                     let currentL = 0;

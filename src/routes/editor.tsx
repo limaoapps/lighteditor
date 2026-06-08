@@ -854,6 +854,12 @@ function Editor() {
   const mediaItemRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const mediaListRef = useRef<HTMLDivElement | null>(null);
 
+  // Metering for balance (pan) view
+  const [panPeaks, setPanPeaks] = useState({ L: 0, R: 0 });
+  const panAnalyzersRef = useRef<{ L: AnalyserNode; R: AnalyserNode } | null>(null);
+  const panReqRef = useRef<number | null>(null);
+
+
 
   const [exporting, setExporting] = useState(false);
   const ffReady = true;

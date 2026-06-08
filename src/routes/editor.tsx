@@ -3210,7 +3210,11 @@ function Editor() {
             <button onClick={() => { if (playhead >= totalDuration - 0.05) setPlayhead(0); setPlaying(true); }} disabled={!items.length} className="rounded p-1.5 hover:bg-card disabled:opacity-40"><Play className="h-4 w-4" /></button>
             <button onClick={() => setPlaying(false)} className="rounded p-1.5 hover:bg-card"><Pause className="h-4 w-4" /></button>
             <button onClick={() => { setPlaying(false); setPlayhead(0); }} className="rounded p-1.5 hover:bg-card"><Square className="h-4 w-4" /></button>
-            <div className="ml-2 font-mono text-xs tabular-nums text-muted-foreground">{fmt(playhead)} / {fmt(totalDuration)}</div>
+            <div className="ml-2 flex items-center gap-1 font-mono text-[11px] tabular-nums text-primary sm:text-xs">
+              <span className="font-bold">{fmt(playhead)}</span>
+              <span className="text-muted-foreground">/</span>
+              <span>{fmt(totalDuration)}</span>
+            </div>
             <div className="flex-1" />
             <button onClick={() => splitAt(playhead)} title="Dividir (S / Ctrl+B)"
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs hover:border-primary hover:text-primary">

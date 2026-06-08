@@ -17,6 +17,7 @@ import {
   type ReverbPreset,
   type Ambience,
   type ChannelMode,
+  type VoicePreset,
 } from "@/lib/audio-fx";
 import { computeItemBounds } from "@/lib/scene-geometry";
 import { PreviewCanvas } from "@/components/editor/PreviewCanvas";

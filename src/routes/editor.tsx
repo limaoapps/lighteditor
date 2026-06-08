@@ -1654,12 +1654,15 @@ function Editor() {
     const local = t - i.start;
     const dur = i.outPoint - i.inPoint;
     let v = 1;
-    if (i.fadeIn && local < i.fadeIn) v *= Math.max(0, local / i.fadeIn);
-    if (i.fadeOut && local > dur - i.fadeOut) v *= Math.max(0, (dur - local) / i.fadeOut);
+    const audioFadeIn = getAudioFadeIn(i);
+    const audioFadeOut = getAudioFadeOut(i);
+    if (audioFadeIn && local < audioFadeIn) v *= Math.max(0, local / audioFadeIn);
+    if (audioFadeOut && local > dur - audioFadeOut) v *= Math.max(0, (dur - local) / audioFadeOut);
     // SEM clamp em 1 — o ganho até +30dB precisa estourar quando o usuário pedir.
     // Multiplicador de fade (0..1) é aplicado depois pelo grafo WebAudio junto ao gainDb.
     return Math.max(0, v);
   };
+  const computeAudioGainDb = (i: TLItem, t: number) => (i.gainDb ?? 0) * computeVol(i, t);
   const fxGainFor = (i: TLItem, t: number) => computeVol(i, t) * Math.pow(10, (i.gainDb ?? 0) / 20);
 
 
@@ -1678,12 +1681,8 @@ function Editor() {
     if (g) {
       v.volume = 1;
       g.nodes.setMuted(!!trackMuted[activeV1Video.trackId]);
-      g.nodes.setGain(activeV1Video.gainDb ?? 0);
       if (activeV1Video.audioFx) g.nodes.setFx(activeV1Video.audioFx);
-      // multiplica fade do envelope no gain final via post-gain (recomputado a cada frame)
-      const fade = computeVol(activeV1Video, playhead);
-      // Envelope linear-em-dB: nas bordas dos fades cai para 0dB (passthrough), no meio fica em gainDb.
-      g.nodes.setGain((activeV1Video.gainDb ?? 0) * fade);
+      g.nodes.setGain(computeAudioGainDb(activeV1Video, playhead));
     } else {
       // fallback se WebAudio falhou
       v.volume = Math.min(1, computeVol(activeV1Video, playhead));
@@ -1737,8 +1736,7 @@ function Editor() {
         el.volume = 1;
         g.nodes.setMuted(!!trackMuted[a.trackId]);
         if (a.audioFx) g.nodes.setFx(a.audioFx);
-        const fade = computeVol(a, playhead);
-        g.nodes.setGain((a.gainDb ?? 0) * fade);
+        g.nodes.setGain(computeAudioGainDb(a, playhead));
       } else {
         el.muted = !!trackMuted[a.trackId];
         el.volume = Math.min(1, computeVol(a, playhead));

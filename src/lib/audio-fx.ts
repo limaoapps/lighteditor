@@ -299,7 +299,7 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
   ringOsc.connect(ringDepth); ringDepth.connect(ringMult.gain);
   try { ringBias.start(); ringOsc.start(); } catch { /* ignore */ }
 
-  const voiceShaper = ctx.createWaveShaper(); voiceShaper.curve = makeLinearCurve(); voiceShaper.oversample = "2x";
+  const voiceShaper = ctx.createWaveShaper(); voiceShaper.curve = makeLinearCurve() as unknown as Float32Array<ArrayBuffer>; voiceShaper.oversample = "2x";
   const voiceHp = ctx.createBiquadFilter(); voiceHp.type = "highpass"; voiceHp.frequency.value = 20; voiceHp.Q.value = 0.7;
   const voiceLp = ctx.createBiquadFilter(); voiceLp.type = "lowpass"; voiceLp.frequency.value = 20000; voiceLp.Q.value = 0.7;
 

@@ -2555,7 +2555,7 @@ function Editor() {
                     transform: `translate(-50%,-50%) scale(${tr.scale * zScale}) rotate(${tr.rotation}deg)`,
                     cursor: "move",
                     opacity: op,
-                    zIndex: trackZ(ov.trackId),
+                    zIndex: isSel ? 40 : trackZ(ov.trackId),
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
                   };
 

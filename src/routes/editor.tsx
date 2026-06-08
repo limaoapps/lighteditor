@@ -3860,6 +3860,7 @@ function Editor() {
                 </div>
               </div>
             </div>
+          </div>
             <div
               ref={hScrollRef}
               onScroll={(e) => {

@@ -282,10 +282,41 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
   const out = ctx.createGain(); out.gain.value = 1;
   const muteGain = ctx.createGain(); muteGain.gain.value = 1;
 
-  // Conexões: input → depthFilter → widthSplitter ... widthMerger → eq[0..n-1] → splitter/merger → echoIn(dry+delay) → echoMix → revDry+conv → revMix → ambDry+ambConv → ambMix → out → muteGain
-  input.connect(depthFilter);
+  // ===== Bloco de Voice FX (ring mod + drive + bandpass) =====
+  // input → voiceIn → [dry path] + [ring mod → shaper → highpass → lowpass] → voiceMix → depthFilter
+  const voiceIn = ctx.createGain(); voiceIn.gain.value = 1;
+  const voiceDry = ctx.createGain(); voiceDry.gain.value = 1;
+  const voiceWet = ctx.createGain(); voiceWet.gain.value = 0;
+  const voiceMix = ctx.createGain(); voiceMix.gain.value = 1;
+  const voiceOutGain = ctx.createGain(); voiceOutGain.gain.value = 1;
+
+  // Ring modulator: signal * (1 + osc*depth) via gain AudioParam
+  const ringMult = ctx.createGain(); ringMult.gain.value = 1;
+  const ringBias = ctx.createConstantSource(); ringBias.offset.value = 1;
+  const ringOsc = ctx.createOscillator(); ringOsc.frequency.value = 50; ringOsc.type = "sine";
+  const ringDepth = ctx.createGain(); ringDepth.gain.value = 0;
+  ringBias.connect(ringMult.gain);
+  ringOsc.connect(ringDepth); ringDepth.connect(ringMult.gain);
+  try { ringBias.start(); ringOsc.start(); } catch { /* ignore */ }
+
+  const voiceShaper = ctx.createWaveShaper(); voiceShaper.curve = makeLinearCurve(); voiceShaper.oversample = "2x";
+  const voiceHp = ctx.createBiquadFilter(); voiceHp.type = "highpass"; voiceHp.frequency.value = 20; voiceHp.Q.value = 0.7;
+  const voiceLp = ctx.createBiquadFilter(); voiceLp.type = "lowpass"; voiceLp.frequency.value = 20000; voiceLp.Q.value = 0.7;
+
+  // Conexões: input → voiceIn → voiceDry → voiceMix
+  //                            → ringMult → voiceShaper → voiceHp → voiceLp → voiceWet → voiceMix
+  input.connect(voiceIn);
+  voiceIn.connect(voiceDry); voiceDry.connect(voiceMix);
+  voiceIn.connect(ringMult);
+  ringMult.connect(voiceShaper);
+  voiceShaper.connect(voiceHp); voiceHp.connect(voiceLp);
+  voiceLp.connect(voiceWet); voiceWet.connect(voiceMix);
+  voiceMix.connect(voiceOutGain);
+
+  // Conexões principais: voiceOutGain → depthFilter → widthSplitter ... → out → muteGain
+  voiceOutGain.connect(depthFilter);
   depthFilter.connect(widthSplitter);
-  
+
   let prev: AudioNode = widthMerger;
   for (const b of eqNodes) { prev.connect(b); prev = b; }
   prev.connect(splitter);
@@ -300,6 +331,7 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
 
   let lastReverbPreset: ReverbPreset = "none";
   let lastAmb: Ambience = "none";
+  let lastVoice: VoicePreset = "none";
 
   const api: AudioFxNodes = {
     input, output: muteGain, splitter,

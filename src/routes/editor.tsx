@@ -887,6 +887,14 @@ function Editor() {
   const [useGpu, setUseGpu] = useState(false);
   const [postAutoDownload, setPostAutoDownload] = useState(true);
   const [postPlay, setPostPlay] = useState(false);
+  // ---- Microphone recording ----
+  const [recording, setRecording] = useState(false);
+  const [recElapsed, setRecElapsed] = useState(0);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recordChunksRef = useRef<Blob[]>([]);
+  const recordStreamRef = useRef<MediaStream | null>(null);
+  const recordStartRef = useRef<{ playhead: number; time: number } | null>(null);
+  const recordTimerRef = useRef<number | null>(null);
   const [postBeep, setPostBeep] = useState(true);
   const [showExportLog, setShowExportLog] = useState(false);
   const [exportLog, setExportLog] = useState<string[]>([]);

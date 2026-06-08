@@ -3796,7 +3796,8 @@ function Editor() {
                 )}
 
                 {/* Audio Effects (EQ, Ambience, Reverb, Echo) */}
-                {(selected.kind === "audio" || selected.kind === "video") && selected.audioFx && (
+                {(selected.kind === "audio" || selected.kind === "video") && (
+
                   <div className="space-y-6">
                     {/* Equalizer */}
                     <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
@@ -3810,18 +3811,20 @@ function Editor() {
                             <div className="relative h-20 w-1.5 rounded-full bg-muted">
                               <div
                                 className="absolute bottom-0 left-0 right-0 rounded-full bg-primary transition-all"
-                                style={{ height: `${((selected.audioFx!.eq[idx] + 18) / 36) * 100}%` }}
+                                style={{ height: `${(((selected.audioFx?.eq?.[idx] ?? 0) + 18) / 36) * 100}%` }}
                               />
                               <input
                                 type="range" min="-18" max="18" step="0.5"
-                                value={selected.audioFx!.eq[idx]}
+                                value={selected.audioFx?.eq?.[idx] ?? 0}
                                 onChange={(e) => {
                                   const val = Number(e.target.value);
                                   setItems(p => p.map(i => {
-                                    if (i.id !== selected.id || !i.audioFx) return i;
-                                    const nextEq = [...i.audioFx.eq];
+                                    if (i.id !== selected.id) return i;
+                                    const baseFx = i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] };
+                                    const nextEq = [...baseFx.eq];
                                     nextEq[idx] = val;
-                                    return { ...i, audioFx: { ...i.audioFx, eq: nextEq } };
+                                    return { ...i, audioFx: { ...baseFx, eq: nextEq } };
+
                                   }));
                                 }}
                                 className="absolute inset-0 z-10 w-full h-full opacity-0 cursor-pointer orientation-vertical"
@@ -3847,8 +3850,9 @@ function Editor() {
                         <div className="space-y-2">
                           <label className="text-[10px] uppercase font-bold text-muted-foreground">Ambiente</label>
                           <select
-                            value={selected.audioFx.ambience}
-                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id && i.audioFx ? { ...i, audioFx: { ...i.audioFx, ambience: e.target.value as Ambience } } : i))}
+                            value={selected.audioFx?.ambience ?? "none"}
+                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), ambience: e.target.value as Ambience } } : i))}
+
                             className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
                           >
                             <option value="none">Nenhum</option>
@@ -3863,8 +3867,9 @@ function Editor() {
                         <div className="space-y-2">
                           <label className="text-[10px] uppercase font-bold text-muted-foreground">Preset de Reverb</label>
                           <select
-                            value={selected.audioFx.reverbPreset}
-                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id && i.audioFx ? { ...i, audioFx: { ...i.audioFx, reverbPreset: e.target.value as ReverbPreset } } : i))}
+                            value={selected.audioFx?.reverbPreset ?? "none"}
+                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), reverbPreset: e.target.value as ReverbPreset } } : i))}
+
                             className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
                           >
                             <option value="none">Nenhum</option>
@@ -3878,10 +3883,11 @@ function Editor() {
                         <div className="space-y-2">
                           <div className="flex justify-between">
                             <label className="text-[10px] uppercase font-bold text-muted-foreground">Mix do Reverb</label>
-                            <span className="text-xs font-mono">{selected.audioFx.reverbMix.toFixed(0)}%</span>
+                            <span className="text-xs font-mono">{(selected.audioFx?.reverbMix ?? 0).toFixed(0)}%</span>
                           </div>
-                          <input type="range" min="0" max="100" value={selected.audioFx.reverbMix}
-                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id && i.audioFx ? { ...i, audioFx: { ...i.audioFx, reverbMix: Number(e.target.value) } } : i))}
+                          <input type="range" min="0" max="100" value={selected.audioFx?.reverbMix ?? 0}
+                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), reverbMix: Number(e.target.value) } } : i))}
+
                             className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
                         </div>
                       </div>
@@ -3898,30 +3904,33 @@ function Editor() {
                         <div className="space-y-2">
                           <div className="flex justify-between">
                             <label className="text-[10px] uppercase font-bold text-muted-foreground">Mix do Eco</label>
-                            <span className="text-xs font-mono">{selected.audioFx.echoMix.toFixed(0)}%</span>
+                            <span className="text-xs font-mono">{(selected.audioFx?.echoMix ?? 0).toFixed(0)}%</span>
                           </div>
-                          <input type="range" min="0" max="100" value={selected.audioFx.echoMix}
-                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id && i.audioFx ? { ...i, audioFx: { ...i.audioFx, echoMix: Number(e.target.value) } } : i))}
+                          <input type="range" min="0" max="100" value={selected.audioFx?.echoMix ?? 0}
+                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), echoMix: Number(e.target.value) } } : i))}
+
                             className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
                         </div>
 
                         <div className="space-y-2">
                           <div className="flex justify-between">
                             <label className="text-[10px] uppercase font-bold text-muted-foreground">Atraso (Delay)</label>
-                            <span className="text-xs font-mono">{selected.audioFx.echoDelay}ms</span>
+                            <span className="text-xs font-mono">{selected.audioFx?.echoDelay ?? 300}ms</span>
                           </div>
-                          <input type="range" min="10" max="2000" step="10" value={selected.audioFx.echoDelay}
-                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id && i.audioFx ? { ...i, audioFx: { ...i.audioFx, echoDelay: Number(e.target.value) } } : i))}
+                          <input type="range" min="10" max="2000" step="10" value={selected.audioFx?.echoDelay ?? 300}
+                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), echoDelay: Number(e.target.value) } } : i))}
+
                             className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
                         </div>
 
                         <div className="space-y-2">
                           <div className="flex justify-between">
                             <label className="text-[10px] uppercase font-bold text-muted-foreground">Feedback (Repetição)</label>
-                            <span className="text-xs font-mono">{selected.audioFx.echoFeedback}%</span>
+                            <span className="text-xs font-mono">{selected.audioFx?.echoFeedback ?? 30}%</span>
                           </div>
-                          <input type="range" min="0" max="95" value={selected.audioFx.echoFeedback}
-                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id && i.audioFx ? { ...i, audioFx: { ...i.audioFx, echoFeedback: Number(e.target.value) } } : i))}
+                          <input type="range" min="0" max="95" value={selected.audioFx?.echoFeedback ?? 30}
+                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), echoFeedback: Number(e.target.value) } } : i))}
+
                             className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
                         </div>
                       </div>
@@ -3937,8 +3946,9 @@ function Editor() {
                         {(["stereo", "mono", "left", "right", "swap"] as ChannelMode[]).map((m) => (
                           <button
                             key={m}
-                            onClick={() => setItems(p => p.map(i => i.id === selected.id && i.audioFx ? { ...i, audioFx: { ...i.audioFx, channelMode: m } } : i))}
-                            className={`rounded-lg border py-2 text-xs font-medium transition-colors ${selected.audioFx!.channelMode === m ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:bg-accent"}`}
+                            onClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), channelMode: m } } : i))}
+                            className={`rounded-lg border py-2 text-xs font-medium transition-colors ${(selected.audioFx?.channelMode ?? "stereo") === m ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:bg-accent"}`}
+
                           >
                             {m.toUpperCase()}
                           </button>

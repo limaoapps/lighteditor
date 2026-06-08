@@ -116,6 +116,7 @@ export function irForAmbience(ctx: BaseAudioContext, amb: Ambience): { ir: Audio
 export type AudioFxNodes = {
   input: AudioNode;
   output: AudioNode;
+  splitter: ChannelSplitterNode; // Permite conectar analisadores externos por canal
   setGain: (db: number) => void;
   setFx: (fx: AudioFx) => void;
   setMuted: (m: boolean) => void;

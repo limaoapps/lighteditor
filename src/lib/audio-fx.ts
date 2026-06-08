@@ -12,6 +12,19 @@ export const EQ_BAND_COUNT = EQ_BANDS.length;
 export type ReverbPreset = "none" | "room" | "hall" | "plate" | "cathedral" | "auditorium" | "cinema";
 export type Ambience = "none" | "room" | "hall" | "cave" | "outdoor" | "underwater" | "lounge" | "surround_light" | "surround_med" | "surround_strong";
 export type ChannelMode = "stereo" | "mono" | "panned" | "left" | "right" | "invert";
+export type VoicePreset =
+  | "none"
+  | "robot"
+  | "monster"
+  | "alien"
+  | "megaphone"
+  | "telephone"
+  | "radio"
+  | "whisper"
+  | "chipmunk"
+  | "demon"
+  | "underwater"
+  | "ghost";
 
 
 export type AudioFx = {
@@ -26,7 +39,9 @@ export type AudioFx = {
   pan: number; // -1 (full left) .. 1 (full right)
   stereoWidth: number; // 0..200 (%)
   positionDepth: number; // -1 (Frente) .. 1 (Trás)
+  voicePreset?: VoicePreset; // efeito de voz
 };
+
 
 
 export const DEFAULT_AUDIO_FX: AudioFx = {
@@ -41,6 +56,7 @@ export const DEFAULT_AUDIO_FX: AudioFx = {
   pan: 0,
   stereoWidth: 100,
   positionDepth: 0,
+  voicePreset: "none",
 };
 
 
@@ -54,7 +70,49 @@ export function hasAudioFx(fx?: Partial<AudioFx> | null): boolean {
   if (fx.channelMode && fx.channelMode !== "stereo") return true;
   if (Math.abs((fx.stereoWidth ?? 100) - 100) > 1) return true;
   if (Math.abs(fx.positionDepth ?? 0) > 0.01) return true;
+  if (fx.voicePreset && fx.voicePreset !== "none") return true;
   return false;
+}
+
+/** ===== Presets de efeito de voz ===== */
+export type VoiceSpec = {
+  ringHz: number; ringDepth: number;   // 0..1 (0 = sem ring mod)
+  drive: number;                        // 0..1 (distorção)
+  lowCutHz: number;                     // highpass freq
+  highCutHz: number;                    // lowpass freq
+  bandQ: number;                        // ressonância dos filtros
+  wet: number;                          // 0..1 (mix dry/wet do bloco de voz)
+  outGainDb: number;                    // compensação de volume
+};
+export const VOICE_SPECS: Record<Exclude<VoicePreset, "none">, VoiceSpec> = {
+  robot:      { ringHz: 50,  ringDepth: 0.85, drive: 0.35, lowCutHz: 250,  highCutHz: 3200, bandQ: 1.0, wet: 1,    outGainDb: 2 },
+  monster:    { ringHz: 30,  ringDepth: 0.55, drive: 0.55, lowCutHz: 60,   highCutHz: 900,  bandQ: 0.8, wet: 1,    outGainDb: 4 },
+  alien:      { ringHz: 180, ringDepth: 0.75, drive: 0.20, lowCutHz: 500,  highCutHz: 5000, bandQ: 1.2, wet: 1,    outGainDb: 0 },
+  megaphone:  { ringHz: 0,   ringDepth: 0,    drive: 0.75, lowCutHz: 600,  highCutHz: 3500, bandQ: 2.0, wet: 1,    outGainDb: 3 },
+  telephone:  { ringHz: 0,   ringDepth: 0,    drive: 0.25, lowCutHz: 400,  highCutHz: 3000, bandQ: 1.5, wet: 1,    outGainDb: 1 },
+  radio:      { ringHz: 0,   ringDepth: 0,    drive: 0.45, lowCutHz: 350,  highCutHz: 4200, bandQ: 1.8, wet: 1,    outGainDb: 2 },
+  whisper:    { ringHz: 0,   ringDepth: 0,    drive: 0.10, lowCutHz: 700,  highCutHz: 8000, bandQ: 0.7, wet: 0.85, outGainDb: 4 },
+  chipmunk:   { ringHz: 0,   ringDepth: 0,    drive: 0.15, lowCutHz: 800,  highCutHz: 10000,bandQ: 0.7, wet: 1,    outGainDb: 0 },
+  demon:      { ringHz: 22,  ringDepth: 0.70, drive: 0.70, lowCutHz: 40,   highCutHz: 700,  bandQ: 1.1, wet: 1,    outGainDb: 5 },
+  underwater: { ringHz: 0,   ringDepth: 0,    drive: 0.10, lowCutHz: 80,   highCutHz: 500,  bandQ: 0.8, wet: 1,    outGainDb: 3 },
+  ghost:      { ringHz: 7,   ringDepth: 0.45, drive: 0.15, lowCutHz: 200,  highCutHz: 4000, bandQ: 0.9, wet: 0.9,  outGainDb: 1 },
+};
+
+function makeDriveCurve(amount: number): Float32Array {
+  const n = 1024; const k = Math.max(0, Math.min(0.999, amount));
+  const curve = new Float32Array(new ArrayBuffer(n * 4));
+  const deg = Math.PI / 180;
+  const a = (k * 100) + 0.0001;
+  for (let i = 0; i < n; i++) {
+    const x = (i * 2) / n - 1;
+    curve[i] = ((3 + a) * x * 20 * deg) / (Math.PI + a * Math.abs(x));
+  }
+  return curve;
+}
+function makeLinearCurve(): Float32Array {
+  const n = 1024; const c = new Float32Array(new ArrayBuffer(n * 4));
+  for (let i = 0; i < n; i++) c[i] = (i * 2) / n - 1;
+  return c;
 }
 
 /** ===== Presets de reverb (parâmetros de geração de IR sintético) ===== */
@@ -224,10 +282,41 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
   const out = ctx.createGain(); out.gain.value = 1;
   const muteGain = ctx.createGain(); muteGain.gain.value = 1;
 
-  // Conexões: input → depthFilter → widthSplitter ... widthMerger → eq[0..n-1] → splitter/merger → echoIn(dry+delay) → echoMix → revDry+conv → revMix → ambDry+ambConv → ambMix → out → muteGain
-  input.connect(depthFilter);
+  // ===== Bloco de Voice FX (ring mod + drive + bandpass) =====
+  // input → voiceIn → [dry path] + [ring mod → shaper → highpass → lowpass] → voiceMix → depthFilter
+  const voiceIn = ctx.createGain(); voiceIn.gain.value = 1;
+  const voiceDry = ctx.createGain(); voiceDry.gain.value = 1;
+  const voiceWet = ctx.createGain(); voiceWet.gain.value = 0;
+  const voiceMix = ctx.createGain(); voiceMix.gain.value = 1;
+  const voiceOutGain = ctx.createGain(); voiceOutGain.gain.value = 1;
+
+  // Ring modulator: signal * (1 + osc*depth) via gain AudioParam
+  const ringMult = ctx.createGain(); ringMult.gain.value = 1;
+  const ringBias = ctx.createConstantSource(); ringBias.offset.value = 1;
+  const ringOsc = ctx.createOscillator(); ringOsc.frequency.value = 50; ringOsc.type = "sine";
+  const ringDepth = ctx.createGain(); ringDepth.gain.value = 0;
+  ringBias.connect(ringMult.gain);
+  ringOsc.connect(ringDepth); ringDepth.connect(ringMult.gain);
+  try { ringBias.start(); ringOsc.start(); } catch { /* ignore */ }
+
+  const voiceShaper = ctx.createWaveShaper(); voiceShaper.curve = makeLinearCurve() as unknown as Float32Array<ArrayBuffer>; voiceShaper.oversample = "2x";
+  const voiceHp = ctx.createBiquadFilter(); voiceHp.type = "highpass"; voiceHp.frequency.value = 20; voiceHp.Q.value = 0.7;
+  const voiceLp = ctx.createBiquadFilter(); voiceLp.type = "lowpass"; voiceLp.frequency.value = 20000; voiceLp.Q.value = 0.7;
+
+  // Conexões: input → voiceIn → voiceDry → voiceMix
+  //                            → ringMult → voiceShaper → voiceHp → voiceLp → voiceWet → voiceMix
+  input.connect(voiceIn);
+  voiceIn.connect(voiceDry); voiceDry.connect(voiceMix);
+  voiceIn.connect(ringMult);
+  ringMult.connect(voiceShaper);
+  voiceShaper.connect(voiceHp); voiceHp.connect(voiceLp);
+  voiceLp.connect(voiceWet); voiceWet.connect(voiceMix);
+  voiceMix.connect(voiceOutGain);
+
+  // Conexões principais: voiceOutGain → depthFilter → widthSplitter ... → out → muteGain
+  voiceOutGain.connect(depthFilter);
   depthFilter.connect(widthSplitter);
-  
+
   let prev: AudioNode = widthMerger;
   for (const b of eqNodes) { prev.connect(b); prev = b; }
   prev.connect(splitter);
@@ -242,6 +331,7 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
 
   let lastReverbPreset: ReverbPreset = "none";
   let lastAmb: Ambience = "none";
+  let lastVoice: VoicePreset = "none";
 
   const api: AudioFxNodes = {
     input, output: muteGain, splitter,
@@ -321,6 +411,32 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
         try { ambConv.buffer = a ? a.ir : null; } catch { /* ignore */ }
         ambDry.gain.value = a ? 1 - a.wet * 0.6 : 1;
         ambWet.gain.value = a ? a.wet : 0;
+      }
+      // Voice preset
+      const vp: VoicePreset = fx.voicePreset ?? "none";
+      if (vp !== lastVoice) {
+        lastVoice = vp;
+        if (vp === "none") {
+          voiceDry.gain.value = 1; voiceWet.gain.value = 0;
+          ringDepth.gain.value = 0;
+          voiceShaper.curve = makeLinearCurve() as unknown as Float32Array<ArrayBuffer>;
+          voiceHp.frequency.value = 20; voiceLp.frequency.value = 20000;
+          voiceOutGain.gain.value = 1;
+        } else {
+          const s = VOICE_SPECS[vp];
+          voiceWet.gain.value = s.wet;
+          voiceDry.gain.value = 1 - s.wet;
+          ringOsc.frequency.value = Math.max(0.1, s.ringHz || 0.1);
+          ringDepth.gain.value = s.ringDepth;
+          voiceShaper.curve = (s.drive > 0.01
+            ? makeDriveCurve(s.drive)
+            : makeLinearCurve()) as unknown as Float32Array<ArrayBuffer>;
+          voiceHp.frequency.value = Math.max(20, s.lowCutHz);
+          voiceHp.Q.value = s.bandQ;
+          voiceLp.frequency.value = Math.min(20000, s.highCutHz);
+          voiceLp.Q.value = s.bandQ;
+          voiceOutGain.gain.value = dbToGain(s.outGainDb);
+        }
       }
     },
     setMuted(m: boolean) { muteGain.gain.value = m ? 0 : 1; },
@@ -427,6 +543,24 @@ export function buildAudioFilterChain(
       out.push("lowpass=f=2200");
       out.push("equalizer=f=180:width_type=o:width=1.4:g=4");
     }
+  }
+  // Voice preset (aproximação FFmpeg: highpass + lowpass + ganho + tremolo p/ ring)
+  const vp = fx?.voicePreset;
+  if (vp && vp !== "none") {
+    const s = VOICE_SPECS[vp];
+    if (s.lowCutHz > 25) out.push(`highpass=f=${Math.round(s.lowCutHz)}`);
+    if (s.highCutHz < 19000) out.push(`lowpass=f=${Math.round(s.highCutHz)}`);
+    if (s.ringDepth > 0.01 && s.ringHz > 0.1) {
+      // tremolo aproxima AM/ring para taxas baixas; para taxas altas, vibrato/distorção
+      if (s.ringHz <= 20) out.push(`tremolo=f=${s.ringHz.toFixed(2)}:d=${s.ringDepth.toFixed(2)}`);
+      else out.push(`vibrato=f=${Math.min(20, s.ringHz/8).toFixed(2)}:d=${Math.min(1, s.ringDepth).toFixed(2)}`);
+    }
+    if (s.drive > 0.05) {
+      // distorção via acrusher leve
+      const lvl = (1 - s.drive * 0.6).toFixed(2);
+      out.push(`acrusher=level_in=1:level_out=${lvl}:bits=8:mode=log:mix=${s.drive.toFixed(2)}`);
+    }
+    if (Math.abs(s.outGainDb) > 0.01) out.push(`volume=${dbToGain(s.outGainDb).toFixed(4)}`);
   }
   // Ganho (>0 dB permitido — até +30dB ou mais)
   const g = dbToGain(gainDb || 0);

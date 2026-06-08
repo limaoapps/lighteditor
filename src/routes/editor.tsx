@@ -17,6 +17,7 @@ import {
   type ReverbPreset,
   type Ambience,
   type ChannelMode,
+  type VoicePreset,
 } from "@/lib/audio-fx";
 import { computeItemBounds } from "@/lib/scene-geometry";
 import { PreviewCanvas } from "@/components/editor/PreviewCanvas";
@@ -3206,6 +3207,36 @@ function Editor() {
                 </div>
 
                 <div className="border-t border-border pt-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Efeito de Voz</div>
+                    {(afx.voicePreset && afx.voicePreset !== "none") && (
+                      <button onClick={() => patchAfx({ voicePreset: "none" })} className="text-[10px] text-muted-foreground hover:text-primary">limpar</button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-4 gap-1">
+                    {([
+                      { v: "none",       l: "Original" },
+                      { v: "robot",      l: "Robô" },
+                      { v: "monster",    l: "Monstro" },
+                      { v: "alien",      l: "ET" },
+                      { v: "megaphone",  l: "Megafone" },
+                      { v: "telephone",  l: "Telefone" },
+                      { v: "radio",      l: "Rádio" },
+                      { v: "whisper",    l: "Sussurro" },
+                      { v: "demon",      l: "Demônio" },
+                      { v: "ghost",      l: "Fantasma" },
+                      { v: "underwater", l: "Submerso" },
+                      { v: "chipmunk",   l: "Esquilo" },
+                    ] as { v: VoicePreset; l: string }[]).map(p => (
+                      <button key={p.v} onClick={() => patchAfx({ voicePreset: p.v })}
+                        className={`rounded-md border px-1.5 py-1 text-[10px] ${ (afx.voicePreset ?? "none") === p.v ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                        {p.l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-border pt-2">
                   <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Reverb</div>
                   <div className="grid grid-cols-5 gap-1">
                     {(["none","room","hall","plate","cathedral"] as ReverbPreset[]).map(p => (
@@ -3870,7 +3901,7 @@ function Editor() {
                   timelineRef.current.scrollLeft = (e.target as HTMLDivElement).scrollLeft;
                 }
               }}
-              className="h-4 w-full overflow-x-auto overflow-y-hidden border-t border-border bg-panel"
+              className="app-scrollbar h-3 w-full overflow-x-auto overflow-y-hidden border-t border-border bg-panel"
               title="Rolar timeline"
             >
               <div style={{ width: labelColW + rulerSpan * zoom, height: 1 }} />

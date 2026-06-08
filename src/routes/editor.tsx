@@ -3029,73 +3029,6 @@ function Editor() {
                 </div>
 
                 <div className="border-t border-border pt-2">
-                {/* Pan meters side effect */}
-                {(() => {
-                  useEffect(() => {
-                    const ctx = ensureAudioCtx();
-                    if (!ctx || !selected || !selected.id) return;
-                    
-                    const entry = mediaGraphRef.current[selected.id];
-                    if (!entry) return;
-
-                    // Setup analyzers if needed
-                    if (!panAnalyzersRef.current) {
-                      const al = ctx.createAnalyser();
-                      const ar = ctx.createAnalyser();
-                      al.fftSize = 512;
-                      ar.fftSize = 512;
-                      panAnalyzersRef.current = { L: al, R: ar };
-                    }
-
-                    const { L, R } = panAnalyzersRef.current;
-                    const nodes = entry.nodes;
-                    
-                    // Connect nodes.splitter (which we just added to AudioFxNodes) to our local analyzers
-                    try {
-                      nodes.splitter.connect(L, 0);
-                      nodes.splitter.connect(R, 1);
-                    } catch (e) {
-                      console.warn("Failed to connect pan meters:", e);
-                    }
-
-                    const buf = new Float32Array(L.fftSize);
-                    let currentL = 0;
-                    let currentR = 0;
-
-                    const update = () => {
-                      L.getFloatTimeDomainData(buf);
-                      let maxL = 0;
-                      for (let i = 0; i < buf.length; i++) {
-                        const v = Math.abs(buf[i]);
-                        if (v > maxL) maxL = v;
-                      }
-                      
-                      R.getFloatTimeDomainData(buf);
-                      let maxR = 0;
-                      for (let i = 0; i < buf.length; i++) {
-                        const v = Math.abs(buf[i]);
-                        if (v > maxR) maxR = v;
-                      }
-
-                      currentL = Math.max(maxL, currentL * 0.85);
-                      currentR = Math.max(maxR, currentR * 0.85);
-                      
-                      setPanPeaks({ L: currentL, R: currentR });
-                      panReqRef.current = requestAnimationFrame(update);
-                    };
-
-                    panReqRef.current = requestAnimationFrame(update);
-
-                    return () => {
-                      if (panReqRef.current) cancelAnimationFrame(panReqRef.current);
-                      try {
-                        nodes.splitter.disconnect(L);
-                        nodes.splitter.disconnect(R);
-                      } catch (e) {}
-                    };
-                  }, [selected?.id]);
-                  return null;
-                })()}
 
                   <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Echo / Delay</div>
                   <label className="flex items-center gap-2">
@@ -3135,6 +3068,74 @@ function Editor() {
                 </div>
 
                 <div className="border-t border-border pt-2">
+                  {/* Pan meters side effect moved inside the component to avoid rendering side-effects */}
+                  {(() => {
+                    useEffect(() => {
+                      const ctx = ensureAudioCtx();
+                      if (!ctx || !selected || !selected.id) return;
+                      
+                      const entry = mediaGraphRef.current[selected.id];
+                      if (!entry) return;
+
+                      // Setup analyzers if needed
+                      if (!panAnalyzersRef.current) {
+                        const al = ctx.createAnalyser();
+                        const ar = ctx.createAnalyser();
+                        al.fftSize = 512;
+                        ar.fftSize = 512;
+                        panAnalyzersRef.current = { L: al, R: ar };
+                      }
+
+                      const { L, R } = panAnalyzersRef.current;
+                      const nodes = entry.nodes;
+                      
+                      // Connect nodes.splitter (which we just added to AudioFxNodes) to our local analyzers
+                      try {
+                        nodes.splitter.connect(L, 0);
+                        nodes.splitter.connect(R, 1);
+                      } catch (e) {
+                        console.warn("Failed to connect pan meters:", e);
+                      }
+
+                      const buf = new Float32Array(L.fftSize);
+                      let currentL = 0;
+                      let currentR = 0;
+
+                      const update = () => {
+                        L.getFloatTimeDomainData(buf);
+                        let maxL = 0;
+                        for (let i = 0; i < buf.length; i++) {
+                          const v = Math.abs(buf[i]);
+                          if (v > maxL) maxL = v;
+                        }
+                        
+                        R.getFloatTimeDomainData(buf);
+                        let maxR = 0;
+                        for (let i = 0; i < buf.length; i++) {
+                          const v = Math.abs(buf[i]);
+                          if (v > maxR) maxR = v;
+                        }
+
+                        currentL = Math.max(maxL, currentL * 0.85);
+                        currentR = Math.max(maxR, currentR * 0.85);
+                        
+                        setPanPeaks({ L: currentL, R: currentR });
+                        panReqRef.current = requestAnimationFrame(update);
+                      };
+
+                      panReqRef.current = requestAnimationFrame(update);
+
+                      return () => {
+                        if (panReqRef.current) cancelAnimationFrame(panReqRef.current);
+                        try {
+                          nodes.splitter.disconnect(L);
+                          nodes.splitter.disconnect(R);
+                        } catch (e) {}
+                      };
+                    }, [selected?.id]);
+                    return null;
+                  })()}
+
                   <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Canais</div>
                   <div className="flex flex-col gap-2">
                     <div className="grid grid-cols-2 gap-1">

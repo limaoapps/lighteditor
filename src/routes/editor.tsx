@@ -1808,8 +1808,10 @@ function Editor() {
     | { type: "move"; id: string; offsetSec: number; origTrackId: string }
     | { type: "resizeL"; id: string; origStart: number; origIn: number; origEnd: number; isImage: boolean; pointerOffsetPx: number }
     | { type: "resizeR"; id: string; origOut: number; pointerOffsetPx: number }
-    | { type: "fadeIn"; id: string }
-    | { type: "fadeOut"; id: string }
+    | { type: "visualFadeIn"; id: string }
+    | { type: "visualFadeOut"; id: string }
+    | { type: "audioFadeIn"; id: string }
+    | { type: "audioFadeOut"; id: string }
     | { type: "gain"; id: string; baseDb: number; baseY: number }
     | { type: "playhead" }
     | null;
@@ -1910,18 +1912,31 @@ function Editor() {
           const newOut = Math.max(i.inPoint + 0.1, Math.min(maxOut, raw - i.start + i.inPoint));
           return { ...i, outPoint: newOut };
         }), false);
-      } else if (d.type === "fadeIn") {
+      } else if (d.type === "visualFadeIn") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
           const dur = i.outPoint - i.inPoint;
           return { ...i, fadeIn: Math.max(0, Math.min(dur, tSec - i.start)) };
         }), false);
-      } else if (d.type === "fadeOut") {
+      } else if (d.type === "visualFadeOut") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
           const dur = i.outPoint - i.inPoint;
           const end = i.start + dur;
           return { ...i, fadeOut: Math.max(0, Math.min(dur, end - tSec)) };
+        }), false);
+      } else if (d.type === "audioFadeIn") {
+        setItems(prev => prev.map(i => {
+          if (i.id !== d.id) return i;
+          const dur = i.outPoint - i.inPoint;
+          return { ...i, audioFadeIn: Math.max(0, Math.min(dur, tSec - i.start)) };
+        }), false);
+      } else if (d.type === "audioFadeOut") {
+        setItems(prev => prev.map(i => {
+          if (i.id !== d.id) return i;
+          const dur = i.outPoint - i.inPoint;
+          const end = i.start + dur;
+          return { ...i, audioFadeOut: Math.max(0, Math.min(dur, end - tSec)) };
         }), false);
       } else if (d.type === "gain") {
         const dyPx = clientY - d.baseY;

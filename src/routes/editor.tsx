@@ -3052,13 +3052,21 @@ function Editor() {
                     <div className="space-y-1">
                       <div className="flex justify-between text-[8px] font-bold text-muted-foreground uppercase">
                         <span>Balanço</span>
-                        <span>{afx.pan === 0 || !afx.pan ? "C" : afx.pan < 0 ? "L" : "R"}</span>
+                        <span>
+                          {afx.pan === 0 || !afx.pan 
+                            ? "Centro" 
+                            : afx.pan < 0 
+                              ? `E ${Math.abs(Math.round(afx.pan * 100))}%` 
+                              : `D ${Math.round(afx.pan * 100)}%`}
+                        </span>
                       </div>
                       <input 
-                        type="range" min="-1" max="1" step="0.1" 
+                        type="range" min="-1" max="1" step="0.01" 
                         value={afx.pan ?? 0}
                         onChange={(e) => patchAfx({ pan: Number(e.target.value), channelMode: "panned" })}
+                        onDoubleClick={() => patchAfx({ pan: 0, channelMode: "stereo" })}
                         className="w-full h-1 rounded bg-muted appearance-none cursor-pointer accent-primary" 
+                        title="Balanço (Pan) - Duplo clique para centralizar"
                       />
                     </div>
                   </div>

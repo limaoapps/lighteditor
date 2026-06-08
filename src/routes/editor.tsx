@@ -3745,12 +3745,39 @@ function Editor() {
                                 );
                               })()}
 
-                              {isAudio && (
-                                <div data-handle="G" title={`Ganho: ${(i.gainDb ?? 0).toFixed(1)}dB (arraste vertical)`}
-                                  onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "gain", id: i.id, baseDb: i.gainDb ?? 0, baseY: e.clientY }; }}
-                                  className="absolute inset-x-1 z-10 h-0.5 cursor-ns-resize bg-yellow-300/80 hover:bg-yellow-200"
-                                  style={{ top: `calc(50% - ${((i.gainDb ?? 0) / 30) * 40}%)` }} />
-                              )}
+                              {isAudio && (() => {
+                                const gainTopPct = 50 - ((i.gainDb ?? 0) / 30) * 40;
+                                const fiPct = w > 0 ? Math.min(100, (fiW / w) * 100) : 0;
+                                const foPct = w > 0 ? Math.min(100, (foW / w) * 100) : 0;
+                                // SVG path: começa em 0dB (top:50%) à esquerda, sobe/desce até gainTopPct após fadeIn,
+                                // mantém até (100% - foPct), volta a 0dB no final.
+                                return (
+                                  <>
+                                    <svg className="pointer-events-none absolute inset-0 z-10 h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
+                                      <polyline
+                                        points={`0,50 ${fiPct},${gainTopPct} ${100 - foPct},${gainTopPct} 100,50`}
+                                        fill="none" stroke="rgb(253 224 71 / 0.9)" strokeWidth="1.2" vectorEffect="non-scaling-stroke"
+                                      />
+                                    </svg>
+                                    {/* Pega vertical para arrastar o ganho (área central) */}
+                                    <div data-handle="G" title={`Ganho: ${(i.gainDb ?? 0).toFixed(1)}dB (arraste vertical)`}
+                                      onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "gain", id: i.id, baseDb: i.gainDb ?? 0, baseY: e.clientY }; }}
+                                      className="absolute z-10 h-2 cursor-ns-resize"
+                                      style={{ left: `${fiPct}%`, right: `${foPct}%`, top: `calc(${gainTopPct}% - 4px)` }} />
+                                    {/* Bolinha de Fade In (esquerda, sobre a linha de ganho) */}
+                                    <div data-handle="FI" title={`Fade in: ${formatFadeLabel(i.fadeIn ?? 0)} (arraste à direita)`}
+                                      onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "fadeIn", id: i.id }; }}
+                                      className="absolute z-30 h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize rounded-full border border-black/60 bg-yellow-300 shadow hover:bg-yellow-200"
+                                      style={{ left: `${fiPct}%`, top: `${fiPct > 0 ? gainTopPct : 50}%` }} />
+                                    {/* Bolinha de Fade Out (direita, sobre a linha de ganho) */}
+                                    <div data-handle="FO" title={`Fade out: ${formatFadeLabel(i.fadeOut ?? 0)} (arraste à esquerda)`}
+                                      onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "fadeOut", id: i.id }; }}
+                                      className="absolute z-30 h-3 w-3 translate-x-1/2 -translate-y-1/2 cursor-ew-resize rounded-full border border-black/60 bg-yellow-300 shadow hover:bg-yellow-200"
+                                      style={{ right: `${foPct}%`, top: `${foPct > 0 ? gainTopPct : 50}%` }} />
+                                  </>
+                                );
+                              })()}
+
 
                               <div className="pointer-events-none truncate px-3 font-medium">{i.name}</div>
                             </div>

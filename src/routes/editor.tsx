@@ -2439,7 +2439,7 @@ function Editor() {
         </aside>
         <div
           onMouseDown={(e) => { sideDragRef.current = { side: "L", startX: e.clientX, startW: leftW }; document.body.style.cursor = "ew-resize"; }}
-          className="w-1 shrink-0 cursor-ew-resize bg-border hover:bg-primary/40"
+          className="hidden w-1 shrink-0 cursor-ew-resize bg-border hover:bg-primary/40 md:block"
           title="Arraste para redimensionar"
         />
 

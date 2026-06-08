@@ -100,7 +100,7 @@ export const VOICE_SPECS: Record<Exclude<VoicePreset, "none">, VoiceSpec> = {
 
 function makeDriveCurve(amount: number): Float32Array {
   const n = 1024; const k = Math.max(0, Math.min(0.999, amount));
-  const curve = new Float32Array(n);
+  const curve = new Float32Array(new ArrayBuffer(n * 4));
   const deg = Math.PI / 180;
   const a = (k * 100) + 0.0001;
   for (let i = 0; i < n; i++) {
@@ -110,7 +110,7 @@ function makeDriveCurve(amount: number): Float32Array {
   return curve;
 }
 function makeLinearCurve(): Float32Array {
-  const n = 1024; const c = new Float32Array(n);
+  const n = 1024; const c = new Float32Array(new ArrayBuffer(n * 4));
   for (let i = 0; i < n; i++) c[i] = (i * 2) / n - 1;
   return c;
 }

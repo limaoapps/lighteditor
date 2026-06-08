@@ -980,6 +980,7 @@ function Editor() {
   // WebAudio: contexto + grafo por elemento (permite ganho > 0dB e FX)
   const audioCtxRef = useRef<AudioContext | null>(null);
   const mediaGraphRef = useRef<Record<string, { src: MediaElementAudioSourceNode; nodes: AudioFxNodes }>>({});
+  const mediaGraphByElementRef = useRef<WeakMap<HTMLMediaElement, { src: MediaElementAudioSourceNode; nodes: AudioFxNodes }>>(new WeakMap());
   const ensureAudioCtx = useCallback(() => {
     if (typeof window === "undefined") return null;
     if (!audioCtxRef.current) {
@@ -1020,6 +1021,13 @@ function Editor() {
     if (!ctx) return null;
     let entry = mediaGraphRef.current[id];
     if (!entry) {
+      const existingForElement = mediaGraphByElementRef.current.get(el);
+      if (existingForElement) {
+        mediaGraphRef.current[id] = existingForElement;
+        entry = existingForElement;
+      }
+    }
+    if (!entry) {
       try {
         const src = ctx.createMediaElementSource(el);
         const nodes = buildAudioFxGraph(ctx, { initialFx: item.audioFx, initialGainDb: item.gainDb ?? 0 });
@@ -1028,6 +1036,7 @@ function Editor() {
         nodes.output.connect(master.input);
         entry = { src, nodes };
         mediaGraphRef.current[id] = entry;
+        mediaGraphByElementRef.current.set(el, entry);
       } catch { return null; }
     }
     return entry;
@@ -1652,20 +1661,18 @@ function Editor() {
     ) ?? null;
   }, [items, playhead, firstVideoTrackId]);
 
-  const computeVol = (i: TLItem, t: number) => {
+  const computeAudioGainDb = (i: TLItem, t: number) => {
     const local = t - i.start;
     const dur = i.outPoint - i.inPoint;
-    let v = 1;
+    if (local < 0 || local > dur) return 0;
     const audioFadeIn = getAudioFadeIn(i);
     const audioFadeOut = getAudioFadeOut(i);
-    if (audioFadeIn && local < audioFadeIn) v *= Math.max(0, local / audioFadeIn);
-    if (audioFadeOut && local > dur - audioFadeOut) v *= Math.max(0, (dur - local) / audioFadeOut);
-    // SEM clamp em 1 — o ganho até +30dB precisa estourar quando o usuário pedir.
-    // Multiplicador de fade (0..1) é aplicado depois pelo grafo WebAudio junto ao gainDb.
-    return Math.max(0, v);
+    let line = 1;
+    if (audioFadeIn > 0.001 && local < audioFadeIn) line = Math.min(line, Math.max(0, local / audioFadeIn));
+    if (audioFadeOut > 0.001 && local > dur - audioFadeOut) line = Math.min(line, Math.max(0, (dur - local) / audioFadeOut));
+    return (i.gainDb ?? 0) * line;
   };
-  const computeAudioGainDb = (i: TLItem, t: number) => (i.gainDb ?? 0) * computeVol(i, t);
-  const fxGainFor = (i: TLItem, t: number) => computeVol(i, t) * Math.pow(10, (i.gainDb ?? 0) / 20);
+  const computeAudioGain = (i: TLItem, t: number) => Math.pow(10, computeAudioGainDb(i, t) / 20);
 
 
   useEffect(() => {
@@ -1687,7 +1694,7 @@ function Editor() {
       g.nodes.setGain(computeAudioGainDb(activeV1Video, playhead));
     } else {
       // fallback se WebAudio falhou
-      v.volume = Math.min(1, computeVol(activeV1Video, playhead));
+      v.volume = Math.min(1, computeAudioGain(activeV1Video, playhead));
     }
     if (playing) {
       v.play().catch((err) => {
@@ -1741,7 +1748,7 @@ function Editor() {
         g.nodes.setGain(computeAudioGainDb(a, playhead));
       } else {
         el.muted = !!trackMuted[a.trackId];
-        el.volume = Math.min(1, computeVol(a, playhead));
+        el.volume = Math.min(1, computeAudioGain(a, playhead));
       }
       if (inRange) {
         const target = a.inPoint + (playhead - a.start);

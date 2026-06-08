@@ -3137,6 +3137,10 @@ function Editor() {
                   })()}
 
                   <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Canais</div>
+                  <div className="rounded bg-amber-500/10 px-2 py-1 text-[10px] text-amber-400 mb-2">
+                    Dica: Arraste a música para as trilhas A1 ou A2 na timeline.
+                  </div>
+
                   <div className="flex flex-col gap-2">
                     <div className="grid grid-cols-2 gap-1">
                       {(["stereo","mono"] as ChannelMode[]).map(m => (

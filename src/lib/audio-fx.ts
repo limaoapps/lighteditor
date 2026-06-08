@@ -339,12 +339,35 @@ export function buildAudioFilterChain(
   const out: string[] = [];
   // Canal primeiro (para reverb/echo já trabalharem na config final)
   if (fx?.channelMode === "mono") out.push("pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1");
+  else if (fx?.channelMode === "left") out.push("pan=stereo|c0=c0|c1=c0");
+  else if (fx?.channelMode === "right") out.push("pan=stereo|c0=c1|c1=c1");
+  else if (fx?.channelMode === "invert") out.push("pan=stereo|c0=c1|c1=c0");
   else if (fx && Math.abs(fx.pan ?? 0) > 0.01) {
     const p = fx.pan!;
     // Aproximação linear do pan para FFmpeg
     const gl = (1 - p) / 2;
     const gr = (1 + p) / 2;
     out.push(`pan=stereo|c0=${gl.toFixed(3)}*c0|c1=${gr.toFixed(3)}*c1`);
+  }
+
+  // Largura Estéreo (Stereo Width)
+  if (fx && Math.abs((fx.stereoWidth ?? 100) - 100) > 1) {
+    const w = (fx.stereoWidth / 100).toFixed(2);
+    out.push(`stereowiden=level_in=1:level_out=1:delay=20:width=${w}`);
+  }
+
+  // Profundidade (Position Depth)
+  if (fx && Math.abs(fx.positionDepth ?? 0) > 0.01) {
+    const d = fx.positionDepth;
+    if (d > 0) {
+      // Trás: abafa (lowpass)
+      const freq = Math.round(20000 - d * 18000);
+      out.push(`lowpass=f=${freq}`);
+    } else {
+      // Frente: brilho (equalizer high shelf)
+      const gain = (Math.abs(d) * 6).toFixed(1);
+      out.push(`equalizer=f=4000:width_type=h:width=2000:g=${gain}`);
+    }
   }
 
 

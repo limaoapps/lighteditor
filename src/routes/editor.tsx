@@ -3591,6 +3591,139 @@ function Editor() {
         );
       })()}
 
+      {/* Mobile Panels */}
+      {showMobilePanel && (
+        <div className="fixed inset-0 z-[1100] flex flex-col bg-background md:hidden">
+          <div className="flex items-center justify-between border-b border-border p-4">
+            <h3 className="font-semibold uppercase tracking-wider text-muted-foreground">{leftPanel}</h3>
+            <button onClick={() => setShowMobilePanel(false)} className="rounded-full bg-muted p-2">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 pb-10">
+            {leftPanel === "media" && (
+              <div className="space-y-4">
+                <button onClick={() => fileInputRef.current?.click()}
+                  className="glow-primary flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-4 text-sm font-bold text-primary-foreground shadow-lg active:scale-95 transition-transform">
+                  <Plus className="h-5 w-5" /> Adicionar Mídia
+                </button>
+                <div className="grid grid-cols-2 gap-3">
+                  {media.map(a => {
+                    const Icon = a.kind === "audio" ? Music2 : a.kind === "image" ? ImageIcon : VideoIcon;
+                    return (
+                      <div key={a.id} onClick={() => { addAssetToTimeline(a); setShowMobilePanel(false); }}
+                        className="flex flex-col gap-2 rounded-xl border border-border bg-card p-2 text-xs shadow-sm active:bg-accent transition-colors">
+                        <div className="aspect-video w-full rounded-lg bg-muted flex items-center justify-center">
+                          <Icon className="h-8 w-8 text-primary/60" />
+                        </div>
+                        <span className="px-1 truncate font-medium">{a.name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {!media.length && <div className="p-10 text-center text-muted-foreground">Nenhuma mídia encontrada.</div>}
+              </div>
+            )}
+            {leftPanel === "titles" && (
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={() => { addText(); setShowMobilePanel(false); }} className="flex flex-col items-center gap-3 rounded-xl border border-border bg-card p-6 shadow-sm active:bg-accent transition-colors">
+                  <div className="rounded-full bg-primary/10 p-3"><TypeIcon className="h-6 w-6 text-primary" /></div>
+                  <span className="font-semibold">Título</span>
+                </button>
+                <button onClick={() => { addCredits(); setShowMobilePanel(false); }} className="flex flex-col items-center gap-3 rounded-xl border border-border bg-card p-6 shadow-sm active:bg-accent transition-colors">
+                  <div className="rounded-full bg-primary/10 p-3"><FileText className="h-6 w-6 text-primary" /></div>
+                  <span className="font-semibold">Créditos</span>
+                </button>
+              </div>
+            )}
+            {leftPanel === "transitions" && (
+              <div className="grid grid-cols-2 gap-3">
+                {TRANSITION_GROUPS.flatMap(g => g.items).map(t => (
+                  <button key={t.id} onClick={() => { if (selected) setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: t.dur, fadeOut: t.dur, transition: t.id } : i)); setShowMobilePanel(false); }}
+                    className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 shadow-sm active:bg-accent transition-colors">
+                    <span className="text-2xl">{t.icon}</span>
+                    <span className="text-[11px] font-medium">{t.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {leftPanel === "effects" && (
+              <div className="grid grid-cols-1 gap-3">
+                {TIMELINE_EFFECTS.map(effect => (
+                  <button key={effect.id} onClick={() => { if (selected) applyTimelineEffect(selected.id, effect.id); setShowMobilePanel(false); }}
+                    className="flex items-center gap-4 rounded-xl border border-border bg-card p-4 shadow-sm active:bg-accent transition-colors">
+                    <div className="rounded-full bg-primary/10 p-3"><Wand2 className="h-6 w-6 text-primary" /></div>
+                    <div>
+                      <div className="font-bold text-sm">{effect.label}</div>
+                      <div className="text-[11px] text-muted-foreground">{effect.hint}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showMobileInspector && (
+        <div className="fixed inset-0 z-[1100] flex flex-col bg-background md:hidden">
+          <div className="flex items-center justify-between border-b border-border p-4">
+            <h3 className="font-semibold uppercase tracking-wider text-muted-foreground">Ajustes do Clip</h3>
+            <button onClick={() => setShowMobileInspector(false)} className="rounded-full bg-muted p-2">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 pb-10">
+            {!selected ? (
+              <div className="p-20 text-center">
+                <Sliders className="mx-auto h-12 w-12 text-muted-foreground opacity-20" />
+                <p className="mt-4 text-muted-foreground">Selecione um clipe na timeline para ver os ajustes.</p>
+              </div>
+            ) : (
+              <div className="space-y-8">
+                <div className="flex items-center gap-3 p-2">
+                  <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                    {selected.kind === "video" ? <VideoIcon className="text-primary" /> : selected.kind === "audio" ? <Music2 className="text-primary" /> : <ImageIcon className="text-primary" />}
+                  </div>
+                  <div>
+                    <div className="font-bold">{selected.name}</div>
+                    <div className="text-xs text-muted-foreground uppercase">{selected.kind}</div>
+                  </div>
+                </div>
+
+                <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold">Volume / Ganho</span>
+                    <span className="font-mono text-primary font-bold">{(selected.gainDb ?? 0).toFixed(1)} dB</span>
+                  </div>
+                  <input type="range" min="-30" max="30" step="0.5" value={selected.gainDb ?? 0}
+                    onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, gainDb: Number(e.target.value) } : i))}
+                    className="w-full h-2 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
+                  <div className="flex justify-between text-[10px] text-muted-foreground uppercase font-bold px-1">
+                    <span>-30dB</span>
+                    <span>0dB</span>
+                    <span>+30dB</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button onClick={() => { splitAt(playhead, selected.id); setShowMobileInspector(false); }}
+                    className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 shadow-sm active:bg-accent transition-colors">
+                    <Scissors className="h-5 w-5 text-primary" />
+                    <span className="text-xs font-bold">Dividir</span>
+                  </button>
+                  <button onClick={() => { deleteItem(selected.id); setShowMobileInspector(false); }}
+                    className="flex flex-col items-center gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-destructive shadow-sm active:bg-destructive/10 transition-colors">
+                    <Trash2 className="h-5 w-5" />
+                    <span className="text-xs font-bold">Excluir</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Context menu */}
 
       {ctxMenu && (

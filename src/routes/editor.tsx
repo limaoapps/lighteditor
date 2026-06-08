@@ -5,7 +5,7 @@ import {
   Loader2, X, Volume2, VolumeX, ZoomIn, ZoomOut, Type as TypeIcon, Music2,
   Image as ImageIcon, Video as VideoIcon, RotateCw, Maximize2, AlignCenter,
   Lock, Unlock, Undo2, Redo2, Check, Copy as CopyIcon, ClipboardPaste,
-  Sparkles, Sliders, Wand2, RotateCcw, Palette,
+  Sparkles, Sliders, Wand2, RotateCcw, Palette, Mic, MicOff,
   Settings as SettingsIcon, FileText, RefreshCw, Cpu, Info, Magnet,
 } from "lucide-react";
 import {
@@ -887,6 +887,14 @@ function Editor() {
   const [useGpu, setUseGpu] = useState(false);
   const [postAutoDownload, setPostAutoDownload] = useState(true);
   const [postPlay, setPostPlay] = useState(false);
+  // ---- Microphone recording ----
+  const [recording, setRecording] = useState(false);
+  const [recElapsed, setRecElapsed] = useState(0);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recordChunksRef = useRef<Blob[]>([]);
+  const recordStreamRef = useRef<MediaStream | null>(null);
+  const recordStartRef = useRef<{ playhead: number; time: number } | null>(null);
+  const recordTimerRef = useRef<number | null>(null);
   const [postBeep, setPostBeep] = useState(true);
   const [showExportLog, setShowExportLog] = useState(false);
   const [exportLog, setExportLog] = useState<string[]>([]);
@@ -1370,6 +1378,85 @@ function Editor() {
     setItems(prev => [...prev, it]);
     setSelectedId(it.id);
   }, [items, tracks, ensureTrack, createTLFromMedia, setItems]);
+
+  // ---- Microphone recording ----
+  const stopMicRecording = useCallback(() => {
+    const mr = recorderRef.current;
+    if (mr && mr.state !== "inactive") {
+      try { mr.stop(); } catch { /* ignore */ }
+    }
+    if (recordTimerRef.current != null) {
+      window.clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+    setRecording(false);
+  }, []);
+
+  const startMicRecording = useCallback(async () => {
+    if (recording) { stopMicRecording(); return; }
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setError("Microfone não suportado neste navegador.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      recordStreamRef.current = stream;
+      const mimeCandidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+      const mime = mimeCandidates.find(m => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(m)) || "";
+      const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      recordChunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) recordChunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        try {
+          const type = mr.mimeType || "audio/webm";
+          const blob = new Blob(recordChunksRef.current, { type });
+          const ext = type.includes("mp4") ? "m4a" : "webm";
+          const file = new File([blob], `Gravacao-${Date.now()}.${ext}`, { type });
+          const url = URL.createObjectURL(blob);
+          const dur = Math.max(0.1, (Date.now() - (recordStartRef.current?.time ?? Date.now())) / 1000);
+          const startAt = recordStartRef.current?.playhead ?? 0;
+          const asset: MediaAsset = {
+            id: crypto.randomUUID(),
+            kind: "audio",
+            name: file.name,
+            file, url,
+            duration: dur,
+          };
+          setMedia(prev => [...prev, asset]);
+          addAssetToTimeline(asset, { start: startAt, duration: dur });
+        } catch (err) {
+          setError("Falha ao salvar gravação: " + (err instanceof Error ? err.message : String(err)));
+        } finally {
+          recordStreamRef.current?.getTracks().forEach(t => t.stop());
+          recordStreamRef.current = null;
+          recordChunksRef.current = [];
+          recorderRef.current = null;
+          recordStartRef.current = null;
+        }
+      };
+      recordStartRef.current = { playhead, time: Date.now() };
+      setRecElapsed(0);
+      recordTimerRef.current = window.setInterval(() => {
+        const t = recordStartRef.current?.time;
+        if (t) setRecElapsed((Date.now() - t) / 1000);
+      }, 100);
+      mr.start(100);
+      recorderRef.current = mr;
+      setRecording(true);
+    } catch (err) {
+      setError("Não foi possível acessar o microfone: " + (err instanceof Error ? err.message : String(err)));
+      setRecording(false);
+    }
+  }, [recording, stopMicRecording, playhead, addAssetToTimeline]);
+
+  // Cleanup ao desmontar
+  useEffect(() => () => {
+    if (recordTimerRef.current != null) window.clearInterval(recordTimerRef.current);
+    recordStreamRef.current?.getTracks().forEach(t => t.stop());
+    try { recorderRef.current?.stop(); } catch { /* ignore */ }
+  }, []);
+
+
 
   const addText = useCallback(() => {
     const videoTracks = tracks.filter(t => t.kind === "video");
@@ -1902,14 +1989,13 @@ function Editor() {
     return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
   }, [pushHistory]);
 
-  const onPreviewWheel = (e: React.WheelEvent) => {
+  const adjustPreviewItemScale = useCallback((delta: number) => {
     const target = (selected && selected.transform) ? selected : activeV1Video;
     if (!target || !target.transform) return;
-    e.preventDefault();
-    const delta = -e.deltaY * 0.0015;
     setItems(prev => prev.map(i => i.id === target.id && i.transform
       ? { ...i, transform: { ...i.transform, scale: Math.max(0.05, Math.min(50, i.transform.scale + delta)) } } : i));
-  };
+  }, [selected, activeV1Video, setItems]);
+
 
   // selected preview target (image/text/active V1 video)
   const previewTarget: TLItem | null = useMemo(() => {
@@ -2546,7 +2632,6 @@ function Editor() {
         <main className="flex min-w-0 flex-1 flex-col select-none">
           <div ref={previewShellRef} className="relative flex min-h-0 flex-1 items-center justify-center bg-black/40 p-6 select-none">
             <div ref={previewBoxRef} className="group/preview relative isolate overflow-hidden rounded-lg shadow-2xl select-none"
-              onWheel={onPreviewWheel}
               style={{
                 aspectRatio: `${aspect.w} / ${aspect.h}`,
                 maxHeight: "100%", maxWidth: "100%",
@@ -2780,6 +2865,41 @@ function Editor() {
                 )}
               </div>
             </div>
+          </div>
+          {/* Zoom do item do preview (fora da área do preview, área central) */}
+          <div className="flex shrink-0 items-center justify-center gap-2 border-t border-border bg-panel/60 px-3 py-1.5 text-xs text-muted-foreground">
+            <button
+              onClick={() => adjustPreviewItemScale(-0.1)}
+              title="Diminuir item do preview"
+              className="rounded p-1 hover:bg-card hover:text-foreground"
+            >
+              <ZoomOut className="h-3.5 w-3.5" />
+            </button>
+            <span className="font-mono tabular-nums">
+              {(() => {
+                const t = (selected && selected.transform) ? selected : activeV1Video;
+                return t?.transform ? `${Math.round(t.transform.scale * 100)}%` : "—";
+              })()}
+            </span>
+            <button
+              onClick={() => adjustPreviewItemScale(0.1)}
+              title="Aumentar item do preview"
+              className="rounded p-1 hover:bg-card hover:text-foreground"
+            >
+              <ZoomIn className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => {
+                const target = (selected && selected.transform) ? selected : activeV1Video;
+                if (!target || !target.transform) return;
+                setItems(prev => prev.map(i => i.id === target.id && i.transform
+                  ? { ...i, transform: { ...i.transform, scale: 1, xPct: 50, yPct: 50 } } : i));
+              }}
+              title="Centralizar e resetar zoom"
+              className="ml-1 rounded p-1 hover:bg-card hover:text-foreground"
+            >
+              <AlignCenter className="h-3.5 w-3.5" />
+            </button>
           </div>
         </main>
         <div
@@ -3352,24 +3472,24 @@ function Editor() {
         <div className="flex shrink-0 flex-col select-none">
           <div className="flex items-center gap-3 border-t border-border bg-panel px-4 py-2">
             <div className="flex items-center gap-0.5 sm:gap-2">
-              <button 
-                onClick={() => { 
-                  if (playhead >= totalDuration - 0.05) setPlayhead(0); 
-                  setPlaying(true); 
-                }} 
-                disabled={!items.length} 
-                className="rounded p-1.5 hover:bg-card disabled:opacity-40"
+              <button
+                onClick={() => {
+                  if (playing) { setPlaying(false); return; }
+                  if (playhead >= totalDuration - 0.05) setPlayhead(0);
+                  setPlaying(true);
+                }}
+                disabled={!items.length}
+                title={playing ? "Pausar (Espaço)" : "Reproduzir (Espaço)"}
+                aria-pressed={playing}
+                className={`rounded p-1.5 hover:bg-card disabled:opacity-40 ${playing ? "text-primary animate-pulse" : ""}`}
               >
-                <Play className="h-4 w-4 fill-current" />
+                {playing
+                  ? <Pause className="h-4 w-4 fill-current" />
+                  : <Play className="h-4 w-4 fill-current" />}
               </button>
-              <button onClick={() => setPlaying(false)} className="rounded p-1.5 hover:bg-card">
-                <Pause className="h-4 w-4 fill-current" />
-              </button>
-              <button 
-                onClick={() => { 
-                  setPlaying(false); 
-                  setPlayhead(0); 
-                }} 
+              <button
+                onClick={() => { setPlaying(false); setPlayhead(0); }}
+                title="Voltar ao início"
                 className="rounded p-1.5 hover:bg-card"
               >
                 <RotateCcw className="h-4 w-4" />
@@ -3384,6 +3504,15 @@ function Editor() {
             <button onClick={() => splitAt(playhead)} title="Dividir (S / Ctrl+B)"
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs hover:border-primary hover:text-primary">
               <Scissors className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Dividir</span>
+            </button>
+            <button
+              onClick={() => { void startMicRecording(); }}
+              title={recording ? "Parar gravação do microfone" : "Gravar do microfone"}
+              aria-pressed={recording}
+              className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors ${recording ? "border-destructive bg-destructive/15 text-destructive animate-pulse" : "border-border bg-card hover:border-primary hover:text-primary"}`}
+            >
+              {recording ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+              <span className="hidden sm:inline">{recording ? `Rec ${recElapsed.toFixed(1)}s` : "Gravar"}</span>
             </button>
             <button
               onClick={() => setSnapResize(s => !s)}

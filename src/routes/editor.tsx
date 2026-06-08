@@ -3699,9 +3699,12 @@ function Editor() {
                           const w = Math.max(20, dur * zoom);
                           const active = i.id === selectedId;
                           const color = i.kind === "audio" ? "oklch(0.55 0.15 200)" : i.kind === "text" ? "oklch(0.55 0.2 320)" : i.kind === "image" ? "oklch(0.6 0.18 80)" : "oklch(0.55 0.18 155)";
-                          const fiW = (i.fadeIn ?? 0) * zoom;
-                          const foW = (i.fadeOut ?? 0) * zoom;
-                          const isAudio = i.kind === "audio" || i.kind === "video";
+                          const visualFiW = (i.fadeIn ?? 0) * zoom;
+                          const visualFoW = (i.fadeOut ?? 0) * zoom;
+                          const audioFiW = getAudioFadeIn(i) * zoom;
+                          const audioFoW = getAudioFadeOut(i) * zoom;
+                          const hasAudio = i.kind === "audio" || i.kind === "video";
+                          const hasVisual = i.kind !== "audio";
                           return (
                             <div key={i.id}
                               onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setSelectedId(i.id); setCtxMenu({ x: e.clientX, y: e.clientY, clipId: i.id }); }}
@@ -3728,11 +3731,11 @@ function Editor() {
                                 setSelectedId(i.id);
                               }}
                             >
-                              {fiW > 0 && (
-                                <div className="pointer-events-none absolute inset-y-0 left-0" style={{ width: fiW, background: "linear-gradient(to right, rgba(0,0,0,0.55), transparent)" }} />
+                              {hasVisual && visualFiW > 0 && (
+                                <div className="pointer-events-none absolute inset-y-0 left-0" style={{ width: visualFiW, background: "linear-gradient(to right, rgba(0,0,0,0.55), transparent)" }} />
                               )}
-                              {foW > 0 && (
-                                <div className="pointer-events-none absolute inset-y-0 right-0" style={{ width: foW, background: "linear-gradient(to left, rgba(0,0,0,0.55), transparent)" }} />
+                              {hasVisual && visualFoW > 0 && (
+                                <div className="pointer-events-none absolute inset-y-0 right-0" style={{ width: visualFoW, background: "linear-gradient(to left, rgba(0,0,0,0.55), transparent)" }} />
                               )}
 
                               <div data-handle="L" onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); const time = getTimelineTimeFromClientX(e.clientX) ?? i.start; skipHistory.current = true; lastTimelinePointer.current = { x: e.clientX, y: e.clientY }; dragRef.current = { type: "resizeL", id: i.id, origStart: i.start, origIn: i.inPoint, origEnd: i.start + (i.outPoint - i.inPoint), isImage: i.kind === "image", pointerOffsetPx: (time - i.start) * zoom }; }}
@@ -3740,25 +3743,25 @@ function Editor() {
                               <div data-handle="R" onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); const end = i.start + (i.outPoint - i.inPoint); const time = getTimelineTimeFromClientX(e.clientX) ?? end; skipHistory.current = true; lastTimelinePointer.current = { x: e.clientX, y: e.clientY }; dragRef.current = { type: "resizeR", id: i.id, origOut: i.outPoint, pointerOffsetPx: (time - end) * zoom }; }}
                                 className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-ew-resize bg-white/40 hover:bg-white" />
 
-                              {!isAudio && (
+                              {hasVisual && (
                                 <>
                               <div data-handle="FI" title={`Fade in: ${formatFadeLabel(i.fadeIn ?? 0)} (arraste à direita)`}
-                                onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "fadeIn", id: i.id }; }}
+                                onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "visualFadeIn", id: i.id }; }}
                                 className="absolute left-2 top-1 z-20 h-3 w-3 cursor-ew-resize rounded-full bg-white opacity-0 ring-1 ring-black/50 group-hover/clip:opacity-90"
-                                style={{ left: Math.max(4, fiW - 6) }} />
+                                style={{ left: Math.max(4, visualFiW - 6) }} />
                               <div data-handle="FO" title={`Fade out: ${formatFadeLabel(i.fadeOut ?? 0)} (arraste à esquerda)`}
-                                onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "fadeOut", id: i.id }; }}
+                                onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "visualFadeOut", id: i.id }; }}
                                 className="absolute top-1 z-20 h-3 w-3 cursor-ew-resize rounded-full bg-white opacity-0 ring-1 ring-black/50 group-hover/clip:opacity-90"
-                                style={{ right: Math.max(4, foW - 6) }} />
+                                style={{ right: Math.max(4, visualFoW - 6) }} />
                               {(i.fadeIn ?? 0) > 0.005 && (
                                 <div className="pointer-events-none absolute top-3.5 z-20 whitespace-nowrap rounded bg-black/80 px-1 text-[9px] font-mono tabular-nums text-white opacity-0 ring-1 ring-white/20 group-hover/clip:opacity-100"
-                                  style={{ left: Math.max(2, fiW - 6) }}>
+                                  style={{ left: Math.max(2, visualFiW - 6) }}>
                                   {formatFadeLabel(i.fadeIn ?? 0)}
                                 </div>
                               )}
                               {(i.fadeOut ?? 0) > 0.005 && (
                                 <div className="pointer-events-none absolute top-3.5 z-20 whitespace-nowrap rounded bg-black/80 px-1 text-[9px] font-mono tabular-nums text-white opacity-0 ring-1 ring-white/20 group-hover/clip:opacity-100"
-                                  style={{ right: Math.max(2, foW - 6) }}>
+                                  style={{ right: Math.max(2, visualFoW - 6) }}>
                                   {formatFadeLabel(i.fadeOut ?? 0)}
                                 </div>
                               )}
@@ -3766,19 +3769,23 @@ function Editor() {
                               )}
                               {(() => {
                                 const d = dragRef.current;
-                                if (!d || (d.type !== "fadeIn" && d.type !== "fadeOut") || d.id !== i.id) return null;
+                                if (!d || (d.type !== "visualFadeIn" && d.type !== "visualFadeOut" && d.type !== "audioFadeIn" && d.type !== "audioFadeOut") || d.id !== i.id) return null;
+                                const isAudioDrag = d.type === "audioFadeIn" || d.type === "audioFadeOut";
+                                const isIn = d.type === "visualFadeIn" || d.type === "audioFadeIn";
+                                const labelIn = isAudioDrag ? getAudioFadeIn(i) : (i.fadeIn ?? 0);
+                                const labelOut = isAudioDrag ? getAudioFadeOut(i) : (i.fadeOut ?? 0);
                                 return (
                                   <div className="pointer-events-none absolute -top-5 z-30 whitespace-nowrap rounded bg-primary px-1.5 py-0.5 text-[10px] font-mono tabular-nums text-primary-foreground shadow"
-                                    style={d.type === "fadeIn" ? { left: Math.max(0, fiW - 14) } : { right: Math.max(0, foW - 14) }}>
-                                    {d.type === "fadeIn" ? `Fade in ${formatFadeLabel(i.fadeIn ?? 0)}` : `Fade out ${formatFadeLabel(i.fadeOut ?? 0)}`}
+                                    style={isIn ? { left: Math.max(0, (isAudioDrag ? audioFiW : visualFiW) - 14) } : { right: Math.max(0, (isAudioDrag ? audioFoW : visualFoW) - 14) }}>
+                                    {isIn ? `Fade in ${formatFadeLabel(labelIn)}` : `Fade out ${formatFadeLabel(labelOut)}`}
                                   </div>
                                 );
                               })()}
 
-                              {isAudio && (() => {
+                              {hasAudio && (() => {
                                 const gainTopPct = 50 - ((i.gainDb ?? 0) / 30) * 40;
-                                const fiPct = w > 0 ? Math.min(100, (fiW / w) * 100) : 0;
-                                const foPct = w > 0 ? Math.min(100, (foW / w) * 100) : 0;
+                                const fiPct = w > 0 ? Math.min(100, (audioFiW / w) * 100) : 0;
+                                const foPct = w > 0 ? Math.min(100, (audioFoW / w) * 100) : 0;
                                 // SVG path: começa em 0dB (top:50%) à esquerda, sobe/desce até gainTopPct após fadeIn,
                                 // mantém até (100% - foPct), volta a 0dB no final.
                                 return (
@@ -3795,13 +3802,13 @@ function Editor() {
                                       className="absolute z-10 h-2 cursor-ns-resize"
                                       style={{ left: `${fiPct}%`, right: `${foPct}%`, top: `calc(${gainTopPct}% - 4px)` }} />
                                     {/* Bolinha de Fade In (esquerda, sobre a linha de ganho) */}
-                                    <div data-handle="FI" title={`Fade in: ${formatFadeLabel(i.fadeIn ?? 0)} (arraste à direita)`}
-                                      onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "fadeIn", id: i.id }; }}
+                                    <div data-handle="AFI" title={`Fade in áudio: ${formatFadeLabel(getAudioFadeIn(i))} (arraste à direita)`}
+                                      onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "audioFadeIn", id: i.id }; }}
                                       className="absolute z-30 h-3 w-3 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize rounded-full border border-black/60 bg-yellow-300 shadow hover:bg-yellow-200"
                                       style={{ left: `${fiPct}%`, top: `${fiPct > 0 ? gainTopPct : 50}%` }} />
                                     {/* Bolinha de Fade Out (direita, sobre a linha de ganho) */}
-                                    <div data-handle="FO" title={`Fade out: ${formatFadeLabel(i.fadeOut ?? 0)} (arraste à esquerda)`}
-                                      onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "fadeOut", id: i.id }; }}
+                                    <div data-handle="AFO" title={`Fade out áudio: ${formatFadeLabel(getAudioFadeOut(i))} (arraste à esquerda)`}
+                                      onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); skipHistory.current = true; dragRef.current = { type: "audioFadeOut", id: i.id }; }}
                                       className="absolute z-30 h-3 w-3 translate-x-1/2 -translate-y-1/2 cursor-ew-resize rounded-full border border-black/60 bg-yellow-300 shadow hover:bg-yellow-200"
                                       style={{ right: `${foPct}%`, top: `${foPct > 0 ? gainTopPct : 50}%` }} />
                                   </>

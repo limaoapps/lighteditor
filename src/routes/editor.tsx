@@ -22,6 +22,7 @@ import {
 import { computeItemBounds } from "@/lib/scene-geometry";
 import { PreviewCanvas } from "@/components/editor/PreviewCanvas";
 import { Waveform } from "@/components/editor/Waveform";
+import { VideoFilmstrip } from "@/components/editor/VideoFilmstrip";
 import type { SceneItem } from "@/lib/scene-renderer";
 import type { CachedMediaItem } from "@/lib/media-cache";
 
@@ -219,6 +220,8 @@ type TLItem = {
   gainDb?: number;
   audioFx?: AudioFx;
   fx?: Fx;
+  /** Vídeo silenciado (áudio foi separado em uma trilha de áudio paralela). */
+  silenced?: boolean;
 };
 
 type Track = { id: string; kind: TrackKind; label: string };
@@ -1400,7 +1403,29 @@ function Editor() {
       .reduce((m, i) => Math.max(m, i.start + (i.outPoint - i.inPoint)), 0);
     const start = opts?.start != null ? Math.max(0, opts.start) : defaultStart;
     const it = createTLFromMedia(asset, targetTrack, start, opts?.duration);
-    setItems(prev => [...prev, it]);
+
+    // Separação automática: vídeo com áudio gera item de áudio espelhado em A1 e o
+    // vídeo passa a ser silenciado. Vídeo → frames; áudio → waveform/ganho/efeitos.
+    const newItems: TLItem[] = [it];
+    if (asset.kind === "video" && asset.duration > 0) {
+      it.silenced = true;
+      it.audioFx = undefined;
+      it.gainDb = undefined;
+      const audioTrack = tracks.find(t => t.kind === "audio")?.id ?? ensureTrack("audio");
+      const audioAsset: MediaAsset = {
+        id: crypto.randomUUID(),
+        kind: "audio",
+        name: `${asset.name} · áudio`,
+        file: asset.file,
+        url: asset.url,
+        duration: asset.duration,
+      };
+      const audioItem = createTLFromMedia(audioAsset, audioTrack, start, asset.duration);
+      audioItem.mediaId = asset.id;
+      newItems.push(audioItem);
+    }
+
+    setItems(prev => [...prev, ...newItems]);
     setSelectedId(it.id);
   }, [items, tracks, ensureTrack, createTLFromMedia, setItems]);
 
@@ -1686,17 +1711,18 @@ function Editor() {
     if (v.src !== wanted) v.src = wanted;
     const target = activeV1Video.inPoint + (playhead - activeV1Video.start);
     if (Math.abs(v.currentTime - target) > 0.25) v.currentTime = target;
-    v.muted = !!trackMuted[activeV1Video.trackId];
+    v.muted = !!trackMuted[activeV1Video.trackId] || !!activeV1Video.silenced;
     // Encaminha pelo grafo WebAudio para permitir ganho >0dB e FX.
     const g = attachGraph(activeV1Video.id, v, activeV1Video);
     if (g) {
       v.volume = 1;
-      g.nodes.setMuted(!!trackMuted[activeV1Video.trackId]);
+      const muted = !!trackMuted[activeV1Video.trackId] || !!activeV1Video.silenced;
+      g.nodes.setMuted(muted);
       if (activeV1Video.audioFx) g.nodes.setFx(activeV1Video.audioFx);
-      g.nodes.setGain(computeAudioGainDb(activeV1Video, playhead));
+      g.nodes.setGain(activeV1Video.silenced ? -120 : computeAudioGainDb(activeV1Video, playhead));
     } else {
       // fallback se WebAudio falhou
-      v.volume = Math.min(1, computeAudioGain(activeV1Video, playhead));
+      v.volume = activeV1Video.silenced ? 0 : Math.min(1, computeAudioGain(activeV1Video, playhead));
     }
     if (playing) {
       v.play().catch((err) => {
@@ -3132,7 +3158,7 @@ function Editor() {
             </div>
           )}
 
-          {selected && (selected.kind === "audio" || selected.kind === "video") && (
+          {selected && (selected.kind === "audio" || (selected.kind === "video" && !selected.silenced)) && (
             <div className="space-y-2 rounded-md border border-border bg-card p-2 text-xs">
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Áudio</div>
               <label className="flex items-center gap-2" title="Duplo clique para restaurar">
@@ -3170,7 +3196,7 @@ function Editor() {
             </div>
           )}
 
-          {selected && (selected.kind === "audio" || selected.kind === "video") && (() => {
+          {selected && (selected.kind === "audio" || (selected.kind === "video" && !selected.silenced)) && (() => {
             const afx: AudioFx = selected.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] };
             const patchAfx = (patch: Partial<AudioFx>) =>
               setItems(p => p.map(i => i.id === selected.id
@@ -3752,8 +3778,11 @@ function Editor() {
                           const visualFoW = (i.fadeOut ?? 0) * zoom;
                           const audioFiW = getAudioFadeIn(i) * zoom;
                           const audioFoW = getAudioFadeOut(i) * zoom;
-                          const hasAudio = i.kind === "audio" || i.kind === "video";
+                          // Áudio (waveform/ganho/fades de áudio) só aparece em clipes de áudio.
+                          // Vídeos silenciados (áudio extraído) NÃO mostram waveform — mostram filmstrip.
+                          const hasAudio = i.kind === "audio" || (i.kind === "video" && !i.silenced);
                           const hasVisual = i.kind !== "audio";
+                          const showFilmstrip = i.kind === "video" && !!i.url;
                           return (
                             <div key={i.id}
                               onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setSelectedId(i.id); setCtxMenu({ x: e.clientX, y: e.clientY, clipId: i.id }); }}
@@ -3780,6 +3809,11 @@ function Editor() {
                                 setSelectedId(i.id);
                               }}
                             >
+                              {showFilmstrip && i.url && (
+                                <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden opacity-95">
+                                  <VideoFilmstrip url={i.url} inPoint={i.inPoint} outPoint={i.outPoint} />
+                                </div>
+                              )}
                               {hasVisual && visualFiW > 0 && (
                                 <div className="pointer-events-none absolute inset-y-0 left-0" style={{ width: visualFiW, background: "linear-gradient(to right, rgba(0,0,0,0.55), transparent)" }} />
                               )}
@@ -4141,7 +4175,7 @@ function Editor() {
                 </div>
 
                 {/* Volume Section */}
-                {(selected.kind === "audio" || selected.kind === "video") && (
+                {(selected.kind === "audio" || (selected.kind === "video" && !selected.silenced)) && (
                   <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -4162,7 +4196,7 @@ function Editor() {
                 )}
 
                 {/* Audio Effects (EQ, Ambience, Reverb, Echo) */}
-                {(selected.kind === "audio" || selected.kind === "video") && (
+                {(selected.kind === "audio" || (selected.kind === "video" && !selected.silenced)) && (
 
                   <div className="space-y-6">
                     {/* Equalizer */}

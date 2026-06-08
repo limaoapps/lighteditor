@@ -85,27 +85,28 @@ export type VoiceSpec = {
   outGainDb: number;                    // compensação de volume
 };
 export const VOICE_SPECS: Record<Exclude<VoicePreset, "none">, VoiceSpec> = {
-  robot:      { ringHz: 50,  ringDepth: 0.85, drive: 0.35, lowCutHz: 250,  highCutHz: 3200, bandQ: 1.0, wet: 1,    outGainDb: 2 },
-  monster:    { ringHz: 30,  ringDepth: 0.55, drive: 0.55, lowCutHz: 60,   highCutHz: 900,  bandQ: 0.8, wet: 1,    outGainDb: 4 },
-  alien:      { ringHz: 180, ringDepth: 0.75, drive: 0.20, lowCutHz: 500,  highCutHz: 5000, bandQ: 1.2, wet: 1,    outGainDb: 0 },
-  megaphone:  { ringHz: 0,   ringDepth: 0,    drive: 0.75, lowCutHz: 600,  highCutHz: 3500, bandQ: 2.0, wet: 1,    outGainDb: 3 },
-  telephone:  { ringHz: 0,   ringDepth: 0,    drive: 0.25, lowCutHz: 400,  highCutHz: 3000, bandQ: 1.5, wet: 1,    outGainDb: 1 },
-  radio:      { ringHz: 0,   ringDepth: 0,    drive: 0.45, lowCutHz: 350,  highCutHz: 4200, bandQ: 1.8, wet: 1,    outGainDb: 2 },
-  whisper:    { ringHz: 0,   ringDepth: 0,    drive: 0.10, lowCutHz: 700,  highCutHz: 8000, bandQ: 0.7, wet: 0.85, outGainDb: 4 },
-  chipmunk:   { ringHz: 0,   ringDepth: 0,    drive: 0.15, lowCutHz: 800,  highCutHz: 10000,bandQ: 0.7, wet: 1,    outGainDb: 0 },
-  demon:      { ringHz: 22,  ringDepth: 0.70, drive: 0.70, lowCutHz: 40,   highCutHz: 700,  bandQ: 1.1, wet: 1,    outGainDb: 5 },
-  underwater: { ringHz: 0,   ringDepth: 0,    drive: 0.10, lowCutHz: 80,   highCutHz: 500,  bandQ: 0.8, wet: 1,    outGainDb: 3 },
-  ghost:      { ringHz: 7,   ringDepth: 0.45, drive: 0.15, lowCutHz: 200,  highCutHz: 4000, bandQ: 0.9, wet: 0.9,  outGainDb: 1 },
+  robot:      { ringHz: 50,  ringDepth: 0.95, drive: 0.10, lowCutHz: 200,  highCutHz: 3500, bandQ: 0.9, wet: 1,    outGainDb: 0 },
+  monster:    { ringHz: 6,   ringDepth: 0.75, drive: 0.18, lowCutHz: 60,   highCutHz: 900,  bandQ: 0.8, wet: 1,    outGainDb: 2 },
+  alien:      { ringHz: 220, ringDepth: 0.85, drive: 0.05, lowCutHz: 400,  highCutHz: 5000, bandQ: 1.0, wet: 1,    outGainDb: -1 },
+  megaphone:  { ringHz: 0,   ringDepth: 0,    drive: 0.25, lowCutHz: 700,  highCutHz: 3200, bandQ: 2.5, wet: 1,    outGainDb: 1 },
+  telephone:  { ringHz: 0,   ringDepth: 0,    drive: 0.08, lowCutHz: 500,  highCutHz: 2800, bandQ: 2.0, wet: 1,    outGainDb: 0 },
+  radio:      { ringHz: 0,   ringDepth: 0,    drive: 0.18, lowCutHz: 350,  highCutHz: 4200, bandQ: 2.0, wet: 1,    outGainDb: 0 },
+  whisper:    { ringHz: 0,   ringDepth: 0,    drive: 0,    lowCutHz: 800,  highCutHz: 8000, bandQ: 0.7, wet: 0.7,  outGainDb: 3 },
+  chipmunk:   { ringHz: 0,   ringDepth: 0,    drive: 0,    lowCutHz: 900,  highCutHz: 10000,bandQ: 0.7, wet: 0.8,  outGainDb: 0 },
+  demon:      { ringHz: 15,  ringDepth: 0.80, drive: 0.20, lowCutHz: 40,   highCutHz: 700,  bandQ: 1.1, wet: 1,    outGainDb: 2 },
+  underwater: { ringHz: 0,   ringDepth: 0,    drive: 0,    lowCutHz: 80,   highCutHz: 500,  bandQ: 0.8, wet: 1,    outGainDb: 3 },
+  ghost:      { ringHz: 7,   ringDepth: 0.45, drive: 0.05, lowCutHz: 200,  highCutHz: 4000, bandQ: 0.9, wet: 0.85, outGainDb: 0 },
 };
 
 function makeDriveCurve(amount: number): Float32Array {
+  // Soft-saturation suave (tanh), evita estourar: mesmo com drive=1, ganho de
+  // pico permanece ~1.0 e o som ganha "caráter" sem distorcer brutalmente.
   const n = 1024; const k = Math.max(0, Math.min(0.999, amount));
   const curve = new Float32Array(new ArrayBuffer(n * 4));
-  const deg = Math.PI / 180;
-  const a = (k * 100) + 0.0001;
+  const drive = 1 + k * 8; // 1..9
   for (let i = 0; i < n; i++) {
     const x = (i * 2) / n - 1;
-    curve[i] = ((3 + a) * x * 20 * deg) / (Math.PI + a * Math.abs(x));
+    curve[i] = Math.tanh(x * drive) / Math.tanh(drive);
   }
   return curve;
 }
@@ -290,8 +291,9 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
   const voiceMix = ctx.createGain(); voiceMix.gain.value = 1;
   const voiceOutGain = ctx.createGain(); voiceOutGain.gain.value = 1;
 
-  // Ring modulator: signal * (1 + osc*depth) via gain AudioParam
-  const ringMult = ctx.createGain(); ringMult.gain.value = 1;
+  // Ring modulator: signal * (1 + osc*depth) via gain AudioParam.
+  // Importante: gain inicial = 0 (sem bias o gain dobraria o sinal mesmo sem voz).
+  const ringMult = ctx.createGain(); ringMult.gain.value = 0;
   const ringBias = ctx.createConstantSource(); ringBias.offset.value = 1;
   const ringOsc = ctx.createOscillator(); ringOsc.frequency.value = 50; ringOsc.type = "sine";
   const ringDepth = ctx.createGain(); ringDepth.gain.value = 0;

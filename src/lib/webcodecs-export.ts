@@ -35,6 +35,8 @@ export type WCItem = {
   outPoint: number;
   fadeIn?: number;
   fadeOut?: number;
+  audioFadeIn?: number;
+  audioFadeOut?: number;
   gainDb?: number;
   audioFx?: AudioFx;
   fx?: {
@@ -501,6 +503,16 @@ function computeOpacity(it: WCItem, localT: number): number {
 
 function dbToGain(db: number) { return Math.pow(10, db / 20); }
 
+function getAudioFadeIn(item: WCItem): number {
+  if (typeof item.audioFadeIn === "number") return item.audioFadeIn;
+  return item.kind === "audio" ? (item.fadeIn ?? 0) : 0;
+}
+
+function getAudioFadeOut(item: WCItem): number {
+  if (typeof item.audioFadeOut === "number") return item.audioFadeOut;
+  return item.kind === "audio" ? (item.fadeOut ?? 0) : 0;
+}
+
 async function decodeAudio(ac: OfflineAudioContext | AudioContext, file: File): Promise<AudioBuffer> {
   const buf = await file.arrayBuffer();
   return await ac.decodeAudioData(buf.slice(0));
@@ -514,35 +526,32 @@ async function buildMixedAudio(opts: WCExportOptions, sampleRate: number): Promi
   const wireSource = (src: AudioBufferSourceNode, item: WCItem, opts2: { ducker?: number } = {}) => {
     // Cada fonte → grafo de FX (EQ + reverb + echo + ambiente + canais + ganho)
     const graph = item.audioFx
-      ? buildAudioFxGraph(ac, { initialFx: item.audioFx, initialGainDb: item.gainDb ?? 0 })
+      ? buildAudioFxGraph(ac, { initialFx: item.audioFx, initialGainDb: 0 })
       : null;
     const dur = item.outPoint - item.inPoint;
-    // Envelope de fade aplicado em um gain pré-grafo
-    const fadeGain = ac.createGain();
+    // Envelope de ganho em dB: 0dB nas bordas, gainDb no trecho central.
+    const gainEnvelope = ac.createGain();
     const startT = item.start;
-    fadeGain.gain.value = 1;
-    if (item.fadeIn && item.fadeIn > 0.01) {
-      fadeGain.gain.setValueAtTime(0, startT);
-      fadeGain.gain.linearRampToValueAtTime(1, startT + item.fadeIn);
+    const targetGain = dbToGain(item.gainDb ?? 0) * (opts2.ducker ?? 1);
+    const edgeGain = 1 * (opts2.ducker ?? 1);
+    const audioFadeIn = getAudioFadeIn(item);
+    const audioFadeOut = getAudioFadeOut(item);
+    gainEnvelope.gain.value = targetGain;
+    if (audioFadeIn > 0.01) {
+      gainEnvelope.gain.setValueAtTime(edgeGain, startT);
+      gainEnvelope.gain.linearRampToValueAtTime(targetGain, startT + audioFadeIn);
+    } else {
+      gainEnvelope.gain.setValueAtTime(targetGain, startT);
     }
-    if (item.fadeOut && item.fadeOut > 0.01) {
-      fadeGain.gain.setValueAtTime(1, startT + dur - item.fadeOut);
-      fadeGain.gain.linearRampToValueAtTime(0, startT + dur);
+    if (audioFadeOut > 0.01) {
+      gainEnvelope.gain.setValueAtTime(targetGain, startT + dur - audioFadeOut);
+      gainEnvelope.gain.linearRampToValueAtTime(edgeGain, startT + dur);
     }
     if (graph) {
-      src.connect(fadeGain).connect(graph.input);
-      // ducker (música) opcional: multiplica saída do grafo
-      if (opts2.ducker != null && opts2.ducker !== 1) {
-        const duck = ac.createGain();
-        duck.gain.value = opts2.ducker;
-        graph.output.connect(duck).connect(ac.destination);
-      } else {
-        graph.output.connect(ac.destination);
-      }
+      src.connect(graph.input);
+      graph.output.connect(gainEnvelope).connect(ac.destination);
     } else {
-      const g = ac.createGain();
-      g.gain.value = Math.pow(10, (item.gainDb ?? 0) / 20) * (opts2.ducker ?? 1);
-      src.connect(fadeGain).connect(g).connect(ac.destination);
+      src.connect(gainEnvelope).connect(ac.destination);
     }
   };
 

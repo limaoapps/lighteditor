@@ -3763,7 +3763,7 @@ function Editor() {
                 <p className="mt-4 text-muted-foreground">Selecione um clipe na timeline para ver os ajustes.</p>
               </div>
             ) : (
-              <div className="space-y-8">
+              <div className="space-y-6">
                 <div className="flex items-center gap-3 p-2">
                   <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
                     {selected.kind === "video" ? <VideoIcon className="text-primary" /> : selected.kind === "audio" ? <Music2 className="text-primary" /> : <ImageIcon className="text-primary" />}
@@ -3774,20 +3774,180 @@ function Editor() {
                   </div>
                 </div>
 
-                <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold">Volume / Ganho</span>
-                    <span className="font-mono text-primary font-bold">{(selected.gainDb ?? 0).toFixed(1)} dB</span>
+                {/* Volume Section */}
+                {(selected.kind === "audio" || selected.kind === "video") && (
+                  <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Volume2 className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-semibold">Volume / Ganho</span>
+                      </div>
+                      <span className="font-mono text-primary font-bold">{(selected.gainDb ?? 0).toFixed(1)} dB</span>
+                    </div>
+                    <input type="range" min="-30" max="30" step="0.5" value={selected.gainDb ?? 0}
+                      onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, gainDb: Number(e.target.value) } : i))}
+                      className="w-full h-2 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
+                    <div className="flex justify-between text-[10px] text-muted-foreground uppercase font-bold px-1">
+                      <span>-30dB</span>
+                      <span>0dB</span>
+                      <span>+30dB</span>
+                    </div>
                   </div>
-                  <input type="range" min="-30" max="30" step="0.5" value={selected.gainDb ?? 0}
-                    onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, gainDb: Number(e.target.value) } : i))}
-                    className="w-full h-2 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
-                  <div className="flex justify-between text-[10px] text-muted-foreground uppercase font-bold px-1">
-                    <span>-30dB</span>
-                    <span>0dB</span>
-                    <span>+30dB</span>
+                )}
+
+                {/* Audio Effects (EQ, Ambience, Reverb, Echo) */}
+                {(selected.kind === "audio" || selected.kind === "video") && selected.audioFx && (
+                  <div className="space-y-6">
+                    {/* Equalizer */}
+                    <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Sliders className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-semibold">Equalizador (12 bandas)</span>
+                      </div>
+                      <div className="flex h-32 items-end justify-between gap-1 overflow-x-auto pb-2">
+                        {EQ_BANDS.map((freq, idx) => (
+                          <div key={freq} className="flex flex-col items-center gap-1 min-w-[30px]">
+                            <div className="relative h-20 w-1.5 rounded-full bg-muted">
+                              <div
+                                className="absolute bottom-0 left-0 right-0 rounded-full bg-primary transition-all"
+                                style={{ height: `${((selected.audioFx!.eq[idx] + 18) / 36) * 100}%` }}
+                              />
+                              <input
+                                type="range" min="-18" max="18" step="0.5"
+                                value={selected.audioFx!.eq[idx]}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value);
+                                  setItems(p => p.map(i => {
+                                    if (i.id !== selected.id || !i.audioFx) return i;
+                                    const nextEq = [...i.audioFx.eq];
+                                    nextEq[idx] = val;
+                                    return { ...i, audioFx: { ...i.audioFx, eq: nextEq } };
+                                  }));
+                                }}
+                                className="absolute inset-0 z-10 w-full h-full opacity-0 cursor-pointer orientation-vertical"
+                                style={{ WebkitAppearance: "slider-vertical" as any }}
+                              />
+                            </div>
+                            <span className="text-[8px] text-muted-foreground font-mono">
+                              {freq >= 1000 ? `${freq / 1000}k` : freq}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Ambience & Reverb */}
+                    <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-semibold">Ambiente e Reverb</span>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <label className="text-[10px] uppercase font-bold text-muted-foreground">Ambiente</label>
+                          <select
+                            value={selected.audioFx.ambience}
+                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id && i.audioFx ? { ...i, audioFx: { ...i.audioFx, ambience: e.target.value as Ambience } } : i))}
+                            className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
+                          >
+                            <option value="none">Nenhum</option>
+                            <option value="room">Sala</option>
+                            <option value="hall">Salão</option>
+                            <option value="cave">Caverna</option>
+                            <option value="outdoor">Ar Livre</option>
+                            <option value="underwater">Subaquático</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] uppercase font-bold text-muted-foreground">Preset de Reverb</label>
+                          <select
+                            value={selected.audioFx.reverbPreset}
+                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id && i.audioFx ? { ...i, audioFx: { ...i.audioFx, reverbPreset: e.target.value as ReverbPreset } } : i))}
+                            className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
+                          >
+                            <option value="none">Nenhum</option>
+                            <option value="room">Quarto</option>
+                            <option value="hall">Hall</option>
+                            <option value="plate">Placa</option>
+                            <option value="cathedral">Catedral</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <label className="text-[10px] uppercase font-bold text-muted-foreground">Mix do Reverb</label>
+                            <span className="text-xs font-mono">{selected.audioFx.reverbMix.toFixed(0)}%</span>
+                          </div>
+                          <input type="range" min="0" max="100" value={selected.audioFx.reverbMix}
+                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id && i.audioFx ? { ...i, audioFx: { ...i.audioFx, reverbMix: Number(e.target.value) } } : i))}
+                            className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Echo / Delay */}
+                    <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <RefreshCw className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-semibold">Eco / Delay</span>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <label className="text-[10px] uppercase font-bold text-muted-foreground">Mix do Eco</label>
+                            <span className="text-xs font-mono">{selected.audioFx.echoMix.toFixed(0)}%</span>
+                          </div>
+                          <input type="range" min="0" max="100" value={selected.audioFx.echoMix}
+                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id && i.audioFx ? { ...i, audioFx: { ...i.audioFx, echoMix: Number(e.target.value) } } : i))}
+                            className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <label className="text-[10px] uppercase font-bold text-muted-foreground">Atraso (Delay)</label>
+                            <span className="text-xs font-mono">{selected.audioFx.echoDelay}ms</span>
+                          </div>
+                          <input type="range" min="10" max="2000" step="10" value={selected.audioFx.echoDelay}
+                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id && i.audioFx ? { ...i, audioFx: { ...i.audioFx, echoDelay: Number(e.target.value) } } : i))}
+                            className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <label className="text-[10px] uppercase font-bold text-muted-foreground">Feedback (Repetição)</label>
+                            <span className="text-xs font-mono">{selected.audioFx.echoFeedback}%</span>
+                          </div>
+                          <input type="range" min="0" max="95" value={selected.audioFx.echoFeedback}
+                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id && i.audioFx ? { ...i, audioFx: { ...i.audioFx, echoFeedback: Number(e.target.value) } } : i))}
+                            className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Channel Mode */}
+                    <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <SettingsIcon className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-semibold">Modo de Canal</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {(["stereo", "mono", "left", "right", "swap"] as ChannelMode[]).map((m) => (
+                          <button
+                            key={m}
+                            onClick={() => setItems(p => p.map(i => i.id === selected.id && i.audioFx ? { ...i, audioFx: { ...i.audioFx, channelMode: m } } : i))}
+                            className={`rounded-lg border py-2 text-xs font-medium transition-colors ${selected.audioFx!.channelMode === m ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:bg-accent"}`}
+                          >
+                            {m.toUpperCase()}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
+
 
                 <div className="grid grid-cols-2 gap-3">
                   <button onClick={() => { splitAt(playhead, selected.id); setShowMobileInspector(false); }}

@@ -9,9 +9,9 @@
 export const EQ_BANDS = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 12000, 14000, 16000];
 export const EQ_BAND_COUNT = EQ_BANDS.length;
 
-export type ReverbPreset = "none" | "room" | "hall" | "plate" | "cathedral";
-export type Ambience = "none" | "room" | "hall" | "cave" | "outdoor" | "underwater" | "lounge";
-export type ChannelMode = "stereo" | "mono" | "panned";
+export type ReverbPreset = "none" | "room" | "hall" | "plate" | "cathedral" | "auditorium" | "cinema";
+export type Ambience = "none" | "room" | "hall" | "cave" | "outdoor" | "underwater" | "lounge" | "surround_light" | "surround_med" | "surround_strong";
+export type ChannelMode = "stereo" | "mono" | "panned" | "left" | "right" | "invert";
 
 
 export type AudioFx = {
@@ -24,6 +24,8 @@ export type AudioFx = {
   ambience: Ambience;
   channelMode: ChannelMode;
   pan: number; // -1 (full left) .. 1 (full right)
+  stereoWidth: number; // 0..200 (%)
+  positionDepth: number; // -1 (Frente) .. 1 (Trás)
 };
 
 
@@ -37,6 +39,8 @@ export const DEFAULT_AUDIO_FX: AudioFx = {
   ambience: "none",
   channelMode: "stereo",
   pan: 0,
+  stereoWidth: 100,
+  positionDepth: 0,
 };
 
 
@@ -48,6 +52,8 @@ export function hasAudioFx(fx?: Partial<AudioFx> | null): boolean {
   if ((fx.echoMix ?? 0) > 0.5) return true;
   if (fx.ambience && fx.ambience !== "none") return true;
   if (fx.channelMode && fx.channelMode !== "stereo") return true;
+  if (Math.abs((fx.stereoWidth ?? 100) - 100) > 1) return true;
+  if (Math.abs(fx.positionDepth ?? 0) > 0.01) return true;
   return false;
 }
 
@@ -58,6 +64,8 @@ const REVERB_SPECS: Record<Exclude<ReverbPreset, "none">, IRSpec> = {
   hall:       { duration: 2.2, decay: 2.2, predelay: 0.025, brightness: 0.5 },
   plate:      { duration: 1.5, decay: 2.6, predelay: 0.005, brightness: 0.9 },
   cathedral:  { duration: 4.5, decay: 1.6, predelay: 0.040, brightness: 0.35 },
+  auditorium: { duration: 3.0, decay: 2.0, predelay: 0.030, brightness: 0.4 },
+  cinema:     { duration: 2.5, decay: 2.5, predelay: 0.020, brightness: 0.5 },
 };
 // Ambientes mais pronunciados — caverna bem "cavernosa", subterrâneo bem "abafado".
 const AMBIENCE_SPECS: Record<Exclude<Ambience, "none">, IRSpec & { wet: number }> = {
@@ -66,7 +74,10 @@ const AMBIENCE_SPECS: Record<Exclude<Ambience, "none">, IRSpec & { wet: number }
   cave:        { duration: 5.5, decay: 0.9, predelay: 0.060, brightness: 0.18, wet: 0.75 },
   outdoor:     { duration: 0.35, decay: 4.5, predelay: 0.000, brightness: 0.95, wet: 0.18 },
   underwater:  { duration: 2.2, decay: 1.4, predelay: 0.000, brightness: 0.08, wet: 0.85 },
-  lounge:      { duration: 1.8, decay: 2.4, predelay: 0.015, brightness: 0.70, wet: 0.35 }, // Som Lounge
+  lounge:      { duration: 1.8, decay: 2.4, predelay: 0.015, brightness: 0.70, wet: 0.35 },
+  surround_light:  { duration: 0.1, decay: 1.0, predelay: 0.005, brightness: 0.8, wet: 0.15 },
+  surround_med:    { duration: 0.2, decay: 1.2, predelay: 0.015, brightness: 0.7, wet: 0.30 },
+  surround_strong: { duration: 0.3, decay: 1.5, predelay: 0.025, brightness: 0.6, wet: 0.45 },
 };
 
 
@@ -119,6 +130,45 @@ export type AudioFxNodes = {
 export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: AudioFx; initialGainDb?: number }): AudioFxNodes {
   const input = ctx.createGain();
   input.gain.value = 1;
+
+  // Position Depth (Frente/Trás)
+  // Frente: Som brilhante (high shelf), menos reverb (dry gain up).
+  // Trás: Som abafado (low pass), mais reverb (wet gain up).
+  const depthFilter = ctx.createBiquadFilter();
+  depthFilter.type = "lowpass";
+  depthFilter.frequency.value = 22000; // start open
+
+  // Mid/Side Matrix for Stereo Width
+  // Mid = (L+R)/2, Side = (L-R)
+  const widthSplitter = ctx.createChannelSplitter(2);
+  const widthMerger = ctx.createChannelMerger(2);
+  const midSum = ctx.createGain(); midSum.gain.value = 0.5;
+  const sideDiff = ctx.createGain(); sideDiff.gain.value = 1;
+  const sideInv = ctx.createGain(); sideInv.gain.value = -1;
+
+  const widthMidGain = ctx.createGain(); // Mid intensity
+  const widthSideGain = ctx.createGain(); // Side intensity
+  
+  // Connections for Width:
+  // L -> midSum, R -> midSum (Mid = (L+R)/2)
+  // L -> sideDiff, R -> sideInv -> sideDiff (Side = L-R)
+  widthSplitter.connect(midSum, 0); 
+  widthSplitter.connect(midSum, 1);
+  widthSplitter.connect(sideDiff, 0);
+  widthSplitter.connect(sideInv, 1);
+  sideInv.connect(sideDiff);
+
+  midSum.connect(widthMidGain);
+  sideDiff.connect(widthSideGain);
+
+  // Re-matrix: L = Mid + Side, R = Mid - Side
+  const widthSideNeg = ctx.createGain(); widthSideNeg.gain.value = -1;
+  widthMidGain.connect(widthMerger, 0, 0); // L <- Mid
+  widthSideGain.connect(widthMerger, 0, 0); // L <- Side
+  widthMidGain.connect(widthMerger, 0, 1); // R <- Mid
+  widthSideGain.connect(widthSideNeg);
+  widthSideNeg.connect(widthMerger, 0, 1); // R <- -Side
+
 
   // EQ 12 bandas: peaking BiquadFilters em série
   const eqNodes: BiquadFilterNode[] = EQ_BANDS.map((f, idx) => {
@@ -173,8 +223,11 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
   const out = ctx.createGain(); out.gain.value = 1;
   const muteGain = ctx.createGain(); muteGain.gain.value = 1;
 
-  // Conexões: input → eq[0..n-1] → splitter/merger → echoIn(dry+delay) → echoMix → revDry+conv → revMix → ambDry+ambConv → ambMix → out → muteGain
-  let prev: AudioNode = input;
+  // Conexões: input → depthFilter → widthSplitter ... widthMerger → eq[0..n-1] → splitter/merger → echoIn(dry+delay) → echoMix → revDry+conv → revMix → ambDry+ambConv → ambMix → out → muteGain
+  input.connect(depthFilter);
+  depthFilter.connect(widthSplitter);
+  
+  let prev: AudioNode = widthMerger;
   for (const b of eqNodes) { prev.connect(b); prev = b; }
   prev.connect(splitter);
   merger.connect(echoDry);
@@ -200,18 +253,43 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
       for (let i = 0; i < eqNodes.length; i++) {
         eqNodes[i].gain.value = fx.eq[i] ?? 0;
       }
+      // Position Depth
+      const depth = fx.positionDepth ?? 0;
+      if (depth > 0) {
+        // Trás: low pass abafa o som
+        depthFilter.type = "lowpass";
+        depthFilter.frequency.value = 20000 - depth * 18000;
+      } else {
+        // Frente: high shelf dá brilho (aproximado)
+        depthFilter.type = "highshelf";
+        depthFilter.frequency.value = 4000;
+        depthFilter.gain.value = Math.abs(depth) * 6;
+      }
+
+      // Stereo Width
+      const widthVal = (fx.stereoWidth ?? 100) / 100;
+      widthMidGain.gain.value = 1; 
+      widthSideGain.gain.value = widthVal;
+
       // Canal (Roteamento conforme regras técnicas)
       const m = fx.channelMode;
       console.log(`[AudioFX] Modo de canal ativo: ${m.toUpperCase()}`);
       
       if (m === "mono") {
-        // M = (L + R) / 2
         gLL.gain.value = 0.5; gLR.gain.value = 0.5;
         gRL.gain.value = 0.5; gRR.gain.value = 0.5;
+      } else if (m === "left") {
+        gLL.gain.value = 1; gLR.gain.value = 0;
+        gRL.gain.value = 1; gRR.gain.value = 0;
+      } else if (m === "right") {
+        gLL.gain.value = 0; gLR.gain.value = 1;
+        gRL.gain.value = 0; gRR.gain.value = 1;
+      } else if (m === "invert") {
+        gLL.gain.value = 0; gLR.gain.value = 1;
+        gRL.gain.value = 1; gRR.gain.value = 0;
       } else {
-        // Estéreo ou Panned (Controle gradual de balanço)
+        // Estéreo ou Panned
         const p = fx.pan ?? 0;
-        // Ganho de potência constante
         const angle = (p + 1) * (Math.PI / 4);
         gLL.gain.value = Math.cos(angle); 
         gLR.gain.value = 0;
@@ -261,12 +339,35 @@ export function buildAudioFilterChain(
   const out: string[] = [];
   // Canal primeiro (para reverb/echo já trabalharem na config final)
   if (fx?.channelMode === "mono") out.push("pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1");
+  else if (fx?.channelMode === "left") out.push("pan=stereo|c0=c0|c1=c0");
+  else if (fx?.channelMode === "right") out.push("pan=stereo|c0=c1|c1=c1");
+  else if (fx?.channelMode === "invert") out.push("pan=stereo|c0=c1|c1=c0");
   else if (fx && Math.abs(fx.pan ?? 0) > 0.01) {
     const p = fx.pan!;
     // Aproximação linear do pan para FFmpeg
     const gl = (1 - p) / 2;
     const gr = (1 + p) / 2;
     out.push(`pan=stereo|c0=${gl.toFixed(3)}*c0|c1=${gr.toFixed(3)}*c1`);
+  }
+
+  // Largura Estéreo (Stereo Width)
+  if (fx && Math.abs((fx.stereoWidth ?? 100) - 100) > 1) {
+    const w = (fx.stereoWidth / 100).toFixed(2);
+    out.push(`stereowiden=level_in=1:level_out=1:delay=20:width=${w}`);
+  }
+
+  // Profundidade (Position Depth)
+  if (fx && Math.abs(fx.positionDepth ?? 0) > 0.01) {
+    const d = fx.positionDepth;
+    if (d > 0) {
+      // Trás: abafa (lowpass)
+      const freq = Math.round(20000 - d * 18000);
+      out.push(`lowpass=f=${freq}`);
+    } else {
+      // Frente: brilho (equalizer high shelf)
+      const gain = (Math.abs(d) * 6).toFixed(1);
+      out.push(`equalizer=f=4000:width_type=h:width=2000:g=${gain}`);
+    }
   }
 
 

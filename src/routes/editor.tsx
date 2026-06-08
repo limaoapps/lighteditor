@@ -414,6 +414,28 @@ function MasterFader({ label, db, setDb, peak, clip, onClearClip }: {
   );
 }
 
+function ChannelMeter({ peak, label }: { peak: number; label: string }) {
+  const minDb = -60, maxDb = 0;
+  const peakDb = peak > 0.00001 ? 20 * Math.log10(peak) : -80;
+  const meterPct = Math.max(0, Math.min(1, (peakDb - minDb) / (maxDb - minDb)));
+  return (
+    <div className="flex flex-col gap-0.5">
+      <div className="flex justify-between text-[7px] font-bold text-muted-foreground uppercase leading-none">
+        <span>{label}</span>
+      </div>
+      <div className="relative h-1 w-full overflow-hidden rounded-full bg-zinc-900 ring-1 ring-white/5">
+        <div
+          className="absolute inset-y-0 left-0 transition-[width] duration-75"
+          style={{
+            width: `${meterPct * 100}%`,
+            background: "linear-gradient(to right, #22c55e 0%, #22c55e 70%, #eab308 85%, #ef4444 100%)",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 const DEFAULT_FX: Fx = {
   brightness: 0, contrast: 0, saturation: 0, temperature: 0,
   sharpness: 0, exposure: 0, shadows: 0, highlights: 0, blur: 0,

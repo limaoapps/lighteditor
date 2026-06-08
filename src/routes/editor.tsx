@@ -3947,16 +3947,33 @@ function Editor() {
                         <span className="text-sm font-semibold">Modo de Canal</span>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        {(["stereo", "mono", "left", "right", "swap"] as ChannelMode[]).map((m) => (
-                          <button
-                            key={m}
-                            onClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), channelMode: m } } : i))}
-                            className={`rounded-lg border py-2 text-xs font-medium transition-colors ${(selected.audioFx?.channelMode ?? "stereo") === m ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:bg-accent"}`}
+                        {(["stereo", "mono", "left", "right", "swap"] as ChannelMode[]).map((m) => {
+                          const labels: Record<ChannelMode, string> = {
+                            stereo: "Estéreo",
+                            mono: "Mono",
+                            left: "Esquerdo",
+                            right: "Direito",
+                            swap: "Inverter",
+                          };
+                          return (
+                            <button
+                              key={m}
+                              onClick={() => {
+                                setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), channelMode: m } } : i));
+                                if (mediaGraphRef.current[selected.id]) {
+                                  mediaGraphRef.current[selected.id].nodes.setFx({
+                                    ...(selected.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }),
+                                    channelMode: m
+                                  });
+                                }
+                              }}
+                              className={`rounded-lg border py-2 text-xs font-medium transition-colors ${(selected.audioFx?.channelMode ?? "stereo") === m ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:bg-accent"}`}
+                            >
+                              {labels[m]}
+                            </button>
+                          );
+                        })}
 
-                          >
-                            {m.toUpperCase()}
-                          </button>
-                        ))}
                       </div>
                     </div>
                   </div>

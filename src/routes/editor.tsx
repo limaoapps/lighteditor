@@ -3808,11 +3808,15 @@ function Editor() {
                       <div className="flex h-32 items-end justify-between gap-1 overflow-x-auto pb-2">
                         {EQ_BANDS.map((freq, idx) => (
                           <div key={freq} className="flex flex-col items-center gap-1 min-w-[30px]">
-                            <div className="relative h-20 w-1.5 rounded-full bg-muted">
+                            <div className="relative group/eq h-20 w-1.5 rounded-full bg-muted">
                               <div
                                 className="absolute bottom-0 left-0 right-0 rounded-full bg-primary transition-all"
                                 style={{ height: `${(((selected.audioFx?.eq?.[idx] ?? 0) + 18) / 36) * 100}%` }}
                               />
+                              {/* Valor numérico flutuante ao ajustar */}
+                              <div className="absolute -top-6 left-1/2 -translate-x-1/2 rounded bg-primary px-1 text-[10px] font-mono text-primary-foreground opacity-0 transition-opacity group-active/eq:opacity-100 group-hover/eq:opacity-100 pointer-events-none whitespace-nowrap z-20">
+                                {(selected.audioFx?.eq?.[idx] ?? 0).toFixed(1)}
+                              </div>
                               <input
                                 type="range" min="-18" max="18" step="0.5"
                                 value={selected.audioFx?.eq?.[idx] ?? 0}
@@ -3824,7 +3828,6 @@ function Editor() {
                                     const nextEq = [...baseFx.eq];
                                     nextEq[idx] = val;
                                     return { ...i, audioFx: { ...baseFx, eq: nextEq } };
-
                                   }));
                                 }}
                                 className="absolute inset-0 z-10 w-full h-full opacity-0 cursor-pointer orientation-vertical"
@@ -3836,6 +3839,7 @@ function Editor() {
                             </span>
                           </div>
                         ))}
+
                       </div>
                     </div>
 
@@ -3943,16 +3947,33 @@ function Editor() {
                         <span className="text-sm font-semibold">Modo de Canal</span>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        {(["stereo", "mono", "left", "right", "swap"] as ChannelMode[]).map((m) => (
-                          <button
-                            key={m}
-                            onClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), channelMode: m } } : i))}
-                            className={`rounded-lg border py-2 text-xs font-medium transition-colors ${(selected.audioFx?.channelMode ?? "stereo") === m ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:bg-accent"}`}
+                        {(["stereo", "mono", "left", "right", "swap"] as ChannelMode[]).map((m) => {
+                          const labels: Record<ChannelMode, string> = {
+                            stereo: "Estéreo",
+                            mono: "Mono",
+                            left: "Esquerdo",
+                            right: "Direito",
+                            swap: "Inverter",
+                          };
+                          return (
+                            <button
+                              key={m}
+                              onClick={() => {
+                                setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), channelMode: m } } : i));
+                                if (mediaGraphRef.current[selected.id]) {
+                                  mediaGraphRef.current[selected.id].nodes.setFx({
+                                    ...(selected.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }),
+                                    channelMode: m
+                                  });
+                                }
+                              }}
+                              className={`rounded-lg border py-2 text-xs font-medium transition-colors ${(selected.audioFx?.channelMode ?? "stereo") === m ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:bg-accent"}`}
+                            >
+                              {labels[m]}
+                            </button>
+                          );
+                        })}
 
-                          >
-                            {m.toUpperCase()}
-                          </button>
-                        ))}
                       </div>
                     </div>
                   </div>

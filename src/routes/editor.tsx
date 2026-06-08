@@ -3158,7 +3158,7 @@ function Editor() {
             </div>
           )}
 
-          {selected && (selected.kind === "audio" || selected.kind === "video") && (
+          {selected && (selected.kind === "audio" || (selected.kind === "video" && !selected.silenced)) && (
             <div className="space-y-2 rounded-md border border-border bg-card p-2 text-xs">
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Áudio</div>
               <label className="flex items-center gap-2" title="Duplo clique para restaurar">
@@ -3196,7 +3196,7 @@ function Editor() {
             </div>
           )}
 
-          {selected && (selected.kind === "audio" || selected.kind === "video") && (() => {
+          {selected && (selected.kind === "audio" || (selected.kind === "video" && !selected.silenced)) && (() => {
             const afx: AudioFx = selected.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] };
             const patchAfx = (patch: Partial<AudioFx>) =>
               setItems(p => p.map(i => i.id === selected.id
@@ -4175,7 +4175,7 @@ function Editor() {
                 </div>
 
                 {/* Volume Section */}
-                {(selected.kind === "audio" || selected.kind === "video") && (
+                {(selected.kind === "audio" || (selected.kind === "video" && !selected.silenced)) && (
                   <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -4196,7 +4196,7 @@ function Editor() {
                 )}
 
                 {/* Audio Effects (EQ, Ambience, Reverb, Echo) */}
-                {(selected.kind === "audio" || selected.kind === "video") && (
+                {(selected.kind === "audio" || (selected.kind === "video" && !selected.silenced)) && (
 
                   <div className="space-y-6">
                     {/* Equalizer */}

@@ -2555,7 +2555,7 @@ function Editor() {
                     transform: `translate(-50%,-50%) scale(${tr.scale * zScale}) rotate(${tr.rotation}deg)`,
                     cursor: "move",
                     opacity: op,
-                    zIndex: trackZ(ov.trackId),
+                    zIndex: isSel ? 40 : trackZ(ov.trackId),
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
                   };
 
@@ -2607,7 +2607,7 @@ function Editor() {
                     cursor: "move",
                     opacity: (computeVisualOpacity(ov, playhead)) * t.opacity,
                     filter: cssFilter(ov.fx),
-                    zIndex: trackZ(ov.trackId),
+                    zIndex: isSel ? 40 : trackZ(ov.trackId),
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
                     maxWidth: "90%",
                   };
@@ -2632,7 +2632,7 @@ function Editor() {
                   transform: `translate(-50%,-50%) scale(${tr.scale}) rotate(${tr.rotation}deg)`,
                   border: "1.5px dashed var(--primary)",
                   pointerEvents: "none",
-                  zIndex: trackZ(previewTarget.trackId) + 1,
+                  zIndex: 40,
                 };
                 return (
                   <div key={`sel-${previewTarget.id}`} style={style}>

@@ -2689,6 +2689,27 @@ function Editor() {
                   playing={playing}
                 />
               )}
+
+              {/* Mobile Play Button overlay */}
+              <div className="md:hidden pointer-events-none absolute inset-0 z-[45] flex items-center justify-center">
+                {!playing && (
+                  <button
+                    onClick={() => {
+                      if (playhead >= totalDuration - 0.05) setPlayhead(0);
+                      setPlaying(true);
+                    }}
+                    className="pointer-events-auto flex h-16 w-16 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm transition-transform active:scale-90"
+                  >
+                    <Play className="h-8 w-8 fill-current ml-1" />
+                  </button>
+                )}
+                {playing && (
+                   <button
+                   onClick={() => setPlaying(false)}
+                   className="pointer-events-auto flex h-full w-full items-center justify-center bg-transparent"
+                 />
+                )}
+              </div>
             </div>
           </div>
         </main>

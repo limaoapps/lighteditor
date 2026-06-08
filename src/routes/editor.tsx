@@ -2314,10 +2314,10 @@ function Editor() {
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <aside className="hidden shrink-0 border-r border-border bg-panel select-none md:flex" style={{ width: leftW }}>
-          <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-border bg-background/30 py-2">
+          <div className="flex w-16 shrink-0 flex-col items-center gap-0.5 border-r border-border bg-background/40 py-1.5">
             {([
               { id: "media" as LeftPanel, icon: Film, label: "Mídia" },
-              { id: "titles" as LeftPanel, icon: TypeIcon, label: "Títulos" },
+              { id: "titles" as LeftPanel, icon: TypeIcon, label: "Texto" },
               { id: "transitions" as LeftPanel, icon: RefreshCw, label: "Transições" },
               { id: "effects" as LeftPanel, icon: Wand2, label: "Efeitos" },
             ]).map(tab => {
@@ -2325,8 +2325,9 @@ function Editor() {
               const active = leftPanel === tab.id;
               return (
                 <button key={tab.id} onClick={() => setLeftPanel(tab.id)} title={tab.label}
-                  className={`grid h-9 w-9 place-items-center rounded-md transition ${active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-card hover:text-foreground"}`}>
+                  className={`flex w-14 flex-col items-center justify-center gap-0.5 rounded-md py-1.5 transition ${active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-card hover:text-foreground"}`}>
                   <Icon className="h-4 w-4" />
+                  <span className="text-[9px] font-medium leading-none">{tab.label}</span>
                 </button>
               );
             })}

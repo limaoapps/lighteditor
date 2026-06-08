@@ -2607,7 +2607,7 @@ function Editor() {
                     cursor: "move",
                     opacity: (computeVisualOpacity(ov, playhead)) * t.opacity,
                     filter: cssFilter(ov.fx),
-                    zIndex: trackZ(ov.trackId),
+                    zIndex: isSel ? 40 : trackZ(ov.trackId),
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
                     maxWidth: "90%",
                   };

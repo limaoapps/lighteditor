@@ -3040,14 +3040,29 @@ function Editor() {
 
                 <div className="border-t border-border pt-2">
                   <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Canais</div>
-                  <div className="grid grid-cols-5 gap-1">
-                    {(["stereo","mono","left","right","swap"] as ChannelMode[]).map(m => (
-                      <button key={m} onClick={() => patchAfx({ channelMode: m })}
-                        className={`rounded-md border px-1.5 py-1 text-[10px] capitalize ${afx.channelMode === m ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
-                        {m === "left" ? "L" : m === "right" ? "R" : m === "swap" ? "L↔R" : m}
-                      </button>
-                    ))}
+                  <div className="flex flex-col gap-2">
+                    <div className="grid grid-cols-2 gap-1">
+                      {(["stereo","mono"] as ChannelMode[]).map(m => (
+                        <button key={m} onClick={() => patchAfx({ channelMode: m })}
+                          className={`rounded-md border px-1.5 py-1 text-[10px] capitalize ${afx.channelMode === m ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                          {m === "stereo" ? "Estéreo" : "Mono"}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[8px] font-bold text-muted-foreground uppercase">
+                        <span>Balanço</span>
+                        <span>{afx.pan === 0 || !afx.pan ? "C" : afx.pan < 0 ? "L" : "R"}</span>
+                      </div>
+                      <input 
+                        type="range" min="-1" max="1" step="0.1" 
+                        value={afx.pan ?? 0}
+                        onChange={(e) => patchAfx({ pan: Number(e.target.value), channelMode: "panned" })}
+                        className="w-full h-1 rounded bg-muted appearance-none cursor-pointer accent-primary" 
+                      />
+                    </div>
                   </div>
+
                 </div>
               </div>
             );

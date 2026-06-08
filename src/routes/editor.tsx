@@ -2198,57 +2198,66 @@ function Editor() {
             <div className="grid h-7 w-7 place-items-center rounded-md bg-primary text-primary-foreground">
               <Film className="h-3.5 w-3.5" />
             </div>
-            <span className="font-display text-sm font-semibold">VIDEO LITE EDITOR</span>
+            <span className="hidden font-display text-sm font-semibold sm:inline">VIDEO LITE EDITOR</span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={undo} title="Desfazer (Ctrl+Z)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Undo2 className="h-4 w-4" /></button>
-          <button onClick={redo} title="Refazer (Ctrl+Y)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Redo2 className="h-4 w-4" /></button>
-          <button onClick={togglePreviewFullscreen} title="Tela cheia do preview (F)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Maximize2 className="h-4 w-4" /></button>
-          <button
-            onClick={() => setUseCanvasPreview(v => !v)}
-            title={useCanvasPreview ? "WYSIWYG ligado — preview = export. Clique para usar preview clássico." : "WYSIWYG desligado — preview em DOM. Clique para usar o motor de render."}
-            className={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${useCanvasPreview ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-card hover:text-foreground"}`}
-          >
-            WYSIWYG
-          </button>
-          <div className="mx-2 h-6 w-px bg-border" />
-          <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Proporção</label>
-          <select value={aspectKey} onChange={(e) => setProjectAspect(e.target.value as AspectKey)}
-            className="rounded-md border border-border bg-card px-2 py-1.5 text-xs">
-            {(Object.keys(ASPECTS) as AspectKey[]).map(k => <option key={k} value={k}>{ASPECTS[k].label}</option>)}
-          </select>
-          {aspectKey === "custom" && (
-            <div className="flex items-center gap-1 text-xs">
-              <input type="number" min={1} value={customAR.w} onChange={(e) => { setCustomAR(s => ({ ...s, w: Math.max(1, Number(e.target.value) || 1) })); setExportPreset("custom"); }}
-                className="w-14 rounded border border-border bg-card px-1.5 py-1" />
-              <span className="text-muted-foreground">:</span>
-              <input type="number" min={1} value={customAR.h} onChange={(e) => { setCustomAR(s => ({ ...s, h: Math.max(1, Number(e.target.value) || 1) })); setExportPreset("custom"); }}
-                className="w-14 rounded border border-border bg-card px-1.5 py-1" />
-            </div>
-          )}
-          <div className="mx-2 h-6 w-px bg-border" />
-          <select value={quality} onChange={(e) => {
-            const nextQuality = e.target.value as Quality;
-            setQuality(nextQuality);
-            const matching = (Object.keys(EXPORT_PRESETS) as ExportPresetKey[]).find(k => {
-              const p = EXPORT_PRESETS[k];
-              return k !== "custom" && p.aspect === aspectKey && p.quality === nextQuality;
-            });
-            setExportPreset(matching ?? "custom");
-          }}
-            className="rounded-md border border-border bg-card px-2 py-1.5 text-xs">
-            <option value="720">720p</option><option value="1080">1080p</option><option value="2160">4K</option>
-          </select>
+        <div className="flex items-center gap-1 sm:gap-2">
+          <div className="hidden items-center gap-2 sm:flex">
+            <button onClick={undo} title="Desfazer (Ctrl+Z)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Undo2 className="h-4 w-4" /></button>
+            <button onClick={redo} title="Refazer (Ctrl+Y)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Redo2 className="h-4 w-4" /></button>
+            <button onClick={togglePreviewFullscreen} title="Tela cheia do preview (F)" className="rounded p-1.5 text-muted-foreground hover:bg-card hover:text-foreground"><Maximize2 className="h-4 w-4" /></button>
+            <button
+              onClick={() => setUseCanvasPreview(v => !v)}
+              title={useCanvasPreview ? "WYSIWYG ligado — preview = export. Clique para usar preview clássico." : "WYSIWYG desligado — preview em DOM. Clique para usar o motor de render."}
+              className={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wider ${useCanvasPreview ? "bg-primary/15 text-primary" : "text-muted-foreground hover:bg-card hover:text-foreground"}`}
+            >
+              WYSIWYG
+            </button>
+            <div className="mx-2 h-6 w-px bg-border" />
+          </div>
+          
+          <div className="flex items-center gap-1.5">
+            <label className="hidden text-[10px] uppercase tracking-wider text-muted-foreground md:inline">Proporção</label>
+            <select value={aspectKey} onChange={(e) => setProjectAspect(e.target.value as AspectKey)}
+              className="rounded-md border border-border bg-card px-2 py-1.5 text-[11px] sm:text-xs">
+              {(Object.keys(ASPECTS) as AspectKey[]).map(k => <option key={k} value={k}>{ASPECTS[k].label}</option>)}
+            </select>
+            {aspectKey === "custom" && (
+              <div className="hidden items-center gap-1 text-xs sm:flex">
+                <input type="number" min={1} value={customAR.w} onChange={(e) => { setCustomAR(s => ({ ...s, w: Math.max(1, Number(e.target.value) || 1) })); setExportPreset("custom"); }}
+                  className="w-14 rounded border border-border bg-card px-1.5 py-1" />
+                <span className="text-muted-foreground">:</span>
+                <input type="number" min={1} value={customAR.h} onChange={(e) => { setCustomAR(s => ({ ...s, h: Math.max(1, Number(e.target.value) || 1) })); setExportPreset("custom"); }}
+                  className="w-14 rounded border border-border bg-card px-1.5 py-1" />
+              </div>
+            )}
+          </div>
+
+          <div className="hidden items-center gap-2 sm:flex">
+            <div className="mx-2 h-6 w-px bg-border" />
+            <select value={quality} onChange={(e) => {
+              const nextQuality = e.target.value as Quality;
+              setQuality(nextQuality);
+              const matching = (Object.keys(EXPORT_PRESETS) as ExportPresetKey[]).find(k => {
+                const p = EXPORT_PRESETS[k];
+                return k !== "custom" && p.aspect === aspectKey && p.quality === nextQuality;
+              });
+              setExportPreset(matching ?? "custom");
+            }}
+              className="rounded-md border border-border bg-card px-2 py-1.5 text-xs">
+              <option value="720">720p</option><option value="1080">1080p</option><option value="2160">4K</option>
+            </select>
+          </div>
+
           <button
             onClick={() => {
               if (!gpuInfoRef.current) gpuInfoRef.current = detectGpu();
               setShowExportSettings(true);
             }}
             disabled={exporting || !items.length}
-            className="glow-primary inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50">
+            className="glow-primary inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-[11px] font-medium text-primary-foreground disabled:opacity-50 sm:text-xs">
             {exporting || ffLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-            {exporting ? "Exportando" : ffLoading ? "Carregando" : ffLoadError ? "Tentar exportar" : "Exportar"}
+            <span>{exporting ? "Export" : "Exportar"}</span>
           </button>
         </div>
       </header>

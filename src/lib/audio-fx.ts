@@ -6,7 +6,7 @@
  * (via OfflineAudioContext). Para FFmpeg WASM, ver `buildAudioFilterChain`.
  */
 
-import { createVoiceEffect, type VoiceEffectName } from "./audio-effects";
+import { createVoiceEffect, defaultVoiceParams, type VoiceEffectName, type VoiceEffectParams } from "./audio-effects";
 
 /** Mapeia presets de voz (incluindo legados) para o efeito modular correspondente. */
 function mapVoicePresetToEffect(vp: VoicePreset | undefined | null): VoiceEffectName {

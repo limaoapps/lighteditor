@@ -1411,9 +1411,10 @@ function Editor() {
   const addAssetToTimeline = useCallback((asset: MediaAsset, opts?: { trackId?: string; start?: number; duration?: number }) => {
     const wantKind: TrackKind = asset.kind === "audio" ? "audio" : "video";
     const findMain = (k: TrackKind) => k === "video" ? [...tracks].reverse().find(t => t.kind === "video")?.id : tracks.find(t => t.kind === "audio")?.id;
-    const targetTrack = opts?.trackId && tracks.find(t => t.id === opts.trackId)?.kind === wantKind
-      ? opts.trackId
-      : (findMain(wantKind) ?? ensureTrack(wantKind));
+    // Confia no trackId fornecido pelo chamador (ex.: gravação de microfone
+    // criou a faixa via ensureTrack imediatamente antes — pode não estar no
+    // snapshot de `tracks` capturado por esta closure).
+    const targetTrack = opts?.trackId ?? (findMain(wantKind) ?? ensureTrack(wantKind));
     const defaultStart = items.filter(i => i.trackId === targetTrack)
       .reduce((m, i) => Math.max(m, i.start + (i.outPoint - i.inPoint)), 0);
     const start = opts?.start != null ? Math.max(0, opts.start) : defaultStart;

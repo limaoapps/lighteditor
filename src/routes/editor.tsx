@@ -19,6 +19,7 @@ import {
   type ChannelMode,
   type VoicePreset,
 } from "@/lib/audio-fx";
+import { VOICE_PARAM_DEFS, defaultVoiceParams, type VoiceEffectName } from "@/lib/audio-effects";
 import { computeItemBounds } from "@/lib/scene-geometry";
 import { PreviewCanvas } from "@/components/editor/PreviewCanvas";
 import { Waveform } from "@/components/editor/Waveform";

@@ -240,6 +240,12 @@ const orderTracksFromCenter = (tracks: Track[]) => {
 const sameTrackOrder = (a: Track[], b: Track[]) =>
   a.length === b.length && a.every((track, index) => track.id === b[index]?.id);
 
+const nextTrackIdFrom = (trackId: string, kind: TrackKind) => {
+  const n = parseInt(trackId.slice(1), 10);
+  const prefix = kind === "video" ? "V" : "A";
+  return `${prefix}${Number.isFinite(n) ? n + 1 : 1}`;
+};
+
 type AspectKey = "16:9" | "9:16" | "1:1" | "4:3" | "custom";
 const ASPECTS: Record<AspectKey, { w: number; h: number; label: string }> = {
   "16:9": { w: 16, h: 9, label: "16:9 · YouTube" },

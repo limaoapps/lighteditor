@@ -126,6 +126,9 @@ export const VOICE_SPECS: Record<Exclude<VoicePreset, "none">, VoiceSpec> = {
   demon:      { ringHz: 15,  ringDepth: 0.80, drive: 0.20, lowCutHz: 40,   highCutHz: 700,  bandQ: 1.1, wet: 1,    outGainDb: 2 },
   underwater: { ringHz: 0,   ringDepth: 0,    drive: 0,    lowCutHz: 80,   highCutHz: 500,  bandQ: 0.8, wet: 1,    outGainDb: 3 },
   ghost:      { ringHz: 7,   ringDepth: 0.45, drive: 0.05, lowCutHz: 200,  highCutHz: 4000, bandQ: 0.9, wet: 0.85, outGainDb: 0 },
+  child:      { ringHz: 0,   ringDepth: 0,    drive: 0,    lowCutHz: 200,  highCutHz: 8000, bandQ: 0.7, wet: 1,    outGainDb: 0 },
+  helium:     { ringHz: 0,   ringDepth: 0,    drive: 0,    lowCutHz: 300,  highCutHz: 10000,bandQ: 0.7, wet: 1,    outGainDb: -1 },
+  cave:       { ringHz: 0,   ringDepth: 0,    drive: 0,    lowCutHz: 80,   highCutHz: 4000, bandQ: 0.7, wet: 1,    outGainDb: 0 },
 };
 
 function makeDriveCurve(amount: number): Float32Array {

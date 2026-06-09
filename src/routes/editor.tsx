@@ -1686,8 +1686,8 @@ function Editor() {
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [playing, totalDuration]);
 
-  // Active V1 (first video track) video for preview <video>
-  const firstVideoTrackId = tracks.find(t => t.kind === "video")?.id;
+  // Active V1 (bottom video track = main background) video for preview <video>
+  const firstVideoTrackId = [...tracks].reverse().find(t => t.kind === "video")?.id;
   const activeV1Video = useMemo(() => {
     if (!firstVideoTrackId) return null;
     return items.find(i =>

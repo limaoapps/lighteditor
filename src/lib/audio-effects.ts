@@ -784,12 +784,3 @@ export function createVoiceEffect(
   if (!name || !isVoiceEffectName(name)) return voiceEffects.normal(ctx);
   return voiceEffects[name](ctx, params);
 }
-
-export function createVoiceEffect(
-  ctx: BaseAudioContext,
-  name: VoiceEffectName | string | null | undefined,
-  params?: VoiceEffectParams,
-): VoiceEffectNode {
-  if (!name || !isVoiceEffectName(name)) return voiceEffects.normal(ctx);
-  return voiceEffects[name](ctx, params);
-}

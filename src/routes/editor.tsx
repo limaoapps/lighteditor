@@ -4461,8 +4461,103 @@ function Editor() {
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-3 mt-4">
-                  <button onClick={() => { splitAt(playhead, selected.id); setShowMobileInspector(false); }}
+                {/* Visual params for image/video */}
+                {(selected.kind === "image" || selected.kind === "video") && selected.transform && selected.fx && (
+                  <div className="space-y-6">
+                    <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Maximize2 className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-semibold">Transformar</span>
+                      </div>
+                      {([
+                        { key: "scale" as const, label: "Escala", min: 0.1, max: 5, step: 0.01, reset: 1, fmt: (v: number) => v.toFixed(2) + "x" },
+                        { key: "rotation" as const, label: "Rotação", min: -180, max: 180, step: 1, reset: 0, fmt: (v: number) => v.toFixed(0) + "°" },
+                        { key: "xPct" as const, label: "Posição X", min: 0, max: 100, step: 0.5, reset: 50, fmt: (v: number) => v.toFixed(0) + "%" },
+                        { key: "yPct" as const, label: "Posição Y", min: 0, max: 100, step: 0.5, reset: 50, fmt: (v: number) => v.toFixed(0) + "%" },
+                      ]).map(p => (
+                        <div key={p.key} className="space-y-2">
+                          <div className="flex justify-between">
+                            <label className="text-[10px] uppercase font-bold text-muted-foreground">{p.label}</label>
+                            <span className="text-xs font-mono">{p.fmt(selected.transform?.[p.key] ?? p.reset)}</span>
+                          </div>
+                          <input type="range" min={p.min} max={p.max} step={p.step}
+                            value={selected.transform?.[p.key] ?? p.reset}
+                            onChange={(e) => { const v = Number(e.target.value); setItems(prev => prev.map(i => i.id === selected.id && i.transform ? { ...i, transform: { ...i.transform, [p.key]: v } } : i)); }}
+                            onDoubleClick={() => setItems(prev => prev.map(i => i.id === selected.id && i.transform ? { ...i, transform: { ...i.transform, [p.key]: p.reset } } : i))}
+                            className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Palette className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-semibold">Modo de Preenchimento</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {(["bars","blur","mirror","stretch","color"] as const).map(m => (
+                          <button key={m} onClick={() => setItems(p => p.map(i => i.id === selected.id && i.fx ? { ...i, fx: { ...i.fx, fillMode: m, ...(m === "blur" && i.fx.fillMode !== "blur" ? { blurBg: 30 } : {}) } } : i))}
+                            className={`rounded-lg border py-2 text-xs font-medium ${selected.fx?.fillMode === m ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground"}`}>
+                            {m === "bars" ? "Barras" : m === "blur" ? "Blur" : m === "mirror" ? "Espelho" : m === "stretch" ? "Esticar" : "Cor"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Sliders className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-semibold">Ajustes de Imagem</span>
+                      </div>
+                      {([
+                        { key: "opacity" as const, label: "Opacidade", min: 0, max: 100, suffix: "%" },
+                        { key: "brightness" as const, label: "Brilho", min: -100, max: 100 },
+                        { key: "contrast" as const, label: "Contraste", min: -100, max: 100 },
+                        { key: "saturation" as const, label: "Saturação", min: -100, max: 100 },
+                        { key: "temperature" as const, label: "Temperatura", min: -100, max: 100 },
+                        { key: "sharpness" as const, label: "Nitidez", min: 0, max: 100 },
+                        { key: "exposure" as const, label: "Exposição", min: -100, max: 100 },
+                        { key: "shadows" as const, label: "Sombras", min: -100, max: 100 },
+                        { key: "highlights" as const, label: "Realces", min: -100, max: 100 },
+                        { key: "blur" as const, label: "Blur", min: 0, max: 100 },
+                      ]).map(p => (
+                        <div key={p.key} className="space-y-2">
+                          <div className="flex justify-between">
+                            <label className="text-[10px] uppercase font-bold text-muted-foreground">{p.label}</label>
+                            <span className="text-xs font-mono">{(selected.fx?.[p.key] as number | undefined) ?? (p.key === "opacity" ? 100 : 0)}{p.suffix ?? ""}</span>
+                          </div>
+                          <input type="range" min={p.min} max={p.max}
+                            value={(selected.fx?.[p.key] as number | undefined) ?? (p.key === "opacity" ? 100 : 0)}
+                            onChange={(e) => { const v = Number(e.target.value); setItems(prev => prev.map(i => i.id === selected.id && i.fx ? { ...i, fx: { ...i.fx, [p.key]: v } } : i)); }}
+                            className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <RefreshCw className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-semibold">Fade In / Fade Out</span>
+                      </div>
+                      {([
+                        { key: "fadeIn" as const, label: "Fade In" },
+                        { key: "fadeOut" as const, label: "Fade Out" },
+                      ]).map(p => (
+                        <div key={p.key} className="space-y-2">
+                          <div className="flex justify-between">
+                            <label className="text-[10px] uppercase font-bold text-muted-foreground">{p.label}</label>
+                            <span className="text-xs font-mono">{((selected[p.key] as number | undefined) ?? 0).toFixed(2)}s</span>
+                          </div>
+                          <input type="range" min={0} max={5} step={0.05}
+                            value={(selected[p.key] as number | undefined) ?? 0}
+                            onChange={(e) => { const v = Number(e.target.value); setItems(prev => prev.map(i => i.id === selected.id ? { ...i, [p.key]: v } : i)); }}
+                            className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                     className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 shadow-sm active:bg-accent transition-colors">
                     <Scissors className="h-5 w-5 text-primary" />
                     <span className="text-xs font-bold">Dividir</span>

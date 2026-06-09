@@ -1699,13 +1699,16 @@ function Editor() {
   const computeAudioGainDb = (i: TLItem, t: number) => {
     const local = t - i.start;
     const dur = i.outPoint - i.inPoint;
-    if (local < 0 || local > dur) return 0;
+    if (local < 0 || local > dur) return -120;
     const audioFadeIn = getAudioFadeIn(i);
     const audioFadeOut = getAudioFadeOut(i);
     let line = 1;
     if (audioFadeIn > 0.001 && local < audioFadeIn) line = Math.min(line, Math.max(0, local / audioFadeIn));
     if (audioFadeOut > 0.001 && local > dur - audioFadeOut) line = Math.min(line, Math.max(0, (dur - local) / audioFadeOut));
-    return (i.gainDb ?? 0) * line;
+    const baseGain = Math.pow(10, (i.gainDb ?? 0) / 20);
+    const finalGain = baseGain * line;
+    if (finalGain <= 1e-6) return -120;
+    return 20 * Math.log10(finalGain);
   };
   const computeAudioGain = (i: TLItem, t: number) => Math.pow(10, computeAudioGainDb(i, t) / 20);
 

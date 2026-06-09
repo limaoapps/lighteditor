@@ -322,9 +322,10 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
     }
     // mapeia o preset para os efeitos modulares; alguns legados ficam como "normal"
     const name = mapVoicePresetToEffect(preset);
-    currentVoiceNode = createVoiceEffect(ctx, name);
-    voiceIn.connect(currentVoiceNode.input);
-    currentVoiceNode.output.connect(voiceOutGain);
+    const node = createVoiceEffect(ctx, name);
+    voiceIn.connect(node.input);
+    node.output.connect(voiceOutGain);
+    currentVoiceNode = node;
   };
   // inicializa em "normal" para garantir caminho conectado mesmo sem preset
   installVoiceEffect("none");

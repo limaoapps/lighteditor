@@ -506,12 +506,12 @@ function dbToGain(db: number) { return Math.pow(10, db / 20); }
 
 function getAudioFadeIn(item: WCItem): number {
   if (typeof item.audioFadeIn === "number") return item.audioFadeIn;
-  return item.kind === "audio" ? (item.fadeIn ?? 0) : 0;
+  return (item.kind === "audio" || item.kind === "video") ? (item.fadeIn ?? 0) : 0;
 }
 
 function getAudioFadeOut(item: WCItem): number {
   if (typeof item.audioFadeOut === "number") return item.audioFadeOut;
-  return item.kind === "audio" ? (item.fadeOut ?? 0) : 0;
+  return (item.kind === "audio" || item.kind === "video") ? (item.fadeOut ?? 0) : 0;
 }
 
 async function decodeAudio(ac: OfflineAudioContext | AudioContext, file: File): Promise<AudioBuffer> {

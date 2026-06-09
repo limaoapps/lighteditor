@@ -20,7 +20,11 @@ export type VoiceEffectName =
   | "megaphone"
   | "radio"
   | "telephone"
-  | "alien";
+  | "alien"
+  | "child"
+  | "helium"
+  | "ghost"
+  | "cave";
 
 export type VoiceEffectParams = Record<string, number>;
 

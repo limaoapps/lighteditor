@@ -1257,18 +1257,19 @@ function Editor() {
       const prefix = kind === "video" ? "V" : "A";
       id = `${prefix}${n}`;
       const newTrack: Track = { id, kind, label: `${id} · ${kind === "video" ? "Vídeo" : "Áudio"}` };
-      // Insert at end of its kind group (video first, then audio)
-      const out: Track[] = [];
-      let inserted = false;
-      for (let i = 0; i < prev.length; i++) {
-        out.push(prev[i]);
-        const next = prev[i + 1];
-        if (!inserted && prev[i].kind === kind && (!next || next.kind !== kind)) {
-          out.push(newTrack);
-          inserted = true;
-        }
+      // Vídeo: nova trilha vai ACIMA (topo do grupo de vídeo => início do array).
+      // Áudio: nova trilha vai ABAIXO (fim do grupo de áudio).
+      if (kind === "video") {
+        const firstVideoIdx = prev.findIndex(t => t.kind === "video");
+        const insertAt = firstVideoIdx < 0 ? 0 : firstVideoIdx;
+        const out = [...prev];
+        out.splice(insertAt, 0, newTrack);
+        return out;
       }
-      if (!inserted) out.push(newTrack);
+      const out = [...prev];
+      let lastAudioIdx = -1;
+      for (let i = 0; i < out.length; i++) if (out[i].kind === "audio") lastAudioIdx = i;
+      if (lastAudioIdx < 0) out.push(newTrack); else out.splice(lastAudioIdx + 1, 0, newTrack);
       return out;
     });
     return id;

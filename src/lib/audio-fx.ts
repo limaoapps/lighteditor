@@ -62,6 +62,7 @@ export type AudioFx = {
   stereoWidth: number; // 0..200 (%)
   positionDepth: number; // -1 (Frente) .. 1 (Trás)
   voicePreset?: VoicePreset; // efeito de voz
+  voiceParams?: VoiceEffectParams; // parâmetros do efeito de voz (intensidades)
 };
 
 
@@ -79,6 +80,7 @@ export const DEFAULT_AUDIO_FX: AudioFx = {
   stereoWidth: 100,
   positionDepth: 0,
   voicePreset: "none",
+  voiceParams: {},
 };
 
 

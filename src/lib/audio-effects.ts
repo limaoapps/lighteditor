@@ -421,7 +421,7 @@ const normal: VoiceEffectFactory = (ctx) => {
 const robot: VoiceEffectFactory = (ctx) => {
   const ring = createRingMod(ctx, 50, 1);
   const dist = ctx.createWaveShaper();
-  dist.curve = makeDistortionCurve(0.35);
+  dist.curve = makeDistortionCurve(0.35) as unknown as Float32Array<ArrayBuffer>;
   dist.oversample = "4x";
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -22;
@@ -451,7 +451,7 @@ const monster: VoiceEffectFactory = (ctx) => {
   lp.type = "lowpass";
   lp.frequency.value = 2200;
   const dist = ctx.createWaveShaper();
-  dist.curve = makeSoftClipCurve(0.55);
+  dist.curve = makeSoftClipCurve(0.55) as unknown as Float32Array<ArrayBuffer>;
   dist.oversample = "4x";
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -18;
@@ -465,7 +465,7 @@ const monster: VoiceEffectFactory = (ctx) => {
 const demon: VoiceEffectFactory = (ctx) => {
   const pitch = createPitchShift(ctx, -12);
   const dist = ctx.createWaveShaper();
-  dist.curve = makeSoftClipCurve(0.45);
+  dist.curve = makeSoftClipCurve(0.45) as unknown as Float32Array<ArrayBuffer>;
   dist.oversample = "4x";
   const lowGrowl = ctx.createBiquadFilter();
   lowGrowl.type = "lowshelf";
@@ -506,7 +506,7 @@ const megaphone: VoiceEffectFactory = (ctx) => {
   peak.Q.value = 1.6;
   peak.gain.value = 6;
   const dist = ctx.createWaveShaper();
-  dist.curve = makeSoftClipCurve(0.22);
+  dist.curve = makeSoftClipCurve(0.22) as unknown as Float32Array<ArrayBuffer>;
   dist.oversample = "2x";
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -18;
@@ -532,7 +532,7 @@ const radio: VoiceEffectFactory = (ctx) => {
   peak.Q.value = 1.2;
   peak.gain.value = 4;
   const dist = ctx.createWaveShaper();
-  dist.curve = makeSoftClipCurve(0.18);
+  dist.curve = makeSoftClipCurve(0.18) as unknown as Float32Array<ArrayBuffer>;
   dist.oversample = "2x";
 
   input.connect(hp);

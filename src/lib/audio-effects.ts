@@ -22,13 +22,72 @@ export type VoiceEffectName =
   | "telephone"
   | "alien";
 
+export type VoiceEffectParams = Record<string, number>;
+
 export type VoiceEffectNode = {
   input: AudioNode;
   output: AudioNode;
   dispose: () => void;
 };
 
-export type VoiceEffectFactory = (ctx: BaseAudioContext) => VoiceEffectNode;
+export type VoiceEffectFactory = (ctx: BaseAudioContext, params?: VoiceEffectParams) => VoiceEffectNode;
+
+/** Definição dos parâmetros expostos para a UI por preset. */
+export type VoiceParamDef = {
+  key: string;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  default: number;
+  unit?: string;
+};
+
+export const VOICE_PARAM_DEFS: Partial<Record<VoiceEffectName, VoiceParamDef[]>> = {
+  radio: [
+    { key: "noise", label: "Ruído", min: 0, max: 1, step: 0.01, default: 0.25, unit: "" },
+    { key: "drive", label: "Distorção", min: 0, max: 1, step: 0.01, default: 0.18 },
+  ],
+  alien: [
+    { key: "pitch", label: "Pitch", min: -12, max: 12, step: 1, default: 5, unit: "st" },
+    { key: "phaserDepth", label: "Phaser", min: 0, max: 1, step: 0.01, default: 0.7 },
+    { key: "phaserRate", label: "Phaser Hz", min: 0.05, max: 4, step: 0.05, default: 0.6 },
+    { key: "chorusDepth", label: "Chorus", min: 0, max: 1, step: 0.01, default: 0.6 },
+    { key: "chorusRate", label: "Chorus Hz", min: 0.1, max: 6, step: 0.1, default: 1.4 },
+  ],
+  robot: [
+    { key: "ringHz", label: "Ring Hz", min: 10, max: 200, step: 1, default: 50 },
+    { key: "drive", label: "Distorção", min: 0, max: 1, step: 0.01, default: 0.35 },
+  ],
+  monster: [
+    { key: "pitch", label: "Pitch", min: -24, max: 0, step: 1, default: -8, unit: "st" },
+    { key: "drive", label: "Distorção", min: 0, max: 1, step: 0.01, default: 0.55 },
+  ],
+  demon: [
+    { key: "pitch", label: "Pitch", min: -24, max: 0, step: 1, default: -12, unit: "st" },
+    { key: "reverb", label: "Reverb", min: 0, max: 1, step: 0.01, default: 0.65 },
+    { key: "drive", label: "Distorção", min: 0, max: 1, step: 0.01, default: 0.45 },
+  ],
+  megaphone: [
+    { key: "drive", label: "Distorção", min: 0, max: 1, step: 0.01, default: 0.22 },
+  ],
+  telephone: [
+    { key: "lowCut", label: "Corte grave Hz", min: 200, max: 800, step: 10, default: 400 },
+    { key: "highCut", label: "Corte agudo Hz", min: 1500, max: 5000, step: 50, default: 3000 },
+  ],
+};
+
+export function defaultVoiceParams(name: VoiceEffectName | string | null | undefined): VoiceEffectParams {
+  const defs = (name && isVoiceEffectName(name)) ? VOICE_PARAM_DEFS[name] : undefined;
+  const out: VoiceEffectParams = {};
+  if (defs) for (const d of defs) out[d.key] = d.default;
+  return out;
+}
+
+function p(params: VoiceEffectParams | undefined, key: string, fallback: number): number {
+  const v = params?.[key];
+  return typeof v === "number" && !isNaN(v) ? v : fallback;
+}
 
 /* ============================================================
  * Building blocks

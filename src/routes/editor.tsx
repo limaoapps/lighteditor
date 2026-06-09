@@ -226,6 +226,26 @@ type TLItem = {
 
 type Track = { id: string; kind: TrackKind; label: string };
 
+const trackNumber = (track: Track) => {
+  const n = parseInt(track.id.slice(1), 10);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const orderTracksFromCenter = (tracks: Track[]) => {
+  const videos = tracks.filter(t => t.kind === "video").sort((a, b) => trackNumber(b) - trackNumber(a));
+  const audios = tracks.filter(t => t.kind === "audio").sort((a, b) => trackNumber(a) - trackNumber(b));
+  return [...videos, ...audios];
+};
+
+const sameTrackOrder = (a: Track[], b: Track[]) =>
+  a.length === b.length && a.every((track, index) => track.id === b[index]?.id);
+
+const nextTrackIdFrom = (trackId: string, kind: TrackKind) => {
+  const n = parseInt(trackId.slice(1), 10);
+  const prefix = kind === "video" ? "V" : "A";
+  return `${prefix}${Number.isFinite(n) ? n + 1 : 1}`;
+};
+
 type AspectKey = "16:9" | "9:16" | "1:1" | "4:3" | "custom";
 const ASPECTS: Record<AspectKey, { w: number; h: number; label: string }> = {
   "16:9": { w: 16, h: 9, label: "16:9 · YouTube" },
@@ -236,8 +256,8 @@ const ASPECTS: Record<AspectKey, { w: number; h: number; label: string }> = {
 };
 
 const INITIAL_TRACKS: Track[] = [
-  { id: "V1", kind: "video", label: "V1 · Vídeo" },
   { id: "V2", kind: "video", label: "V2 · Vídeo" },
+  { id: "V1", kind: "video", label: "V1 · Vídeo" },
   { id: "A1", kind: "audio", label: "A1 · Áudio" },
   { id: "A2", kind: "audio", label: "A2 · Áudio" },
 ];
@@ -825,7 +845,13 @@ function Editor() {
   const aspect = aspectKey === "custom" ? customAR : ASPECTS[aspectKey];
 
   const [media, setMedia] = useState<MediaAsset[]>([]);
-  const [tracks, setTracks] = useState<Track[]>(INITIAL_TRACKS);
+  const [tracks, setTracks] = useState<Track[]>(() => orderTracksFromCenter(INITIAL_TRACKS));
+  useEffect(() => {
+    setTracks(prev => {
+      const ordered = orderTracksFromCenter(prev);
+      return sameTrackOrder(prev, ordered) ? prev : ordered;
+    });
+  }, []);
   const [items, setItemsRaw] = useState<TLItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const draggedTransitionRef = useRef<TransitionPreset | null>(null);
@@ -1188,7 +1214,7 @@ function Editor() {
   const trackZ = useCallback((trackId: string): number => {
     const idx = videoTrackOrder.map[trackId];
     if (idx == null) return 2;
-    // V1 (idx 0) => maior zIndex; cada trilha abaixo recebe 2 níveis (bg + content)
+    // V3/V2 ficam acima de V1; cada trilha abaixo recebe 2 níveis (bg + content)
     return 10 + (videoTrackOrder.count - idx) * 2;
   }, [videoTrackOrder]);
 
@@ -1257,20 +1283,7 @@ function Editor() {
       const prefix = kind === "video" ? "V" : "A";
       id = `${prefix}${n}`;
       const newTrack: Track = { id, kind, label: `${id} · ${kind === "video" ? "Vídeo" : "Áudio"}` };
-      // Vídeo: nova trilha vai ACIMA (topo do grupo de vídeo => início do array).
-      // Áudio: nova trilha vai ABAIXO (fim do grupo de áudio).
-      if (kind === "video") {
-        const firstVideoIdx = prev.findIndex(t => t.kind === "video");
-        const insertAt = firstVideoIdx < 0 ? 0 : firstVideoIdx;
-        const out = [...prev];
-        out.splice(insertAt, 0, newTrack);
-        return out;
-      }
-      const out = [...prev];
-      let lastAudioIdx = -1;
-      for (let i = 0; i < out.length; i++) if (out[i].kind === "audio") lastAudioIdx = i;
-      if (lastAudioIdx < 0) out.push(newTrack); else out.splice(lastAudioIdx + 1, 0, newTrack);
-      return out;
+      return orderTracksFromCenter([...prev, newTrack]);
     });
     return id;
   }, []);
@@ -1285,7 +1298,7 @@ function Editor() {
       const newTrack: Track = { id, kind, label: `${id} · ${kind === "video" ? "Vídeo" : "Áudio"}` };
       const out = [...prev];
       out.splice(Math.max(0, Math.min(out.length, insertIndex)), 0, newTrack);
-      return out;
+      return orderTracksFromCenter(out);
     });
   }, []);
 
@@ -1599,27 +1612,15 @@ function Editor() {
   };
   const pasteClip = () => {
     const src = clipboardRef.current; if (!src) return;
-    // Cria uma nova trilha automaticamente: vídeo/imagem acima das demais; áudio abaixo.
+    // Cola na próxima trilha a partir do meio: V1→V2→V3 sobe; A1→A2→A3 desce.
     const kind: TrackKind = src.kind === "audio" ? "audio" : "video";
-    const sameKind = tracks.filter(t => t.kind === kind);
-    const nums = sameKind.map(t => parseInt(t.id.slice(1), 10)).filter(n => !isNaN(n));
-    const n = (nums.length ? Math.max(...nums) : 0) + 1;
-    const prefix = kind === "video" ? "V" : "A";
-    const newId = `${prefix}${n}`;
-    const newTrack: Track = { id: newId, kind, label: `${newId} · ${kind === "video" ? "Vídeo" : "Áudio"}` };
+    const targetId = nextTrackIdFrom(src.trackId, kind);
     setTracks(prev => {
-      if (kind === "video") {
-        // acima de tudo: primeira posição (V1 fica abaixo das novas)
-        return [newTrack, ...prev];
-      }
-      // áudio: após a última trilha de áudio (fundo)
-      const out = [...prev];
-      let lastAudioIdx = -1;
-      for (let i = 0; i < out.length; i++) if (out[i].kind === "audio") lastAudioIdx = i;
-      if (lastAudioIdx < 0) out.push(newTrack); else out.splice(lastAudioIdx + 1, 0, newTrack);
-      return out;
+      if (prev.some(t => t.id === targetId && t.kind === kind)) return prev;
+      const newTrack: Track = { id: targetId, kind, label: `${targetId} · ${kind === "video" ? "Vídeo" : "Áudio"}` };
+      return orderTracksFromCenter([...prev, newTrack]);
     });
-    const it: TLItem = { ...src, id: crypto.randomUUID(), start: playhead, fadeIn: 0, fadeOut: 0, trackId: newId };
+    const it: TLItem = { ...src, id: crypto.randomUUID(), start: playhead, fadeIn: 0, fadeOut: 0, trackId: targetId };
     setItems(prev => [...prev, it]);
     setSelectedId(it.id);
   };
@@ -1930,7 +1931,9 @@ function Editor() {
             const minI = sameKindIdxs[0].i;
             const maxI = sameKindIdxs[sameKindIdxs.length - 1].i;
             if (idx >= 0 && idx < currentTracks.length && currentTracks[idx].kind === wantKind) newTrackId = currentTracks[idx].id;
-            else if (idx > maxI) newTrackId = ensureTrack(wantKind);
+            else if (wantKind === "video" && idx < minI) newTrackId = ensureTrack("video");
+            else if (wantKind === "video" && idx > maxI) newTrackId = currentTracks[maxI].id;
+            else if (wantKind === "audio" && idx > maxI) newTrackId = ensureTrack("audio");
             else if (idx < minI) newTrackId = currentTracks[minI].id;
           }
         }

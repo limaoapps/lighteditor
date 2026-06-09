@@ -1503,7 +1503,7 @@ function Editor() {
       setError("Não foi possível acessar o microfone: " + (err instanceof Error ? err.message : String(err)));
       setRecording(false);
     }
-  }, [recording, stopMicRecording, playhead, addAssetToTimeline]);
+  }, [recording, stopMicRecording, playhead, addAssetToTimeline, ensureTrack]);
 
   // Cleanup ao desmontar
   useEffect(() => () => {

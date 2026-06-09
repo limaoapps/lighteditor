@@ -3267,17 +3267,17 @@ function Editor() {
                       { v: "none",       l: "Original" },
                       { v: "robot",      l: "Robô" },
                       { v: "monster",    l: "Monstro" },
+                      { v: "demon",      l: "Diabólica" },
                       { v: "alien",      l: "ET" },
                       { v: "megaphone",  l: "Megafone" },
-                      { v: "telephone",  l: "Telefone" },
                       { v: "radio",      l: "Rádio" },
-                      { v: "whisper",    l: "Sussurro" },
-                      { v: "demon",      l: "Demônio" },
+                      { v: "telephone",  l: "Telefone" },
+                      { v: "child",      l: "Criança" },
+                      { v: "helium",     l: "Helio" },
                       { v: "ghost",      l: "Fantasma" },
-                      { v: "underwater", l: "Submerso" },
-                      { v: "chipmunk",   l: "Esquilo" },
+                      { v: "cave",       l: "Caverna" },
                     ] as { v: VoicePreset; l: string }[]).map(p => (
-                      <button key={p.v} onClick={() => patchAfx({ voicePreset: p.v })}
+                      <button key={p.v} onClick={() => patchAfx({ voicePreset: p.v, voiceParams: { ...defaultVoiceParams(p.v as VoiceEffectName), intensity: 1 } })}
                         className={`rounded-md border px-1.5 py-1 text-[10px] ${ (afx.voicePreset ?? "none") === p.v ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
                         {p.l}
                       </button>

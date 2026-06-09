@@ -1397,7 +1397,7 @@ function Editor() {
 
   const addAssetToTimeline = useCallback((asset: MediaAsset, opts?: { trackId?: string; start?: number; duration?: number }) => {
     const wantKind: TrackKind = asset.kind === "audio" ? "audio" : "video";
-    const findMain = (k: TrackKind) => k === "video" ? tracks.findLast?.(t => t.kind === "video")?.id ?? [...tracks].reverse().find(t => t.kind === "video")?.id : tracks.find(t => t.kind === "audio")?.id;
+    const findMain = (k: TrackKind) => k === "video" ? [...tracks].reverse().find(t => t.kind === "video")?.id : tracks.find(t => t.kind === "audio")?.id;
     const targetTrack = opts?.trackId && tracks.find(t => t.id === opts.trackId)?.kind === wantKind
       ? opts.trackId
       : (findMain(wantKind) ?? ensureTrack(wantKind));

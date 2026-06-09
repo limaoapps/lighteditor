@@ -1615,14 +1615,12 @@ function Editor() {
     // Cola na próxima trilha a partir do meio: V1→V2→V3 sobe; A1→A2→A3 desce.
     const kind: TrackKind = src.kind === "audio" ? "audio" : "video";
     const targetId = nextTrackIdFrom(src.trackId, kind);
-    const hasTargetTrack = tracks.some(t => t.id === targetId && t.kind === kind);
     setTracks(prev => {
       if (prev.some(t => t.id === targetId && t.kind === kind)) return prev;
       const newTrack: Track = { id: targetId, kind, label: `${targetId} · ${kind === "video" ? "Vídeo" : "Áudio"}` };
       return orderTracksFromCenter([...prev, newTrack]);
     });
-    const fallbackId = hasTargetTrack ? targetId : targetId;
-    const it: TLItem = { ...src, id: crypto.randomUUID(), start: playhead, fadeIn: 0, fadeOut: 0, trackId: fallbackId };
+    const it: TLItem = { ...src, id: crypto.randomUUID(), start: playhead, fadeIn: 0, fadeOut: 0, trackId: targetId };
     setItems(prev => [...prev, it]);
     setSelectedId(it.id);
   };

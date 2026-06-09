@@ -354,6 +354,7 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
   let lastReverbPreset: ReverbPreset = "none";
   let lastAmb: Ambience = "none";
   let lastVoice: VoicePreset = "none";
+  let lastVoiceParamsKey = "";
 
   const api: AudioFxNodes = {
     input, output: muteGain, splitter,

@@ -1931,7 +1931,9 @@ function Editor() {
             const minI = sameKindIdxs[0].i;
             const maxI = sameKindIdxs[sameKindIdxs.length - 1].i;
             if (idx >= 0 && idx < currentTracks.length && currentTracks[idx].kind === wantKind) newTrackId = currentTracks[idx].id;
-            else if (idx > maxI) newTrackId = ensureTrack(wantKind);
+            else if (wantKind === "video" && idx < minI) newTrackId = ensureTrack("video");
+            else if (wantKind === "video" && idx > maxI) newTrackId = currentTracks[maxI].id;
+            else if (wantKind === "audio" && idx > maxI) newTrackId = ensureTrack("audio");
             else if (idx < minI) newTrackId = currentTracks[minI].id;
           }
         }

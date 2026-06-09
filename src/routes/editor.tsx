@@ -1612,27 +1612,17 @@ function Editor() {
   };
   const pasteClip = () => {
     const src = clipboardRef.current; if (!src) return;
-    // Cria uma nova trilha automaticamente: vídeo/imagem acima das demais; áudio abaixo.
+    // Cola na próxima trilha a partir do meio: V1→V2→V3 sobe; A1→A2→A3 desce.
     const kind: TrackKind = src.kind === "audio" ? "audio" : "video";
-    const sameKind = tracks.filter(t => t.kind === kind);
-    const nums = sameKind.map(t => parseInt(t.id.slice(1), 10)).filter(n => !isNaN(n));
-    const n = (nums.length ? Math.max(...nums) : 0) + 1;
-    const prefix = kind === "video" ? "V" : "A";
-    const newId = `${prefix}${n}`;
-    const newTrack: Track = { id: newId, kind, label: `${newId} · ${kind === "video" ? "Vídeo" : "Áudio"}` };
+    const targetId = nextTrackIdFrom(src.trackId, kind);
+    const hasTargetTrack = tracks.some(t => t.id === targetId && t.kind === kind);
     setTracks(prev => {
-      if (kind === "video") {
-        // acima de tudo: primeira posição (V1 fica abaixo das novas)
-        return [newTrack, ...prev];
-      }
-      // áudio: após a última trilha de áudio (fundo)
-      const out = [...prev];
-      let lastAudioIdx = -1;
-      for (let i = 0; i < out.length; i++) if (out[i].kind === "audio") lastAudioIdx = i;
-      if (lastAudioIdx < 0) out.push(newTrack); else out.splice(lastAudioIdx + 1, 0, newTrack);
-      return out;
+      if (prev.some(t => t.id === targetId && t.kind === kind)) return prev;
+      const newTrack: Track = { id: targetId, kind, label: `${targetId} · ${kind === "video" ? "Vídeo" : "Áudio"}` };
+      return orderTracksFromCenter([...prev, newTrack]);
     });
-    const it: TLItem = { ...src, id: crypto.randomUUID(), start: playhead, fadeIn: 0, fadeOut: 0, trackId: newId };
+    const fallbackId = hasTargetTrack ? targetId : targetId;
+    const it: TLItem = { ...src, id: crypto.randomUUID(), start: playhead, fadeIn: 0, fadeOut: 0, trackId: fallbackId };
     setItems(prev => [...prev, it]);
     setSelectedId(it.id);
   };

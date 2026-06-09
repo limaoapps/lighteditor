@@ -3939,6 +3939,12 @@ function Editor() {
                                         <Waveform url={i.url} inPoint={i.inPoint} outPoint={i.outPoint} color={i.kind === "audio" ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.45)"} />
                                       </div>
                                     )}
+                                    {audioFiW > 0 && (
+                                      <div className="pointer-events-none absolute inset-y-0 left-0 z-[6]" style={{ width: audioFiW, background: "linear-gradient(to right, rgba(253,224,71,0.55), rgba(253,224,71,0.18) 60%, transparent)" }} />
+                                    )}
+                                    {audioFoW > 0 && (
+                                      <div className="pointer-events-none absolute inset-y-0 right-0 z-[6]" style={{ width: audioFoW, background: "linear-gradient(to left, rgba(253,224,71,0.55), rgba(253,224,71,0.18) 60%, transparent)" }} />
+                                    )}
                                     <svg className="pointer-events-none absolute inset-0 z-10 h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
                                       <polyline
                                         points={`0,50 ${fiPct},${gainTopPct} ${100 - foPct},${gainTopPct} 100,50`}

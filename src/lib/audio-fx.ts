@@ -437,9 +437,11 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
       }
       // Voice preset (modular — reconstrói o sub-grafo de DSP)
       const vp: VoicePreset = fx.voicePreset ?? "none";
-      if (vp !== lastVoice) {
+      const paramsKey = JSON.stringify(fx.voiceParams ?? {});
+      if (vp !== lastVoice || paramsKey !== lastVoiceParamsKey) {
         lastVoice = vp;
-        installVoiceEffect(vp);
+        lastVoiceParamsKey = paramsKey;
+        installVoiceEffect(vp, fx.voiceParams);
         // compensação de volume opcional para efeitos com clipping forte
         const s = vp !== "none" ? VOICE_SPECS[vp] : null;
         voiceOutGain.gain.value = s ? dbToGain(s.outGainDb) : 1;

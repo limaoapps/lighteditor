@@ -412,11 +412,11 @@ function MasterFader({ label, db, setDb, peak, clip, onClearClip }: {
           />
         </div>
       </div>
-      <div className={`shrink-0 font-mono text-[9px] tabular-nums ${labelColor}`}>
+      <div className={`shrink-0 font-mono text-[12px] font-semibold tabular-nums ${labelColor}`}>
         {db > 0 ? "+" : ""}{db.toFixed(1)}
       </div>
-      <div className="shrink-0 font-mono text-[8px] text-muted-foreground">pk {peakDbLabel}</div>
-      <div className="shrink-0 text-[9px] font-bold text-muted-foreground">{label}</div>
+      <div className="shrink-0 font-mono text-[10px] text-muted-foreground">pk {peakDbLabel}</div>
+      <div className="shrink-0 text-[12px] font-bold text-muted-foreground">{label}</div>
     </div>
   );
 }

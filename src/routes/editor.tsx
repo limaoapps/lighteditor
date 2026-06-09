@@ -910,7 +910,7 @@ function Editor() {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recordChunksRef = useRef<Blob[]>([]);
   const recordStreamRef = useRef<MediaStream | null>(null);
-  const recordStartRef = useRef<{ playhead: number; time: number } | null>(null);
+  const recordStartRef = useRef<{ playhead: number; time: number; trackId: string } | null>(null);
   const recordTimerRef = useRef<number | null>(null);
   const [postBeep, setPostBeep] = useState(true);
   const [showExportLog, setShowExportLog] = useState(false);

@@ -226,6 +226,20 @@ type TLItem = {
 
 type Track = { id: string; kind: TrackKind; label: string };
 
+const trackNumber = (track: Track) => {
+  const n = parseInt(track.id.slice(1), 10);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const orderTracksFromCenter = (tracks: Track[]) => {
+  const videos = tracks.filter(t => t.kind === "video").sort((a, b) => trackNumber(b) - trackNumber(a));
+  const audios = tracks.filter(t => t.kind === "audio").sort((a, b) => trackNumber(a) - trackNumber(b));
+  return [...videos, ...audios];
+};
+
+const sameTrackOrder = (a: Track[], b: Track[]) =>
+  a.length === b.length && a.every((track, index) => track.id === b[index]?.id);
+
 type AspectKey = "16:9" | "9:16" | "1:1" | "4:3" | "custom";
 const ASPECTS: Record<AspectKey, { w: number; h: number; label: string }> = {
   "16:9": { w: 16, h: 9, label: "16:9 · YouTube" },
@@ -236,8 +250,8 @@ const ASPECTS: Record<AspectKey, { w: number; h: number; label: string }> = {
 };
 
 const INITIAL_TRACKS: Track[] = [
-  { id: "V1", kind: "video", label: "V1 · Vídeo" },
   { id: "V2", kind: "video", label: "V2 · Vídeo" },
+  { id: "V1", kind: "video", label: "V1 · Vídeo" },
   { id: "A1", kind: "audio", label: "A1 · Áudio" },
   { id: "A2", kind: "audio", label: "A2 · Áudio" },
 ];

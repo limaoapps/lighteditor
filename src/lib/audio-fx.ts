@@ -6,7 +6,7 @@
  * (via OfflineAudioContext). Para FFmpeg WASM, ver `buildAudioFilterChain`.
  */
 
-import { createVoiceEffect, type VoiceEffectName } from "./audio-effects";
+import { createVoiceEffect, defaultVoiceParams, type VoiceEffectName, type VoiceEffectParams } from "./audio-effects";
 
 /** Mapeia presets de voz (incluindo legados) para o efeito modular correspondente. */
 function mapVoicePresetToEffect(vp: VoicePreset | undefined | null): VoiceEffectName {
@@ -62,6 +62,7 @@ export type AudioFx = {
   stereoWidth: number; // 0..200 (%)
   positionDepth: number; // -1 (Frente) .. 1 (Trás)
   voicePreset?: VoicePreset; // efeito de voz
+  voiceParams?: VoiceEffectParams; // parâmetros do efeito de voz (intensidades)
 };
 
 
@@ -79,6 +80,7 @@ export const DEFAULT_AUDIO_FX: AudioFx = {
   stereoWidth: 100,
   positionDepth: 0,
   voicePreset: "none",
+  voiceParams: {},
 };
 
 
@@ -312,7 +314,7 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
   const voiceIn = ctx.createGain(); voiceIn.gain.value = 1;
   const voiceOutGain = ctx.createGain(); voiceOutGain.gain.value = 1;
   let currentVoiceNode: { input: AudioNode; output: AudioNode; dispose: () => void } | null = null;
-  const installVoiceEffect = (preset: VoicePreset) => {
+  const installVoiceEffect = (preset: VoicePreset, params?: VoiceEffectParams) => {
     // desconecta o anterior
     if (currentVoiceNode) {
       try { voiceIn.disconnect(currentVoiceNode.input); } catch { /* ignore */ }
@@ -322,7 +324,9 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
     }
     // mapeia o preset para os efeitos modulares; alguns legados ficam como "normal"
     const name = mapVoicePresetToEffect(preset);
-    const node = createVoiceEffect(ctx, name);
+    // Mescla defaults com params do usuário para garantir intensidades válidas.
+    const mergedParams = { ...defaultVoiceParams(name), ...(params ?? {}) };
+    const node = createVoiceEffect(ctx, name, mergedParams);
     voiceIn.connect(node.input);
     node.output.connect(voiceOutGain);
     currentVoiceNode = node;
@@ -350,6 +354,7 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
   let lastReverbPreset: ReverbPreset = "none";
   let lastAmb: Ambience = "none";
   let lastVoice: VoicePreset = "none";
+  let lastVoiceParamsKey = "";
 
   const api: AudioFxNodes = {
     input, output: muteGain, splitter,
@@ -432,9 +437,11 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
       }
       // Voice preset (modular — reconstrói o sub-grafo de DSP)
       const vp: VoicePreset = fx.voicePreset ?? "none";
-      if (vp !== lastVoice) {
+      const paramsKey = JSON.stringify(fx.voiceParams ?? {});
+      if (vp !== lastVoice || paramsKey !== lastVoiceParamsKey) {
         lastVoice = vp;
-        installVoiceEffect(vp);
+        lastVoiceParamsKey = paramsKey;
+        installVoiceEffect(vp, fx.voiceParams);
         // compensação de volume opcional para efeitos com clipping forte
         const s = vp !== "none" ? VOICE_SPECS[vp] : null;
         voiceOutGain.gain.value = s ? dbToGain(s.outGainDb) : 1;

@@ -19,6 +19,7 @@ import {
   type ChannelMode,
   type VoicePreset,
 } from "@/lib/audio-fx";
+import { VOICE_PARAM_DEFS, defaultVoiceParams, type VoiceEffectName } from "@/lib/audio-effects";
 import { computeItemBounds } from "@/lib/scene-geometry";
 import { PreviewCanvas } from "@/components/editor/PreviewCanvas";
 import { Waveform } from "@/components/editor/Waveform";
@@ -747,12 +748,13 @@ function computeVisualOpacity(i: TLItem, t: number): number {
 
 function getAudioFadeIn(i: TLItem): number {
   if (typeof i.audioFadeIn === "number") return i.audioFadeIn;
-  return i.kind === "audio" ? (i.fadeIn ?? 0) : 0;
+  // Vídeos com áudio também respeitam o fade visual como fade de áudio (NLE-style).
+  return (i.kind === "audio" || i.kind === "video") ? (i.fadeIn ?? 0) : 0;
 }
 
 function getAudioFadeOut(i: TLItem): number {
   if (typeof i.audioFadeOut === "number") return i.audioFadeOut;
-  return i.kind === "audio" ? (i.fadeOut ?? 0) : 0;
+  return (i.kind === "audio" || i.kind === "video") ? (i.fadeOut ?? 0) : 0;
 }
 
 function computeZoomScale(fx: Fx | undefined, localT: number, dur: number): number {
@@ -1411,9 +1413,10 @@ function Editor() {
   const addAssetToTimeline = useCallback((asset: MediaAsset, opts?: { trackId?: string; start?: number; duration?: number }) => {
     const wantKind: TrackKind = asset.kind === "audio" ? "audio" : "video";
     const findMain = (k: TrackKind) => k === "video" ? [...tracks].reverse().find(t => t.kind === "video")?.id : tracks.find(t => t.kind === "audio")?.id;
-    const targetTrack = opts?.trackId && tracks.find(t => t.id === opts.trackId)?.kind === wantKind
-      ? opts.trackId
-      : (findMain(wantKind) ?? ensureTrack(wantKind));
+    // Confia no trackId fornecido pelo chamador (ex.: gravação de microfone
+    // criou a faixa via ensureTrack imediatamente antes — pode não estar no
+    // snapshot de `tracks` capturado por esta closure).
+    const targetTrack = opts?.trackId ?? (findMain(wantKind) ?? ensureTrack(wantKind));
     const defaultStart = items.filter(i => i.trackId === targetTrack)
       .reduce((m, i) => Math.max(m, i.start + (i.outPoint - i.inPoint)), 0);
     const start = opts?.start != null ? Math.max(0, opts.start) : defaultStart;
@@ -3275,7 +3278,51 @@ function Editor() {
                       </button>
                     ))}
                   </div>
+                  {(() => {
+                    const vpName = (afx.voicePreset ?? "none") as VoiceEffectName | "none" | "whisper" | "chipmunk" | "underwater" | "ghost";
+                    const mapName: Record<string, VoiceEffectName> = {
+                      robot: "robot", monster: "monster", demon: "demon", megaphone: "megaphone",
+                      radio: "radio", telephone: "telephone", alien: "alien",
+                      whisper: "telephone", chipmunk: "alien", underwater: "monster", ghost: "demon",
+                    };
+                    const effectiveName = mapName[vpName as string];
+                    const defs = effectiveName ? VOICE_PARAM_DEFS[effectiveName] : undefined;
+                    if (!defs || defs.length === 0) return null;
+                    const currentParams = afx.voiceParams ?? defaultVoiceParams(effectiveName);
+                    return (
+                      <div className="mt-2 space-y-1.5 rounded-md border border-border/60 bg-muted/20 p-2">
+                        <div className="flex items-center justify-between">
+                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Parâmetros do efeito</div>
+                          <button
+                            onClick={() => patchAfx({ voiceParams: defaultVoiceParams(effectiveName) })}
+                            className="text-[10px] text-muted-foreground hover:text-primary"
+                          >
+                            reset
+                          </button>
+                        </div>
+                        {defs.map(def => {
+                          const val = typeof currentParams[def.key] === "number" ? currentParams[def.key] : def.default;
+                          return (
+                            <label key={def.key} className="flex items-center gap-2 text-[11px]">
+                              <span className="w-20 truncate text-muted-foreground">{def.label}</span>
+                              <input
+                                type="range"
+                                min={def.min} max={def.max} step={def.step} value={val}
+                                onChange={(e) => patchAfx({ voiceParams: { ...currentParams, [def.key]: Number(e.target.value) } })}
+                                onDoubleClick={() => patchAfx({ voiceParams: { ...currentParams, [def.key]: def.default } })}
+                                className="flex-1 accent-[color:var(--primary)]"
+                              />
+                              <span className="w-12 text-right font-mono tabular-nums">
+                                {def.step >= 1 ? val.toFixed(0) : val.toFixed(2)}{def.unit ?? ""}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
+
 
                 <div className="border-t border-border pt-2">
                   <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Reverb</div>

@@ -22,13 +22,72 @@ export type VoiceEffectName =
   | "telephone"
   | "alien";
 
+export type VoiceEffectParams = Record<string, number>;
+
 export type VoiceEffectNode = {
   input: AudioNode;
   output: AudioNode;
   dispose: () => void;
 };
 
-export type VoiceEffectFactory = (ctx: BaseAudioContext) => VoiceEffectNode;
+export type VoiceEffectFactory = (ctx: BaseAudioContext, params?: VoiceEffectParams) => VoiceEffectNode;
+
+/** Definição dos parâmetros expostos para a UI por preset. */
+export type VoiceParamDef = {
+  key: string;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  default: number;
+  unit?: string;
+};
+
+export const VOICE_PARAM_DEFS: Partial<Record<VoiceEffectName, VoiceParamDef[]>> = {
+  radio: [
+    { key: "noise", label: "Ruído", min: 0, max: 1, step: 0.01, default: 0.25, unit: "" },
+    { key: "drive", label: "Distorção", min: 0, max: 1, step: 0.01, default: 0.18 },
+  ],
+  alien: [
+    { key: "pitch", label: "Pitch", min: -12, max: 12, step: 1, default: 5, unit: "st" },
+    { key: "phaserDepth", label: "Phaser", min: 0, max: 1, step: 0.01, default: 0.7 },
+    { key: "phaserRate", label: "Phaser Hz", min: 0.05, max: 4, step: 0.05, default: 0.6 },
+    { key: "chorusDepth", label: "Chorus", min: 0, max: 1, step: 0.01, default: 0.6 },
+    { key: "chorusRate", label: "Chorus Hz", min: 0.1, max: 6, step: 0.1, default: 1.4 },
+  ],
+  robot: [
+    { key: "ringHz", label: "Ring Hz", min: 10, max: 200, step: 1, default: 50 },
+    { key: "drive", label: "Distorção", min: 0, max: 1, step: 0.01, default: 0.35 },
+  ],
+  monster: [
+    { key: "pitch", label: "Pitch", min: -24, max: 0, step: 1, default: -8, unit: "st" },
+    { key: "drive", label: "Distorção", min: 0, max: 1, step: 0.01, default: 0.55 },
+  ],
+  demon: [
+    { key: "pitch", label: "Pitch", min: -24, max: 0, step: 1, default: -12, unit: "st" },
+    { key: "reverb", label: "Reverb", min: 0, max: 1, step: 0.01, default: 0.65 },
+    { key: "drive", label: "Distorção", min: 0, max: 1, step: 0.01, default: 0.45 },
+  ],
+  megaphone: [
+    { key: "drive", label: "Distorção", min: 0, max: 1, step: 0.01, default: 0.22 },
+  ],
+  telephone: [
+    { key: "lowCut", label: "Corte grave Hz", min: 200, max: 800, step: 10, default: 400 },
+    { key: "highCut", label: "Corte agudo Hz", min: 1500, max: 5000, step: 50, default: 3000 },
+  ],
+};
+
+export function defaultVoiceParams(name: VoiceEffectName | string | null | undefined): VoiceEffectParams {
+  const defs = (name && isVoiceEffectName(name)) ? VOICE_PARAM_DEFS[name] : undefined;
+  const out: VoiceEffectParams = {};
+  if (defs) for (const d of defs) out[d.key] = d.default;
+  return out;
+}
+
+function p(params: VoiceEffectParams | undefined, key: string, fallback: number): number {
+  const v = params?.[key];
+  return typeof v === "number" && !isNaN(v) ? v : fallback;
+}
 
 /* ============================================================
  * Building blocks
@@ -418,10 +477,10 @@ const normal: VoiceEffectFactory = (ctx) => {
 };
 
 /** Robô: Ring Modulation + Distortion + Compressor. */
-const robot: VoiceEffectFactory = (ctx) => {
-  const ring = createRingMod(ctx, 50, 1);
+const robot: VoiceEffectFactory = (ctx, params) => {
+  const ring = createRingMod(ctx, p(params, "ringHz", 50), 1);
   const dist = ctx.createWaveShaper();
-  dist.curve = makeDistortionCurve(0.35) as unknown as Float32Array<ArrayBuffer>;
+  dist.curve = makeDistortionCurve(p(params, "drive", 0.35)) as unknown as Float32Array<ArrayBuffer>;
   dist.oversample = "4x";
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -22;
@@ -441,8 +500,8 @@ const robot: VoiceEffectFactory = (ctx) => {
 };
 
 /** Monstro: Pitch -8 + Bass Boost + Distortion. */
-const monster: VoiceEffectFactory = (ctx) => {
-  const pitch = createPitchShift(ctx, -8);
+const monster: VoiceEffectFactory = (ctx, params) => {
+  const pitch = createPitchShift(ctx, p(params, "pitch", -8));
   const bass = ctx.createBiquadFilter();
   bass.type = "lowshelf";
   bass.frequency.value = 200;
@@ -451,7 +510,7 @@ const monster: VoiceEffectFactory = (ctx) => {
   lp.type = "lowpass";
   lp.frequency.value = 2200;
   const dist = ctx.createWaveShaper();
-  dist.curve = makeSoftClipCurve(0.55) as unknown as Float32Array<ArrayBuffer>;
+  dist.curve = makeSoftClipCurve(p(params, "drive", 0.55)) as unknown as Float32Array<ArrayBuffer>;
   dist.oversample = "4x";
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -18;
@@ -462,10 +521,10 @@ const monster: VoiceEffectFactory = (ctx) => {
 };
 
 /** Demônio: Pitch -12 + Reverb + Distortion. */
-const demon: VoiceEffectFactory = (ctx) => {
-  const pitch = createPitchShift(ctx, -12);
+const demon: VoiceEffectFactory = (ctx, params) => {
+  const pitch = createPitchShift(ctx, p(params, "pitch", -12));
   const dist = ctx.createWaveShaper();
-  dist.curve = makeSoftClipCurve(0.45) as unknown as Float32Array<ArrayBuffer>;
+  dist.curve = makeSoftClipCurve(p(params, "drive", 0.45)) as unknown as Float32Array<ArrayBuffer>;
   dist.oversample = "4x";
   const lowGrowl = ctx.createBiquadFilter();
   lowGrowl.type = "lowshelf";
@@ -479,9 +538,10 @@ const demon: VoiceEffectFactory = (ctx) => {
   const input = ctx.createGain();
   const output = ctx.createGain();
   const dry = ctx.createGain();
-  dry.gain.value = 0.55;
+  const wetAmt = Math.max(0, Math.min(1, p(params, "reverb", 0.65)));
+  dry.gain.value = 1 - wetAmt * 0.6;
   const wet = ctx.createGain();
-  wet.gain.value = 0.65;
+  wet.gain.value = wetAmt;
   const rev = createReverb(ctx, 3.0, 1.8, 0.35);
 
   const sub = chain(ctx, [pitch, lowGrowl, dist, lp]);
@@ -495,7 +555,7 @@ const demon: VoiceEffectFactory = (ctx) => {
 };
 
 /** Megafone: Band Pass + distorção leve. */
-const megaphone: VoiceEffectFactory = (ctx) => {
+const megaphone: VoiceEffectFactory = (ctx, params) => {
   const bp = ctx.createBiquadFilter();
   bp.type = "bandpass";
   bp.frequency.value = 1700;
@@ -506,7 +566,7 @@ const megaphone: VoiceEffectFactory = (ctx) => {
   peak.Q.value = 1.6;
   peak.gain.value = 6;
   const dist = ctx.createWaveShaper();
-  dist.curve = makeSoftClipCurve(0.22) as unknown as Float32Array<ArrayBuffer>;
+  dist.curve = makeSoftClipCurve(p(params, "drive", 0.22)) as unknown as Float32Array<ArrayBuffer>;
   dist.oversample = "2x";
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -18;
@@ -516,8 +576,8 @@ const megaphone: VoiceEffectFactory = (ctx) => {
   return chain(ctx, [bp, peak, dist, comp, trim]);
 };
 
-/** Rádio: High pass + Low pass + ruído sutil. */
-const radio: VoiceEffectFactory = (ctx) => {
+/** Rádio: High pass + Low pass + ruído ajustável. */
+const radio: VoiceEffectFactory = (ctx, params) => {
   const input = ctx.createGain();
   const output = ctx.createGain();
   const hp = ctx.createBiquadFilter();
@@ -532,7 +592,7 @@ const radio: VoiceEffectFactory = (ctx) => {
   peak.Q.value = 1.2;
   peak.gain.value = 4;
   const dist = ctx.createWaveShaper();
-  dist.curve = makeSoftClipCurve(0.18) as unknown as Float32Array<ArrayBuffer>;
+  dist.curve = makeSoftClipCurve(p(params, "drive", 0.18)) as unknown as Float32Array<ArrayBuffer>;
   dist.oversample = "2x";
 
   input.connect(hp);
@@ -541,7 +601,9 @@ const radio: VoiceEffectFactory = (ctx) => {
   peak.connect(dist);
   dist.connect(output);
 
-  const noise = createNoiseSource(ctx, 0.025);
+  // Nível de ruído: 0..1 mapeado para 0..0.18 amplitude (audível mas não estoura).
+  const noiseLevel = Math.max(0, Math.min(1, p(params, "noise", 0.25))) * 0.18;
+  const noise = createNoiseSource(ctx, noiseLevel);
   const nhp = ctx.createBiquadFilter();
   nhp.type = "highpass";
   nhp.frequency.value = 800;
@@ -552,24 +614,20 @@ const radio: VoiceEffectFactory = (ctx) => {
     input,
     output,
     dispose: () => {
-      try {
-        noise.source.stop();
-      } catch {
-        /* ignore */
-      }
+      try { noise.source.stop(); } catch { /* ignore */ }
     },
   };
 };
 
-/** Telefone: HP 400Hz + LP 3000Hz. */
-const telephone: VoiceEffectFactory = (ctx) => {
+/** Telefone: HP/LP ajustáveis. */
+const telephone: VoiceEffectFactory = (ctx, params) => {
   const hp = ctx.createBiquadFilter();
   hp.type = "highpass";
-  hp.frequency.value = 400;
+  hp.frequency.value = p(params, "lowCut", 400);
   hp.Q.value = 0.7;
   const lp = ctx.createBiquadFilter();
   lp.type = "lowpass";
-  lp.frequency.value = 3000;
+  lp.frequency.value = p(params, "highCut", 3000);
   lp.Q.value = 0.7;
   const peak = ctx.createBiquadFilter();
   peak.type = "peaking";
@@ -581,11 +639,15 @@ const telephone: VoiceEffectFactory = (ctx) => {
   return chain(ctx, [hp, lp, peak, trim]);
 };
 
-/** Alienígena: Pitch + Phaser + Chorus. */
-const alien: VoiceEffectFactory = (ctx) => {
-  const pitch = createPitchShift(ctx, 5);
-  const phaser = createPhaser(ctx, 0.6, 1000, 500, 4);
-  const chorus = createChorus(ctx, 1.4, 0.004, 0.018);
+/** Alienígena: Pitch + Phaser + Chorus (todos ajustáveis). */
+const alien: VoiceEffectFactory = (ctx, params) => {
+  const pitch = createPitchShift(ctx, p(params, "pitch", 5));
+  const phaserRate = p(params, "phaserRate", 0.6);
+  const phaserDepthRaw = Math.max(0, Math.min(1, p(params, "phaserDepth", 0.7)));
+  const phaser = createPhaser(ctx, phaserRate, 200 + phaserDepthRaw * 1200, 500, 4);
+  const chorusRate = p(params, "chorusRate", 1.4);
+  const chorusDepth = Math.max(0, Math.min(1, p(params, "chorusDepth", 0.6))) * 0.006;
+  const chorus = createChorus(ctx, chorusRate, chorusDepth, 0.018);
   const hp = ctx.createBiquadFilter();
   hp.type = "highpass";
   hp.frequency.value = 250;
@@ -613,7 +675,8 @@ export function isVoiceEffectName(v: string | null | undefined): v is VoiceEffec
 export function createVoiceEffect(
   ctx: BaseAudioContext,
   name: VoiceEffectName | string | null | undefined,
+  params?: VoiceEffectParams,
 ): VoiceEffectNode {
   if (!name || !isVoiceEffectName(name)) return voiceEffects.normal(ctx);
-  return voiceEffects[name](ctx);
+  return voiceEffects[name](ctx, params);
 }

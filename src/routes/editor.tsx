@@ -2429,13 +2429,18 @@ function Editor() {
     const longestAudioDur = droppedAssets
       .filter(asset => asset.kind === "audio")
       .reduce((m, asset) => Math.max(m, asset.duration || 0), 0);
+    const targetTrack = tracks.find(t => t.id === trackId);
+    const targetKind: TrackKind = targetTrack?.kind ?? "video";
+    const videoTargetId = targetKind === "video" ? trackId : (tracks.find(t => t.kind === "video")?.id ?? ensureTrack("video"));
+    const audioTargetId = targetKind === "audio" ? trackId : (tracks.find(t => t.kind === "audio")?.id ?? ensureTrack("audio"));
     const cursors: Record<TrackKind, number> = { video: start, audio: start };
     for (const mid of ids) {
       const asset = media.find(m => m.id === mid);
       if (!asset) continue;
       const laneKind: TrackKind = asset.kind === "audio" ? "audio" : "video";
+      const laneTrackId = laneKind === "audio" ? audioTargetId : videoTargetId;
       const duration = asset.kind === "image" && longestAudioDur > 0 ? longestAudioDur : undefined;
-      addAssetToTimeline(asset, { trackId, start: cursors[laneKind], duration });
+      addAssetToTimeline(asset, { trackId: laneTrackId, start: cursors[laneKind], duration });
       const dur = asset.kind === "image" ? (duration ?? Math.min(asset.duration || 5, 5)) : (asset.duration || 5);
       cursors[laneKind] += dur;
     }

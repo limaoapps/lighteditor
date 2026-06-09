@@ -18,11 +18,14 @@ function mapVoicePresetToEffect(vp: VoicePreset | undefined | null): VoiceEffect
     case "radio": return "radio";
     case "telephone": return "telephone";
     case "alien": return "alien";
-    // legados — mapeados para o mais próximo
+    case "child": return "child";
+    case "helium": return "helium";
+    case "ghost": return "ghost";
+    case "cave": return "cave";
+    // legados
     case "whisper": return "telephone";
-    case "chipmunk": return "alien";
+    case "chipmunk": return "helium";
     case "underwater": return "monster";
-    case "ghost": return "demon";
     default: return "normal";
   }
 }
@@ -46,7 +49,10 @@ export type VoicePreset =
   | "chipmunk"
   | "demon"
   | "underwater"
-  | "ghost";
+  | "ghost"
+  | "child"
+  | "helium"
+  | "cave";
 
 
 export type AudioFx = {
@@ -120,6 +126,9 @@ export const VOICE_SPECS: Record<Exclude<VoicePreset, "none">, VoiceSpec> = {
   demon:      { ringHz: 15,  ringDepth: 0.80, drive: 0.20, lowCutHz: 40,   highCutHz: 700,  bandQ: 1.1, wet: 1,    outGainDb: 2 },
   underwater: { ringHz: 0,   ringDepth: 0,    drive: 0,    lowCutHz: 80,   highCutHz: 500,  bandQ: 0.8, wet: 1,    outGainDb: 3 },
   ghost:      { ringHz: 7,   ringDepth: 0.45, drive: 0.05, lowCutHz: 200,  highCutHz: 4000, bandQ: 0.9, wet: 0.85, outGainDb: 0 },
+  child:      { ringHz: 0,   ringDepth: 0,    drive: 0,    lowCutHz: 200,  highCutHz: 8000, bandQ: 0.7, wet: 1,    outGainDb: 0 },
+  helium:     { ringHz: 0,   ringDepth: 0,    drive: 0,    lowCutHz: 300,  highCutHz: 10000,bandQ: 0.7, wet: 1,    outGainDb: -1 },
+  cave:       { ringHz: 0,   ringDepth: 0,    drive: 0,    lowCutHz: 80,   highCutHz: 4000, bandQ: 0.7, wet: 1,    outGainDb: 0 },
 };
 
 function makeDriveCurve(amount: number): Float32Array {
@@ -312,30 +321,31 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
   // O sub-grafo do efeito é construído dinamicamente pelo módulo audio-effects.ts
   // (mesmos nós usados em pré-visualização e exportação offline).
   const voiceIn = ctx.createGain(); voiceIn.gain.value = 1;
-  const voiceOutGain = ctx.createGain(); voiceOutGain.gain.value = 1;
+  const voiceWet = ctx.createGain(); voiceWet.gain.value = 1; // saída do efeito
+  const voiceDry = ctx.createGain(); voiceDry.gain.value = 0; // bypass original (para mix de intensidade)
+  const voiceOutGain = ctx.createGain(); voiceOutGain.gain.value = 1; // compensação de volume
   let currentVoiceNode: { input: AudioNode; output: AudioNode; dispose: () => void } | null = null;
   const installVoiceEffect = (preset: VoicePreset, params?: VoiceEffectParams) => {
-    // desconecta o anterior
     if (currentVoiceNode) {
       try { voiceIn.disconnect(currentVoiceNode.input); } catch { /* ignore */ }
-      try { currentVoiceNode.output.disconnect(voiceOutGain); } catch { /* ignore */ }
+      try { currentVoiceNode.output.disconnect(voiceWet); } catch { /* ignore */ }
       try { currentVoiceNode.dispose(); } catch { /* ignore */ }
       currentVoiceNode = null;
     }
-    // mapeia o preset para os efeitos modulares; alguns legados ficam como "normal"
     const name = mapVoicePresetToEffect(preset);
-    // Mescla defaults com params do usuário para garantir intensidades válidas.
     const mergedParams = { ...defaultVoiceParams(name), ...(params ?? {}) };
     const node = createVoiceEffect(ctx, name, mergedParams);
     voiceIn.connect(node.input);
-    node.output.connect(voiceOutGain);
+    node.output.connect(voiceWet);
     currentVoiceNode = node;
   };
-  // inicializa em "normal" para garantir caminho conectado mesmo sem preset
   installVoiceEffect("none");
 
-  // Conexão principal: input → voiceIn → (efeito) → voiceOutGain → depthFilter → ...
+  // Caminho: input → voiceIn → (efeito → voiceWet) || (voiceDry) → voiceOutGain → depthFilter
   input.connect(voiceIn);
+  voiceIn.connect(voiceDry);
+  voiceWet.connect(voiceOutGain);
+  voiceDry.connect(voiceOutGain);
   voiceOutGain.connect(depthFilter);
   depthFilter.connect(widthSplitter);
 
@@ -442,10 +452,16 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
         lastVoice = vp;
         lastVoiceParamsKey = paramsKey;
         installVoiceEffect(vp, fx.voiceParams);
-        // compensação de volume opcional para efeitos com clipping forte
         const s = vp !== "none" ? VOICE_SPECS[vp] : null;
         voiceOutGain.gain.value = s ? dbToGain(s.outGainDb) : 1;
       }
+      // Intensidade global do efeito de voz (wet/dry mix). 0..1 → 100% = efeito puro.
+      const intensityRaw = fx.voiceParams?.intensity;
+      const intensity = vp === "none"
+        ? 0
+        : (typeof intensityRaw === "number" ? Math.max(0, Math.min(1, intensityRaw)) : 1);
+      voiceWet.gain.value = intensity;
+      voiceDry.gain.value = vp === "none" ? 1 : (1 - intensity);
     },
     setMuted(m: boolean) { muteGain.gain.value = m ? 0 : 1; },
   };

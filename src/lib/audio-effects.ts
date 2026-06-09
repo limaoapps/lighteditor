@@ -20,7 +20,11 @@ export type VoiceEffectName =
   | "megaphone"
   | "radio"
   | "telephone"
-  | "alien";
+  | "alien"
+  | "child"
+  | "helium"
+  | "ghost"
+  | "cave";
 
 export type VoiceEffectParams = Record<string, number>;
 
@@ -74,6 +78,23 @@ export const VOICE_PARAM_DEFS: Partial<Record<VoiceEffectName, VoiceParamDef[]>>
   telephone: [
     { key: "lowCut", label: "Corte grave Hz", min: 200, max: 800, step: 10, default: 400 },
     { key: "highCut", label: "Corte agudo Hz", min: 1500, max: 5000, step: 50, default: 3000 },
+  ],
+  child: [
+    { key: "pitch", label: "Pitch", min: 1, max: 12, step: 1, default: 5, unit: "st" },
+  ],
+  helium: [
+    { key: "pitch", label: "Pitch", min: 6, max: 24, step: 1, default: 12, unit: "st" },
+  ],
+  ghost: [
+    { key: "echoDelay", label: "Echo (s)", min: 0.1, max: 1.5, step: 0.05, default: 0.45 },
+    { key: "echoFb", label: "Echo Fb", min: 0, max: 0.9, step: 0.05, default: 0.45 },
+    { key: "reverb", label: "Reverb", min: 0, max: 1, step: 0.01, default: 0.6 },
+    { key: "chorusDepth", label: "Chorus", min: 0, max: 1, step: 0.01, default: 0.5 },
+  ],
+  cave: [
+    { key: "size", label: "Tamanho", min: 0.3, max: 1, step: 0.01, default: 0.85 },
+    { key: "echoDelay", label: "Echo (s)", min: 0.1, max: 1.2, step: 0.05, default: 0.4 },
+    { key: "echoFb", label: "Echo Fb", min: 0, max: 0.85, step: 0.05, default: 0.5 },
   ],
 };
 
@@ -657,6 +678,85 @@ const alien: VoiceEffectFactory = (ctx, params) => {
   return chain(ctx, [pitch, phaser, chorus, hp, lp]);
 };
 
+/** Criança: pitch shift positivo discreto. */
+const child: VoiceEffectFactory = (ctx, params) => {
+  const pitch = createPitchShift(ctx, p(params, "pitch", 5));
+  const hp = ctx.createBiquadFilter();
+  hp.type = "highpass"; hp.frequency.value = 180;
+  const trim = ctx.createGain(); trim.gain.value = 0.95;
+  return chain(ctx, [pitch, hp, trim]);
+};
+
+/** Helio: pitch muito alto (efeito hélio). */
+const helium: VoiceEffectFactory = (ctx, params) => {
+  const pitch = createPitchShift(ctx, p(params, "pitch", 12));
+  const hp = ctx.createBiquadFilter();
+  hp.type = "highpass"; hp.frequency.value = 300;
+  const peak = ctx.createBiquadFilter();
+  peak.type = "peaking"; peak.frequency.value = 3500; peak.Q.value = 1.2; peak.gain.value = 4;
+  const trim = ctx.createGain(); trim.gain.value = 0.9;
+  return chain(ctx, [pitch, hp, peak, trim]);
+};
+
+/** Fantasma: echo + reverb + chorus (sobrenatural). */
+const ghost: VoiceEffectFactory = (ctx, params) => {
+  const input = ctx.createGain();
+  const output = ctx.createGain();
+  const delay = ctx.createDelay(2.0);
+  delay.delayTime.value = Math.max(0.05, p(params, "echoDelay", 0.45));
+  const fb = ctx.createGain();
+  fb.gain.value = Math.max(0, Math.min(0.9, p(params, "echoFb", 0.45)));
+  const dampLp = ctx.createBiquadFilter();
+  dampLp.type = "lowpass"; dampLp.frequency.value = 2200;
+  delay.connect(dampLp); dampLp.connect(fb); fb.connect(delay);
+
+  const chorusDepth = Math.max(0, Math.min(1, p(params, "chorusDepth", 0.5))) * 0.005;
+  const chorus = createChorus(ctx, 0.8, chorusDepth, 0.020);
+  const rev = createReverb(ctx, 3.5, 1.4, 0.35);
+  const revWet = ctx.createGain();
+  revWet.gain.value = Math.max(0, Math.min(1, p(params, "reverb", 0.6)));
+  const hp = ctx.createBiquadFilter();
+  hp.type = "highpass"; hp.frequency.value = 180;
+
+  input.connect(hp);
+  hp.connect(chorus.input);
+  chorus.output.connect(output);          // dry-ish (já com chorus)
+  chorus.output.connect(delay);            // alimenta echo
+  delay.connect(output);                   // echo seco
+  chorus.output.connect(rev);              // reverb
+  rev.connect(revWet); revWet.connect(output);
+
+  return { input, output, dispose: chorus.dispose };
+};
+
+/** Caverna: reverb longo + echo suave. */
+const cave: VoiceEffectFactory = (ctx, params) => {
+  const input = ctx.createGain();
+  const output = ctx.createGain();
+  const size = Math.max(0.3, Math.min(1, p(params, "size", 0.85)));
+  const rev = createReverb(ctx, 2.5 + size * 4.0, 0.8 + (1 - size) * 1.5, 0.18);
+  const revWet = ctx.createGain(); revWet.gain.value = 0.7;
+  const dry = ctx.createGain(); dry.gain.value = 0.55;
+  const lp = ctx.createBiquadFilter();
+  lp.type = "lowpass"; lp.frequency.value = 3200;
+
+  const delay = ctx.createDelay(2.0);
+  delay.delayTime.value = Math.max(0.05, p(params, "echoDelay", 0.4));
+  const fb = ctx.createGain();
+  fb.gain.value = Math.max(0, Math.min(0.85, p(params, "echoFb", 0.5)));
+  const damp = ctx.createBiquadFilter();
+  damp.type = "lowpass"; damp.frequency.value = 1800;
+  delay.connect(damp); damp.connect(fb); fb.connect(delay);
+  const echoWet = ctx.createGain(); echoWet.gain.value = 0.5;
+
+  input.connect(lp);
+  lp.connect(dry); dry.connect(output);
+  lp.connect(rev); rev.connect(revWet); revWet.connect(output);
+  lp.connect(delay); delay.connect(echoWet); echoWet.connect(output);
+
+  return { input, output, dispose: () => {} };
+};
+
 export const voiceEffects: Record<VoiceEffectName, VoiceEffectFactory> = {
   normal,
   robot,
@@ -666,6 +766,10 @@ export const voiceEffects: Record<VoiceEffectName, VoiceEffectFactory> = {
   radio,
   telephone,
   alien,
+  child,
+  helium,
+  ghost,
+  cave,
 };
 
 export function isVoiceEffectName(v: string | null | undefined): v is VoiceEffectName {

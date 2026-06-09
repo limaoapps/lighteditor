@@ -530,13 +530,13 @@ async function buildMixedAudio(opts: WCExportOptions, sampleRate: number): Promi
       ? buildAudioFxGraph(ac, { initialFx: item.audioFx, initialGainDb: 0 })
       : null;
     const dur = item.outPoint - item.inPoint;
-    // Envelope de ganho seguindo a linha amarela: 0dB nas bordas, gainDb no trecho central.
+    // Envelope de ganho: silêncio nas bordas (durante fade), gainDb no trecho central.
     const gainEnvelope = ac.createGain();
     const startT = item.start;
     const gainDb = item.gainDb ?? 0;
     const ducker = opts2.ducker ?? 1;
     const targetGain = dbToGain(gainDb) * ducker;
-    const edgeGain = ducker;
+    const SILENCE = 0.0001;
     const audioFadeIn = getAudioFadeIn(item);
     const audioFadeOut = getAudioFadeOut(item);
     const safeFadeIn = Math.max(0, Math.min(dur, audioFadeIn));
@@ -544,15 +544,15 @@ async function buildMixedAudio(opts: WCExportOptions, sampleRate: number): Promi
     const centerStart = startT + safeFadeIn;
     const centerEnd = startT + Math.max(safeFadeIn, dur - safeFadeOut);
     gainEnvelope.gain.cancelScheduledValues(0);
-    gainEnvelope.gain.setValueAtTime(edgeGain, startT);
     if (safeFadeIn > 0.01) {
-      gainEnvelope.gain.exponentialRampToValueAtTime(targetGain, centerStart);
+      gainEnvelope.gain.setValueAtTime(SILENCE, startT);
+      gainEnvelope.gain.exponentialRampToValueAtTime(Math.max(SILENCE, targetGain), centerStart);
     } else {
       gainEnvelope.gain.setValueAtTime(targetGain, startT);
     }
     gainEnvelope.gain.setValueAtTime(targetGain, centerEnd);
     if (safeFadeOut > 0.01) {
-      gainEnvelope.gain.exponentialRampToValueAtTime(edgeGain, startT + dur);
+      gainEnvelope.gain.exponentialRampToValueAtTime(SILENCE, startT + dur);
     }
     if (graph) {
       src.connect(graph.input);

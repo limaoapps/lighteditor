@@ -321,30 +321,31 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
   // O sub-grafo do efeito é construído dinamicamente pelo módulo audio-effects.ts
   // (mesmos nós usados em pré-visualização e exportação offline).
   const voiceIn = ctx.createGain(); voiceIn.gain.value = 1;
-  const voiceOutGain = ctx.createGain(); voiceOutGain.gain.value = 1;
+  const voiceWet = ctx.createGain(); voiceWet.gain.value = 1; // saída do efeito
+  const voiceDry = ctx.createGain(); voiceDry.gain.value = 0; // bypass original (para mix de intensidade)
+  const voiceOutGain = ctx.createGain(); voiceOutGain.gain.value = 1; // compensação de volume
   let currentVoiceNode: { input: AudioNode; output: AudioNode; dispose: () => void } | null = null;
   const installVoiceEffect = (preset: VoicePreset, params?: VoiceEffectParams) => {
-    // desconecta o anterior
     if (currentVoiceNode) {
       try { voiceIn.disconnect(currentVoiceNode.input); } catch { /* ignore */ }
-      try { currentVoiceNode.output.disconnect(voiceOutGain); } catch { /* ignore */ }
+      try { currentVoiceNode.output.disconnect(voiceWet); } catch { /* ignore */ }
       try { currentVoiceNode.dispose(); } catch { /* ignore */ }
       currentVoiceNode = null;
     }
-    // mapeia o preset para os efeitos modulares; alguns legados ficam como "normal"
     const name = mapVoicePresetToEffect(preset);
-    // Mescla defaults com params do usuário para garantir intensidades válidas.
     const mergedParams = { ...defaultVoiceParams(name), ...(params ?? {}) };
     const node = createVoiceEffect(ctx, name, mergedParams);
     voiceIn.connect(node.input);
-    node.output.connect(voiceOutGain);
+    node.output.connect(voiceWet);
     currentVoiceNode = node;
   };
-  // inicializa em "normal" para garantir caminho conectado mesmo sem preset
   installVoiceEffect("none");
 
-  // Conexão principal: input → voiceIn → (efeito) → voiceOutGain → depthFilter → ...
+  // Caminho: input → voiceIn → (efeito → voiceWet) || (voiceDry) → voiceOutGain → depthFilter
   input.connect(voiceIn);
+  voiceIn.connect(voiceDry);
+  voiceWet.connect(voiceOutGain);
+  voiceDry.connect(voiceOutGain);
   voiceOutGain.connect(depthFilter);
   depthFilter.connect(widthSplitter);
 

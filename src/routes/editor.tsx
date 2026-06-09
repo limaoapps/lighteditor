@@ -839,7 +839,13 @@ function Editor() {
   const aspect = aspectKey === "custom" ? customAR : ASPECTS[aspectKey];
 
   const [media, setMedia] = useState<MediaAsset[]>([]);
-  const [tracks, setTracks] = useState<Track[]>(INITIAL_TRACKS);
+  const [tracks, setTracks] = useState<Track[]>(() => orderTracksFromCenter(INITIAL_TRACKS));
+  useEffect(() => {
+    setTracks(prev => {
+      const ordered = orderTracksFromCenter(prev);
+      return sameTrackOrder(prev, ordered) ? prev : ordered;
+    });
+  }, []);
   const [items, setItemsRaw] = useState<TLItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const draggedTransitionRef = useRef<TransitionPreset | null>(null);

@@ -4558,6 +4558,8 @@ function Editor() {
                   </div>
                 )}
 
+                <div className="grid grid-cols-2 gap-3 mt-4">
+                  <button onClick={() => { splitAt(playhead, selected.id); setShowMobileInspector(false); }}
                     className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 shadow-sm active:bg-accent transition-colors">
                     <Scissors className="h-5 w-5 text-primary" />
                     <span className="text-xs font-bold">Dividir</span>

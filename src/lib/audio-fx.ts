@@ -452,10 +452,16 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
         lastVoice = vp;
         lastVoiceParamsKey = paramsKey;
         installVoiceEffect(vp, fx.voiceParams);
-        // compensação de volume opcional para efeitos com clipping forte
         const s = vp !== "none" ? VOICE_SPECS[vp] : null;
         voiceOutGain.gain.value = s ? dbToGain(s.outGainDb) : 1;
       }
+      // Intensidade global do efeito de voz (wet/dry mix). 0..1 → 100% = efeito puro.
+      const intensityRaw = fx.voiceParams?.intensity;
+      const intensity = vp === "none"
+        ? 0
+        : (typeof intensityRaw === "number" ? Math.max(0, Math.min(1, intensityRaw)) : 1);
+      voiceWet.gain.value = intensity;
+      voiceDry.gain.value = vp === "none" ? 1 : (1 - intensity);
     },
     setMuted(m: boolean) { muteGain.gain.value = m ? 0 : 1; },
   };

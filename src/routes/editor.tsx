@@ -2181,7 +2181,7 @@ function Editor() {
       return;
     }
 
-    const v1trackId = tracks.find(t => t.kind === "video")?.id;
+    const v1trackId = [...tracks].reverse().find(t => t.kind === "video")?.id;
     const v1clips = items
       .filter(i => i.trackId === v1trackId && i.kind === "video")
       .sort((a, b) => a.start - b.start);

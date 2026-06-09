@@ -18,11 +18,14 @@ function mapVoicePresetToEffect(vp: VoicePreset | undefined | null): VoiceEffect
     case "radio": return "radio";
     case "telephone": return "telephone";
     case "alien": return "alien";
-    // legados — mapeados para o mais próximo
+    case "child": return "child";
+    case "helium": return "helium";
+    case "ghost": return "ghost";
+    case "cave": return "cave";
+    // legados
     case "whisper": return "telephone";
-    case "chipmunk": return "alien";
+    case "chipmunk": return "helium";
     case "underwater": return "monster";
-    case "ghost": return "demon";
     default: return "normal";
   }
 }

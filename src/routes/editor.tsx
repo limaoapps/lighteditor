@@ -1465,6 +1465,7 @@ function Editor() {
           const url = URL.createObjectURL(blob);
           const dur = Math.max(0.1, (Date.now() - (recordStartRef.current?.time ?? Date.now())) / 1000);
           const startAt = recordStartRef.current?.playhead ?? 0;
+          const trackId = recordStartRef.current?.trackId;
           const asset: MediaAsset = {
             id: crypto.randomUUID(),
             kind: "audio",
@@ -1473,7 +1474,7 @@ function Editor() {
             duration: dur,
           };
           setMedia(prev => [...prev, asset]);
-          addAssetToTimeline(asset, { start: startAt, duration: dur });
+          addAssetToTimeline(asset, { start: startAt, duration: dur, trackId });
         } catch (err) {
           setError("Falha ao salvar gravação: " + (err instanceof Error ? err.message : String(err)));
         } finally {
@@ -1484,7 +1485,10 @@ function Editor() {
           recordStartRef.current = null;
         }
       };
-      recordStartRef.current = { playhead, time: Date.now() };
+      // Sempre cria uma nova trilha de áudio dedicada para a gravação,
+      // para não sobrepor o áudio do vídeo ou outras faixas existentes.
+      const recTrackId = ensureTrack("audio");
+      recordStartRef.current = { playhead, time: Date.now(), trackId: recTrackId };
       setRecElapsed(0);
       recordTimerRef.current = window.setInterval(() => {
         const t = recordStartRef.current?.time;
@@ -1493,6 +1497,8 @@ function Editor() {
       mr.start(100);
       recorderRef.current = mr;
       setRecording(true);
+      // Inicia o playback automaticamente ao começar a gravar.
+      setPlaying(true);
     } catch (err) {
       setError("Não foi possível acessar o microfone: " + (err instanceof Error ? err.message : String(err)));
       setRecording(false);

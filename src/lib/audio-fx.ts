@@ -314,7 +314,7 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
   const voiceIn = ctx.createGain(); voiceIn.gain.value = 1;
   const voiceOutGain = ctx.createGain(); voiceOutGain.gain.value = 1;
   let currentVoiceNode: { input: AudioNode; output: AudioNode; dispose: () => void } | null = null;
-  const installVoiceEffect = (preset: VoicePreset) => {
+  const installVoiceEffect = (preset: VoicePreset, params?: VoiceEffectParams) => {
     // desconecta o anterior
     if (currentVoiceNode) {
       try { voiceIn.disconnect(currentVoiceNode.input); } catch { /* ignore */ }
@@ -324,7 +324,9 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
     }
     // mapeia o preset para os efeitos modulares; alguns legados ficam como "normal"
     const name = mapVoicePresetToEffect(preset);
-    const node = createVoiceEffect(ctx, name);
+    // Mescla defaults com params do usuário para garantir intensidades válidas.
+    const mergedParams = { ...defaultVoiceParams(name), ...(params ?? {}) };
+    const node = createVoiceEffect(ctx, name, mergedParams);
     voiceIn.connect(node.input);
     node.output.connect(voiceOutGain);
     currentVoiceNode = node;

@@ -79,6 +79,23 @@ export const VOICE_PARAM_DEFS: Partial<Record<VoiceEffectName, VoiceParamDef[]>>
     { key: "lowCut", label: "Corte grave Hz", min: 200, max: 800, step: 10, default: 400 },
     { key: "highCut", label: "Corte agudo Hz", min: 1500, max: 5000, step: 50, default: 3000 },
   ],
+  child: [
+    { key: "pitch", label: "Pitch", min: 1, max: 12, step: 1, default: 5, unit: "st" },
+  ],
+  helium: [
+    { key: "pitch", label: "Pitch", min: 6, max: 24, step: 1, default: 12, unit: "st" },
+  ],
+  ghost: [
+    { key: "echoDelay", label: "Echo (s)", min: 0.1, max: 1.5, step: 0.05, default: 0.45 },
+    { key: "echoFb", label: "Echo Fb", min: 0, max: 0.9, step: 0.05, default: 0.45 },
+    { key: "reverb", label: "Reverb", min: 0, max: 1, step: 0.01, default: 0.6 },
+    { key: "chorusDepth", label: "Chorus", min: 0, max: 1, step: 0.01, default: 0.5 },
+  ],
+  cave: [
+    { key: "size", label: "Tamanho", min: 0.3, max: 1, step: 0.01, default: 0.85 },
+    { key: "echoDelay", label: "Echo (s)", min: 0.1, max: 1.2, step: 0.05, default: 0.4 },
+    { key: "echoFb", label: "Echo Fb", min: 0, max: 0.85, step: 0.05, default: 0.5 },
+  ],
 };
 
 export function defaultVoiceParams(name: VoiceEffectName | string | null | undefined): VoiceEffectParams {

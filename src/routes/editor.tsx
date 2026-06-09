@@ -1208,7 +1208,7 @@ function Editor() {
   const trackZ = useCallback((trackId: string): number => {
     const idx = videoTrackOrder.map[trackId];
     if (idx == null) return 2;
-    // V1 (idx 0) => maior zIndex; cada trilha abaixo recebe 2 níveis (bg + content)
+    // V3/V2 ficam acima de V1; cada trilha abaixo recebe 2 níveis (bg + content)
     return 10 + (videoTrackOrder.count - idx) * 2;
   }, [videoTrackOrder]);
 
@@ -1277,20 +1277,7 @@ function Editor() {
       const prefix = kind === "video" ? "V" : "A";
       id = `${prefix}${n}`;
       const newTrack: Track = { id, kind, label: `${id} · ${kind === "video" ? "Vídeo" : "Áudio"}` };
-      // Vídeo: nova trilha vai ACIMA (topo do grupo de vídeo => início do array).
-      // Áudio: nova trilha vai ABAIXO (fim do grupo de áudio).
-      if (kind === "video") {
-        const firstVideoIdx = prev.findIndex(t => t.kind === "video");
-        const insertAt = firstVideoIdx < 0 ? 0 : firstVideoIdx;
-        const out = [...prev];
-        out.splice(insertAt, 0, newTrack);
-        return out;
-      }
-      const out = [...prev];
-      let lastAudioIdx = -1;
-      for (let i = 0; i < out.length; i++) if (out[i].kind === "audio") lastAudioIdx = i;
-      if (lastAudioIdx < 0) out.push(newTrack); else out.splice(lastAudioIdx + 1, 0, newTrack);
-      return out;
+      return orderTracksFromCenter([...prev, newTrack]);
     });
     return id;
   }, []);
@@ -1305,7 +1292,7 @@ function Editor() {
       const newTrack: Track = { id, kind, label: `${id} · ${kind === "video" ? "Vídeo" : "Áudio"}` };
       const out = [...prev];
       out.splice(Math.max(0, Math.min(out.length, insertIndex)), 0, newTrack);
-      return out;
+      return orderTracksFromCenter(out);
     });
   }, []);
 

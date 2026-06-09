@@ -747,12 +747,13 @@ function computeVisualOpacity(i: TLItem, t: number): number {
 
 function getAudioFadeIn(i: TLItem): number {
   if (typeof i.audioFadeIn === "number") return i.audioFadeIn;
-  return i.kind === "audio" ? (i.fadeIn ?? 0) : 0;
+  // Vídeos com áudio também respeitam o fade visual como fade de áudio (NLE-style).
+  return (i.kind === "audio" || i.kind === "video") ? (i.fadeIn ?? 0) : 0;
 }
 
 function getAudioFadeOut(i: TLItem): number {
   if (typeof i.audioFadeOut === "number") return i.audioFadeOut;
-  return i.kind === "audio" ? (i.fadeOut ?? 0) : 0;
+  return (i.kind === "audio" || i.kind === "video") ? (i.fadeOut ?? 0) : 0;
 }
 
 function computeZoomScale(fx: Fx | undefined, localT: number, dur: number): number {

@@ -1257,18 +1257,19 @@ function Editor() {
       const prefix = kind === "video" ? "V" : "A";
       id = `${prefix}${n}`;
       const newTrack: Track = { id, kind, label: `${id} · ${kind === "video" ? "Vídeo" : "Áudio"}` };
-      // Insert at end of its kind group (video first, then audio)
-      const out: Track[] = [];
-      let inserted = false;
-      for (let i = 0; i < prev.length; i++) {
-        out.push(prev[i]);
-        const next = prev[i + 1];
-        if (!inserted && prev[i].kind === kind && (!next || next.kind !== kind)) {
-          out.push(newTrack);
-          inserted = true;
-        }
+      // Vídeo: nova trilha vai ACIMA (topo do grupo de vídeo => início do array).
+      // Áudio: nova trilha vai ABAIXO (fim do grupo de áudio).
+      if (kind === "video") {
+        const firstVideoIdx = prev.findIndex(t => t.kind === "video");
+        const insertAt = firstVideoIdx < 0 ? 0 : firstVideoIdx;
+        const out = [...prev];
+        out.splice(insertAt, 0, newTrack);
+        return out;
       }
-      if (!inserted) out.push(newTrack);
+      const out = [...prev];
+      let lastAudioIdx = -1;
+      for (let i = 0; i < out.length; i++) if (out[i].kind === "audio") lastAudioIdx = i;
+      if (lastAudioIdx < 0) out.push(newTrack); else out.splice(lastAudioIdx + 1, 0, newTrack);
       return out;
     });
     return id;
@@ -1396,9 +1397,10 @@ function Editor() {
 
   const addAssetToTimeline = useCallback((asset: MediaAsset, opts?: { trackId?: string; start?: number; duration?: number }) => {
     const wantKind: TrackKind = asset.kind === "audio" ? "audio" : "video";
+    const findMain = (k: TrackKind) => k === "video" ? [...tracks].reverse().find(t => t.kind === "video")?.id : tracks.find(t => t.kind === "audio")?.id;
     const targetTrack = opts?.trackId && tracks.find(t => t.id === opts.trackId)?.kind === wantKind
       ? opts.trackId
-      : (tracks.find(t => t.kind === wantKind)?.id ?? ensureTrack(wantKind));
+      : (findMain(wantKind) ?? ensureTrack(wantKind));
     const defaultStart = items.filter(i => i.trackId === targetTrack)
       .reduce((m, i) => Math.max(m, i.start + (i.outPoint - i.inPoint)), 0);
     const start = opts?.start != null ? Math.max(0, opts.start) : defaultStart;
@@ -1684,8 +1686,8 @@ function Editor() {
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [playing, totalDuration]);
 
-  // Active V1 (first video track) video for preview <video>
-  const firstVideoTrackId = tracks.find(t => t.kind === "video")?.id;
+  // Active V1 (bottom video track = main background) video for preview <video>
+  const firstVideoTrackId = [...tracks].reverse().find(t => t.kind === "video")?.id;
   const activeV1Video = useMemo(() => {
     if (!firstVideoTrackId) return null;
     return items.find(i =>
@@ -1807,7 +1809,7 @@ function Editor() {
   // Esta projeção é a MESMA usada pelo exportador (withPreviewGeometry).
   // ============================================================
   const previewScene = useMemo(() => {
-    const v1trackId = tracks.find(t => t.kind === "video")?.id;
+    const v1trackId = [...tracks].reverse().find(t => t.kind === "video")?.id;
     const toScene = <T extends TLItem>(c: T): CachedMediaItem & SceneItem => {
       const bounds = (c.kind === "video" || c.kind === "image") ? computeItemBounds(
         { kind: c.kind, width: c.width, height: c.height },
@@ -2179,7 +2181,7 @@ function Editor() {
       return;
     }
 
-    const v1trackId = tracks.find(t => t.kind === "video")?.id;
+    const v1trackId = [...tracks].reverse().find(t => t.kind === "video")?.id;
     const v1clips = items
       .filter(i => i.trackId === v1trackId && i.kind === "video")
       .sort((a, b) => a.start - b.start);
@@ -4455,6 +4457,103 @@ function Editor() {
                           <span className="text-[10px] font-bold text-muted-foreground">R</span>
                         </div>
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Visual params for image/video */}
+                {(selected.kind === "image" || selected.kind === "video") && selected.transform && selected.fx && (
+                  <div className="space-y-6">
+                    <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Maximize2 className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-semibold">Transformar</span>
+                      </div>
+                      {([
+                        { key: "scale" as const, label: "Escala", min: 0.1, max: 5, step: 0.01, reset: 1, fmt: (v: number) => v.toFixed(2) + "x" },
+                        { key: "rotation" as const, label: "Rotação", min: -180, max: 180, step: 1, reset: 0, fmt: (v: number) => v.toFixed(0) + "°" },
+                        { key: "xPct" as const, label: "Posição X", min: 0, max: 100, step: 0.5, reset: 50, fmt: (v: number) => v.toFixed(0) + "%" },
+                        { key: "yPct" as const, label: "Posição Y", min: 0, max: 100, step: 0.5, reset: 50, fmt: (v: number) => v.toFixed(0) + "%" },
+                      ]).map(p => (
+                        <div key={p.key} className="space-y-2">
+                          <div className="flex justify-between">
+                            <label className="text-[10px] uppercase font-bold text-muted-foreground">{p.label}</label>
+                            <span className="text-xs font-mono">{p.fmt(selected.transform?.[p.key] ?? p.reset)}</span>
+                          </div>
+                          <input type="range" min={p.min} max={p.max} step={p.step}
+                            value={selected.transform?.[p.key] ?? p.reset}
+                            onChange={(e) => { const v = Number(e.target.value); setItems(prev => prev.map(i => i.id === selected.id && i.transform ? { ...i, transform: { ...i.transform, [p.key]: v } } : i)); }}
+                            onDoubleClick={() => setItems(prev => prev.map(i => i.id === selected.id && i.transform ? { ...i, transform: { ...i.transform, [p.key]: p.reset } } : i))}
+                            className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Palette className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-semibold">Modo de Preenchimento</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {(["bars","blur","mirror","stretch","color"] as const).map(m => (
+                          <button key={m} onClick={() => setItems(p => p.map(i => i.id === selected.id && i.fx ? { ...i, fx: { ...i.fx, fillMode: m, ...(m === "blur" && i.fx.fillMode !== "blur" ? { blurBg: 30 } : {}) } } : i))}
+                            className={`rounded-lg border py-2 text-xs font-medium ${selected.fx?.fillMode === m ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground"}`}>
+                            {m === "bars" ? "Barras" : m === "blur" ? "Blur" : m === "mirror" ? "Espelho" : m === "stretch" ? "Esticar" : "Cor"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Sliders className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-semibold">Ajustes de Imagem</span>
+                      </div>
+                      {([
+                        { key: "opacity" as const, label: "Opacidade", min: 0, max: 100, suffix: "%" },
+                        { key: "brightness" as const, label: "Brilho", min: -100, max: 100 },
+                        { key: "contrast" as const, label: "Contraste", min: -100, max: 100 },
+                        { key: "saturation" as const, label: "Saturação", min: -100, max: 100 },
+                        { key: "temperature" as const, label: "Temperatura", min: -100, max: 100 },
+                        { key: "sharpness" as const, label: "Nitidez", min: 0, max: 100 },
+                        { key: "exposure" as const, label: "Exposição", min: -100, max: 100 },
+                        { key: "shadows" as const, label: "Sombras", min: -100, max: 100 },
+                        { key: "highlights" as const, label: "Realces", min: -100, max: 100 },
+                        { key: "blur" as const, label: "Blur", min: 0, max: 100 },
+                      ]).map(p => (
+                        <div key={p.key} className="space-y-2">
+                          <div className="flex justify-between">
+                            <label className="text-[10px] uppercase font-bold text-muted-foreground">{p.label}</label>
+                            <span className="text-xs font-mono">{(selected.fx?.[p.key] as number | undefined) ?? (p.key === "opacity" ? 100 : 0)}{p.suffix ?? ""}</span>
+                          </div>
+                          <input type="range" min={p.min} max={p.max}
+                            value={(selected.fx?.[p.key] as number | undefined) ?? (p.key === "opacity" ? 100 : 0)}
+                            onChange={(e) => { const v = Number(e.target.value); setItems(prev => prev.map(i => i.id === selected.id && i.fx ? { ...i, fx: { ...i.fx, [p.key]: v } } : i)); }}
+                            className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <RefreshCw className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-semibold">Fade In / Fade Out</span>
+                      </div>
+                      {([
+                        { key: "fadeIn" as const, label: "Fade In" },
+                        { key: "fadeOut" as const, label: "Fade Out" },
+                      ]).map(p => (
+                        <div key={p.key} className="space-y-2">
+                          <div className="flex justify-between">
+                            <label className="text-[10px] uppercase font-bold text-muted-foreground">{p.label}</label>
+                            <span className="text-xs font-mono">{((selected[p.key] as number | undefined) ?? 0).toFixed(2)}s</span>
+                          </div>
+                          <input type="range" min={0} max={5} step={0.05}
+                            value={(selected[p.key] as number | undefined) ?? 0}
+                            onChange={(e) => { const v = Number(e.target.value); setItems(prev => prev.map(i => i.id === selected.id ? { ...i, [p.key]: v } : i)); }}
+                            className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

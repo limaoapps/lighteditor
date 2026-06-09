@@ -3284,28 +3284,41 @@ function Editor() {
                     ))}
                   </div>
                   {(() => {
-                    const vpName = (afx.voicePreset ?? "none") as VoiceEffectName | "none" | "whisper" | "chipmunk" | "underwater" | "ghost";
+                    const vpName = (afx.voicePreset ?? "none") as string;
+                    if (vpName === "none") return null;
                     const mapName: Record<string, VoiceEffectName> = {
                       robot: "robot", monster: "monster", demon: "demon", megaphone: "megaphone",
                       radio: "radio", telephone: "telephone", alien: "alien",
-                      whisper: "telephone", chipmunk: "alien", underwater: "monster", ghost: "demon",
+                      child: "child", helium: "helium", ghost: "ghost", cave: "cave",
+                      whisper: "telephone", chipmunk: "helium", underwater: "monster",
                     };
-                    const effectiveName = mapName[vpName as string];
+                    const effectiveName = mapName[vpName];
                     const defs = effectiveName ? VOICE_PARAM_DEFS[effectiveName] : undefined;
-                    if (!defs || defs.length === 0) return null;
-                    const currentParams = afx.voiceParams ?? defaultVoiceParams(effectiveName);
+                    const currentParams = afx.voiceParams ?? { ...defaultVoiceParams(effectiveName), intensity: 1 };
+                    const intensity = typeof currentParams.intensity === "number" ? currentParams.intensity : 1;
                     return (
                       <div className="mt-2 space-y-1.5 rounded-md border border-border/60 bg-muted/20 p-2">
                         <div className="flex items-center justify-between">
                           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Parâmetros do efeito</div>
                           <button
-                            onClick={() => patchAfx({ voiceParams: defaultVoiceParams(effectiveName) })}
+                            onClick={() => patchAfx({ voiceParams: { ...defaultVoiceParams(effectiveName), intensity: 1 } })}
                             className="text-[10px] text-muted-foreground hover:text-primary"
                           >
                             reset
                           </button>
                         </div>
-                        {defs.map(def => {
+                        <label className="flex items-center gap-2 text-[11px]">
+                          <span className="w-20 truncate text-muted-foreground">Intensidade</span>
+                          <input
+                            type="range"
+                            min={0} max={1} step={0.01} value={intensity}
+                            onChange={(e) => patchAfx({ voiceParams: { ...currentParams, intensity: Number(e.target.value) } })}
+                            onDoubleClick={() => patchAfx({ voiceParams: { ...currentParams, intensity: 1 } })}
+                            className="flex-1 accent-[color:var(--primary)]"
+                          />
+                          <span className="w-12 text-right font-mono tabular-nums">{Math.round(intensity * 100)}%</span>
+                        </label>
+                        {(defs ?? []).map(def => {
                           const val = typeof currentParams[def.key] === "number" ? currentParams[def.key] : def.default;
                           return (
                             <label key={def.key} className="flex items-center gap-2 text-[11px]">

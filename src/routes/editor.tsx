@@ -1809,7 +1809,7 @@ function Editor() {
   // Esta projeção é a MESMA usada pelo exportador (withPreviewGeometry).
   // ============================================================
   const previewScene = useMemo(() => {
-    const v1trackId = tracks.find(t => t.kind === "video")?.id;
+    const v1trackId = [...tracks].reverse().find(t => t.kind === "video")?.id;
     const toScene = <T extends TLItem>(c: T): CachedMediaItem & SceneItem => {
       const bounds = (c.kind === "video" || c.kind === "image") ? computeItemBounds(
         { kind: c.kind, width: c.width, height: c.height },

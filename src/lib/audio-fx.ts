@@ -283,39 +283,32 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
   const out = ctx.createGain(); out.gain.value = 1;
   const muteGain = ctx.createGain(); muteGain.gain.value = 1;
 
-  // ===== Bloco de Voice FX (ring mod + drive + bandpass) =====
-  // input → voiceIn → [dry path] + [ring mod → shaper → highpass → lowpass] → voiceMix → depthFilter
+  // ===== Bloco de Voice FX (modular — voiceEffects DSP chain) =====
+  // input → voiceIn → [currentVoice.input → currentVoice.output] → voiceOutGain → depthFilter
+  // O sub-grafo do efeito é construído dinamicamente pelo módulo audio-effects.ts
+  // (mesmos nós usados em pré-visualização e exportação offline).
   const voiceIn = ctx.createGain(); voiceIn.gain.value = 1;
-  const voiceDry = ctx.createGain(); voiceDry.gain.value = 1;
-  const voiceWet = ctx.createGain(); voiceWet.gain.value = 0;
-  const voiceMix = ctx.createGain(); voiceMix.gain.value = 1;
   const voiceOutGain = ctx.createGain(); voiceOutGain.gain.value = 1;
+  let currentVoiceNode: { input: AudioNode; output: AudioNode; dispose: () => void } | null = null;
+  const installVoiceEffect = (preset: VoicePreset) => {
+    // desconecta o anterior
+    if (currentVoiceNode) {
+      try { voiceIn.disconnect(currentVoiceNode.input); } catch { /* ignore */ }
+      try { currentVoiceNode.output.disconnect(voiceOutGain); } catch { /* ignore */ }
+      try { currentVoiceNode.dispose(); } catch { /* ignore */ }
+      currentVoiceNode = null;
+    }
+    // mapeia o preset para os efeitos modulares; alguns legados ficam como "normal"
+    const name = mapVoicePresetToEffect(preset);
+    currentVoiceNode = createVoiceEffect(ctx, name);
+    voiceIn.connect(currentVoiceNode.input);
+    currentVoiceNode.output.connect(voiceOutGain);
+  };
+  // inicializa em "normal" para garantir caminho conectado mesmo sem preset
+  installVoiceEffect("none");
 
-  // Ring modulator: signal * (1 + osc*depth) via gain AudioParam.
-  // Importante: gain inicial = 0 (sem bias o gain dobraria o sinal mesmo sem voz).
-  const ringMult = ctx.createGain(); ringMult.gain.value = 0;
-  const ringBias = ctx.createConstantSource(); ringBias.offset.value = 1;
-  const ringOsc = ctx.createOscillator(); ringOsc.frequency.value = 50; ringOsc.type = "sine";
-  const ringDepth = ctx.createGain(); ringDepth.gain.value = 0;
-  ringBias.connect(ringMult.gain);
-  ringOsc.connect(ringDepth); ringDepth.connect(ringMult.gain);
-  try { ringBias.start(); ringOsc.start(); } catch { /* ignore */ }
-
-  const voiceShaper = ctx.createWaveShaper(); voiceShaper.curve = makeLinearCurve() as unknown as Float32Array<ArrayBuffer>; voiceShaper.oversample = "2x";
-  const voiceHp = ctx.createBiquadFilter(); voiceHp.type = "highpass"; voiceHp.frequency.value = 20; voiceHp.Q.value = 0.7;
-  const voiceLp = ctx.createBiquadFilter(); voiceLp.type = "lowpass"; voiceLp.frequency.value = 20000; voiceLp.Q.value = 0.7;
-
-  // Conexões: input → voiceIn → voiceDry → voiceMix
-  //                            → ringMult → voiceShaper → voiceHp → voiceLp → voiceWet → voiceMix
+  // Conexão principal: input → voiceIn → (efeito) → voiceOutGain → depthFilter → ...
   input.connect(voiceIn);
-  voiceIn.connect(voiceDry); voiceDry.connect(voiceMix);
-  voiceIn.connect(ringMult);
-  ringMult.connect(voiceShaper);
-  voiceShaper.connect(voiceHp); voiceHp.connect(voiceLp);
-  voiceLp.connect(voiceWet); voiceWet.connect(voiceMix);
-  voiceMix.connect(voiceOutGain);
-
-  // Conexões principais: voiceOutGain → depthFilter → widthSplitter ... → out → muteGain
   voiceOutGain.connect(depthFilter);
   depthFilter.connect(widthSplitter);
 

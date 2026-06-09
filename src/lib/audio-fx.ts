@@ -49,7 +49,10 @@ export type VoicePreset =
   | "chipmunk"
   | "demon"
   | "underwater"
-  | "ghost";
+  | "ghost"
+  | "child"
+  | "helium"
+  | "cave";
 
 
 export type AudioFx = {

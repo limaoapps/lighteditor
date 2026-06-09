@@ -377,7 +377,7 @@ function MasterFader({ label, db, setDb, peak, clip, onClearClip }: {
         className={`h-2.5 w-5 shrink-0 rounded-sm transition ${clip ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.9)] animate-pulse" : "bg-zinc-700"}`}
       />
       <div className="flex min-h-0 flex-1 items-stretch gap-1">
-        <div className="relative w-7 shrink-0 font-mono text-[8px] tabular-nums text-muted-foreground">
+        <div className="relative w-9 shrink-0 font-mono text-[11px] leading-none font-semibold tabular-nums text-muted-foreground">
           {dbTicks.map(tick => (
             <div key={tick} className="absolute right-0 -translate-y-1/2" style={{ top: tickTop(tick) }}>
               {tick > 0 ? `+${tick}` : tick}

@@ -6,6 +6,28 @@
  * (via OfflineAudioContext). Para FFmpeg WASM, ver `buildAudioFilterChain`.
  */
 
+import { createVoiceEffect, type VoiceEffectName } from "./audio-effects";
+
+/** Mapeia presets de voz (incluindo legados) para o efeito modular correspondente. */
+function mapVoicePresetToEffect(vp: VoicePreset | undefined | null): VoiceEffectName {
+  switch (vp) {
+    case "robot": return "robot";
+    case "monster": return "monster";
+    case "demon": return "demon";
+    case "megaphone": return "megaphone";
+    case "radio": return "radio";
+    case "telephone": return "telephone";
+    case "alien": return "alien";
+    // legados — mapeados para o mais próximo
+    case "whisper": return "telephone";
+    case "chipmunk": return "alien";
+    case "underwater": return "monster";
+    case "ghost": return "demon";
+    default: return "normal";
+  }
+}
+
+
 export const EQ_BANDS = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 12000, 14000, 16000];
 export const EQ_BAND_COUNT = EQ_BANDS.length;
 

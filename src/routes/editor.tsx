@@ -377,7 +377,7 @@ function MasterFader({ label, db, setDb, peak, clip, onClearClip }: {
         className={`h-2.5 w-5 shrink-0 rounded-sm transition ${clip ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.9)] animate-pulse" : "bg-zinc-700"}`}
       />
       <div className="flex min-h-0 flex-1 items-stretch gap-1">
-        <div className="relative w-7 shrink-0 font-mono text-[8px] tabular-nums text-muted-foreground">
+        <div className="relative w-9 shrink-0 font-mono text-[11px] leading-none font-semibold tabular-nums text-muted-foreground">
           {dbTicks.map(tick => (
             <div key={tick} className="absolute right-0 -translate-y-1/2" style={{ top: tickTop(tick) }}>
               {tick > 0 ? `+${tick}` : tick}
@@ -412,11 +412,11 @@ function MasterFader({ label, db, setDb, peak, clip, onClearClip }: {
           />
         </div>
       </div>
-      <div className={`shrink-0 font-mono text-[9px] tabular-nums ${labelColor}`}>
+      <div className={`shrink-0 font-mono text-[12px] font-semibold tabular-nums ${labelColor}`}>
         {db > 0 ? "+" : ""}{db.toFixed(1)}
       </div>
-      <div className="shrink-0 font-mono text-[8px] text-muted-foreground">pk {peakDbLabel}</div>
-      <div className="shrink-0 text-[9px] font-bold text-muted-foreground">{label}</div>
+      <div className="shrink-0 font-mono text-[10px] text-muted-foreground">pk {peakDbLabel}</div>
+      <div className="shrink-0 text-[12px] font-bold text-muted-foreground">{label}</div>
     </div>
   );
 }
@@ -910,7 +910,7 @@ function Editor() {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recordChunksRef = useRef<Blob[]>([]);
   const recordStreamRef = useRef<MediaStream | null>(null);
-  const recordStartRef = useRef<{ playhead: number; time: number } | null>(null);
+  const recordStartRef = useRef<{ playhead: number; time: number; trackId: string } | null>(null);
   const recordTimerRef = useRef<number | null>(null);
   const [postBeep, setPostBeep] = useState(true);
   const [showExportLog, setShowExportLog] = useState(false);
@@ -1465,6 +1465,7 @@ function Editor() {
           const url = URL.createObjectURL(blob);
           const dur = Math.max(0.1, (Date.now() - (recordStartRef.current?.time ?? Date.now())) / 1000);
           const startAt = recordStartRef.current?.playhead ?? 0;
+          const trackId = recordStartRef.current?.trackId;
           const asset: MediaAsset = {
             id: crypto.randomUUID(),
             kind: "audio",
@@ -1473,7 +1474,7 @@ function Editor() {
             duration: dur,
           };
           setMedia(prev => [...prev, asset]);
-          addAssetToTimeline(asset, { start: startAt, duration: dur });
+          addAssetToTimeline(asset, { start: startAt, duration: dur, trackId });
         } catch (err) {
           setError("Falha ao salvar gravação: " + (err instanceof Error ? err.message : String(err)));
         } finally {
@@ -1484,7 +1485,10 @@ function Editor() {
           recordStartRef.current = null;
         }
       };
-      recordStartRef.current = { playhead, time: Date.now() };
+      // Sempre cria uma nova trilha de áudio dedicada para a gravação,
+      // para não sobrepor o áudio do vídeo ou outras faixas existentes.
+      const recTrackId = ensureTrack("audio");
+      recordStartRef.current = { playhead, time: Date.now(), trackId: recTrackId };
       setRecElapsed(0);
       recordTimerRef.current = window.setInterval(() => {
         const t = recordStartRef.current?.time;
@@ -1493,11 +1497,13 @@ function Editor() {
       mr.start(100);
       recorderRef.current = mr;
       setRecording(true);
+      // Inicia o playback automaticamente ao começar a gravar.
+      setPlaying(true);
     } catch (err) {
       setError("Não foi possível acessar o microfone: " + (err instanceof Error ? err.message : String(err)));
       setRecording(false);
     }
-  }, [recording, stopMicRecording, playhead, addAssetToTimeline]);
+  }, [recording, stopMicRecording, playhead, addAssetToTimeline, ensureTrack]);
 
   // Cleanup ao desmontar
   useEffect(() => () => {

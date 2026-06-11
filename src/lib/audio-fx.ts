@@ -65,7 +65,8 @@ export type AudioFx = {
   ambience: Ambience;
   channelMode: ChannelMode;
   pan: number; // -1 (full left) .. 1 (full right)
-  stereoWidth: number; // 0..200 (%)
+  stereoEnabled: boolean; // se false, força mono (ignora largura)
+  stereoWidth: number; // 0..200 (%) — intensidade do estéreo (100% = natural)
   positionDepth: number; // -1 (Frente) .. 1 (Trás)
   voicePreset?: VoicePreset; // efeito de voz
   voiceParams?: VoiceEffectParams; // parâmetros do efeito de voz (intensidades)
@@ -83,7 +84,8 @@ export const DEFAULT_AUDIO_FX: AudioFx = {
   ambience: "none",
   channelMode: "stereo",
   pan: 0,
-  stereoWidth: 100,
+  stereoEnabled: true,
+  stereoWidth: 60,
   positionDepth: 0,
   voicePreset: "none",
   voiceParams: {},
@@ -98,6 +100,7 @@ export function hasAudioFx(fx?: Partial<AudioFx> | null): boolean {
   if ((fx.echoMix ?? 0) > 0.5) return true;
   if (fx.ambience && fx.ambience !== "none") return true;
   if (fx.channelMode && fx.channelMode !== "stereo") return true;
+  if (fx.stereoEnabled === false) return true;
   if (Math.abs((fx.stereoWidth ?? 100) - 100) > 1) return true;
   if (Math.abs(fx.positionDepth ?? 0) > 0.01) return true;
   if (fx.voicePreset && fx.voicePreset !== "none") return true;
@@ -390,9 +393,10 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
         depthFilter.gain.value = Math.abs(depth) * 6;
       }
 
-      // Stereo Width
-      const widthVal = (fx.stereoWidth ?? 100) / 100;
-      widthMidGain.gain.value = 1; 
+      // Stereo Width / Enable
+      const stereoOn = fx.stereoEnabled !== false;
+      const widthVal = stereoOn ? (fx.stereoWidth ?? 100) / 100 : 0;
+      widthMidGain.gain.value = 1;
       widthSideGain.gain.value = widthVal;
 
       // Canal (Roteamento conforme regras técnicas)
@@ -491,8 +495,10 @@ export function buildAudioFilterChain(
     out.push(`pan=stereo|c0=${gl.toFixed(3)}*c0|c1=${gr.toFixed(3)}*c1`);
   }
 
-  // Largura Estéreo (Stereo Width)
-  if (fx && Math.abs((fx.stereoWidth ?? 100) - 100) > 1) {
+  // Largura Estéreo (Stereo Width) — quando desligado, força mono
+  if (fx && fx.stereoEnabled === false) {
+    out.push("pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1");
+  } else if (fx && Math.abs((fx.stereoWidth ?? 100) - 100) > 1) {
     const w = (fx.stereoWidth / 100).toFixed(2);
     out.push(`stereowiden=level_in=1:level_out=1:delay=20:width=${w}`);
   }

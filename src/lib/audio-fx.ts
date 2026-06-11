@@ -100,6 +100,7 @@ export function hasAudioFx(fx?: Partial<AudioFx> | null): boolean {
   if ((fx.echoMix ?? 0) > 0.5) return true;
   if (fx.ambience && fx.ambience !== "none") return true;
   if (fx.channelMode && fx.channelMode !== "stereo") return true;
+  if (fx.stereoEnabled === false) return true;
   if (Math.abs((fx.stereoWidth ?? 100) - 100) > 1) return true;
   if (Math.abs(fx.positionDepth ?? 0) > 0.01) return true;
   if (fx.voicePreset && fx.voicePreset !== "none") return true;

@@ -4463,13 +4463,26 @@ function Editor() {
                       
                       <div className="space-y-4">
                         <div className="space-y-2">
-                          <div className="flex justify-between">
-                            <label className="text-[10px] uppercase font-bold text-muted-foreground">Largura Estéreo</label>
-                            <span className="text-xs font-mono">{(selected.audioFx?.stereoWidth ?? 100).toFixed(0)}%</span>
+                          <div className="flex justify-between items-center">
+                            <label className="text-[10px] uppercase font-bold text-muted-foreground">Estéreo</label>
+                            <button
+                              onClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), stereoEnabled: !(i.audioFx?.stereoEnabled ?? true) } } : i))}
+                              className={`text-[10px] font-bold px-2 py-1 rounded-md border transition-colors ${(selected.audioFx?.stereoEnabled ?? true) ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground"}`}
+                            >
+                              {(selected.audioFx?.stereoEnabled ?? true) ? "LIGADO" : "DESLIGADO"}
+                            </button>
                           </div>
-                          <input type="range" min="0" max="200" value={selected.audioFx?.stereoWidth ?? 100}
-                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), stereoWidth: Number(e.target.value) } } : i))}
-                            className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
+                          {(selected.audioFx?.stereoEnabled ?? true) && (
+                            <>
+                              <div className="flex justify-between">
+                                <label className="text-[10px] uppercase font-bold text-muted-foreground">Intensidade</label>
+                                <span className="text-xs font-mono">{(selected.audioFx?.stereoWidth ?? 100).toFixed(0)}%</span>
+                              </div>
+                              <input type="range" min="0" max="200" value={selected.audioFx?.stereoWidth ?? 100}
+                                onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), stereoWidth: Number(e.target.value) } } : i))}
+                                className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
+                            </>
+                          )}
                         </div>
 
                         <div className="space-y-2">

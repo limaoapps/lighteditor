@@ -3401,11 +3401,7 @@ function Editor() {
                 </div>
 
                 <div className="border-t border-border pt-2">
-
-
                   <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Canais</div>
-
-
                   <div className="flex flex-col gap-2">
                     <div className="grid grid-cols-2 gap-1">
                       {(["stereo","mono"] as ChannelMode[]).map(m => (
@@ -3415,6 +3411,24 @@ function Editor() {
                         </button>
                       ))}
                     </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase">Estéreo</span>
+                      <button
+                        onClick={() => patchAfx({ stereoEnabled: !(afx.stereoEnabled ?? true) })}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md border transition-colors ${(afx.stereoEnabled ?? true) ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground"}`}
+                      >
+                        {(afx.stereoEnabled ?? true) ? "LIGADO" : "DESLIGADO"}
+                      </button>
+                    </div>
+                    {(afx.stereoEnabled ?? true) && (
+                      <label className="flex items-center gap-2">
+                        <span className="w-12 text-muted-foreground">Intens.</span>
+                        <input type="range" min={0} max={200} step={1} value={afx.stereoWidth ?? 100}
+                          onChange={(e) => patchAfx({ stereoWidth: Number(e.target.value) })}
+                          className="flex-1 accent-[color:var(--primary)]" />
+                        <span className="w-10 text-right font-mono tabular-nums">{afx.stereoWidth ?? 100}%</span>
+                      </label>
+                    )}
                     <div className="space-y-1">
                       <div className="flex justify-between text-[8px] font-bold text-muted-foreground uppercase">
                         <span>Balanço</span>
@@ -3442,7 +3456,6 @@ function Editor() {
                       </div>
                     </div>
                   </div>
-
                 </div>
               </div>
             );

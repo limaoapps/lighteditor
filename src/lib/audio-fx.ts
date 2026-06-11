@@ -393,9 +393,10 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
         depthFilter.gain.value = Math.abs(depth) * 6;
       }
 
-      // Stereo Width
-      const widthVal = (fx.stereoWidth ?? 100) / 100;
-      widthMidGain.gain.value = 1; 
+      // Stereo Width / Enable
+      const stereoOn = fx.stereoEnabled !== false;
+      const widthVal = stereoOn ? (fx.stereoWidth ?? 100) / 100 : 0;
+      widthMidGain.gain.value = 1;
       widthSideGain.gain.value = widthVal;
 
       // Canal (Roteamento conforme regras técnicas)

@@ -65,7 +65,8 @@ export type AudioFx = {
   ambience: Ambience;
   channelMode: ChannelMode;
   pan: number; // -1 (full left) .. 1 (full right)
-  stereoWidth: number; // 0..200 (%)
+  stereoEnabled: boolean; // se false, força mono (ignora largura)
+  stereoWidth: number; // 0..200 (%) — intensidade do estéreo (100% = natural)
   positionDepth: number; // -1 (Frente) .. 1 (Trás)
   voicePreset?: VoicePreset; // efeito de voz
   voiceParams?: VoiceEffectParams; // parâmetros do efeito de voz (intensidades)
@@ -83,7 +84,8 @@ export const DEFAULT_AUDIO_FX: AudioFx = {
   ambience: "none",
   channelMode: "stereo",
   pan: 0,
-  stereoWidth: 100,
+  stereoEnabled: true,
+  stereoWidth: 60,
   positionDepth: 0,
   voicePreset: "none",
   voiceParams: {},

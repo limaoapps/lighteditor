@@ -495,8 +495,10 @@ export function buildAudioFilterChain(
     out.push(`pan=stereo|c0=${gl.toFixed(3)}*c0|c1=${gr.toFixed(3)}*c1`);
   }
 
-  // Largura Estéreo (Stereo Width)
-  if (fx && Math.abs((fx.stereoWidth ?? 100) - 100) > 1) {
+  // Largura Estéreo (Stereo Width) — quando desligado, força mono
+  if (fx && fx.stereoEnabled === false) {
+    out.push("pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1");
+  } else if (fx && Math.abs((fx.stereoWidth ?? 100) - 100) > 1) {
     const w = (fx.stereoWidth / 100).toFixed(2);
     out.push(`stereowiden=level_in=1:level_out=1:delay=20:width=${w}`);
   }

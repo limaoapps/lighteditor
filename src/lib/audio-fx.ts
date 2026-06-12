@@ -500,11 +500,14 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
       voiceWet.gain.value = intensity;
       voiceDry.gain.value = vp === "none" ? 1 : (1 - intensity);
 
-      // Pro rack (Tone.js)
+      // Pro rack (Tone.js) — só roteia áudio pela cadeia Tone quando há
+      // efeito/EQ/estéreo realmente ativo. Apenas marcar "Ativar" sem ligar
+      // nada NÃO insere a cadeia no caminho do sinal (evita silêncio caso
+      // algum nó Tone tenha problema de roteamento).
       const pro = fx.pro;
-      const proOn = !!(pro && pro.enabled);
-      setProRouting(proOn);
+      const proOn = hasAudioFxPro(pro);
       if (proOn) ensureProRack().update(pro!);
+      setProRouting(proOn);
     },
     setMuted(m: boolean) { muteGain.gain.value = m ? 0 : 1; },
     dispose() { try { proRack?.dispose(); } catch { /* */ } },

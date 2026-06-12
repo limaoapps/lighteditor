@@ -368,7 +368,34 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
   revMix.connect(ambDry);
   revMix.connect(ambConv);
   ambMix.connect(out);
-  out.connect(muteGain);
+
+  // ===== Rack Pro (Tone.js): inserido entre `out` e `muteGain`. Bypass quando desabilitado. =====
+  let proRack: EffectsRack | null = null;
+  const proIn = ctx.createGain(); proIn.gain.value = 1;
+  const proOut = ctx.createGain(); proOut.gain.value = 1;
+  out.connect(proIn);
+  let proActive = false;
+  const ensureProRack = (): EffectsRack => {
+    if (!proRack) {
+      proRack = buildEffectsRack(ctx);
+      proRack.output.connect(proOut);
+    }
+    return proRack;
+  };
+  const setProRouting = (active: boolean) => {
+    if (active === proActive) return;
+    proActive = active;
+    try { proIn.disconnect(); } catch { /* */ }
+    try { proOut.disconnect(); } catch { /* */ }
+    if (active) {
+      ensureProRack();
+      proIn.connect(proRack!.input);
+      proOut.connect(muteGain);
+    } else {
+      proIn.connect(muteGain);
+    }
+  };
+  setProRouting(false);
 
   let lastReverbPreset: ReverbPreset = "none";
   let lastAmb: Ambience = "none";

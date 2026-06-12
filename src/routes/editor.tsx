@@ -20,6 +20,8 @@ import {
   type VoicePreset,
 } from "@/lib/audio-fx";
 import { VOICE_PARAM_DEFS, defaultVoiceParams, type VoiceEffectName } from "@/lib/audio-effects";
+import { AudioPanel } from "@/components/editor/audio/AudioPanel";
+import { DEFAULT_AUDIO_FX_PRO, type AudioFxPro } from "@/lib/audio/types";
 import { computeItemBounds } from "@/lib/scene-geometry";
 import { PreviewCanvas } from "@/components/editor/PreviewCanvas";
 import { Waveform } from "@/components/editor/Waveform";
@@ -3217,6 +3219,19 @@ function Editor() {
               </label>
             </div>
           )}
+
+          {selected && (selected.kind === "audio" || (selected.kind === "video" && !selected.silenced)) && (() => {
+            const pro: AudioFxPro = selected.audioFx?.pro ?? DEFAULT_AUDIO_FX_PRO;
+            const onChangePro = (next: AudioFxPro) =>
+              setItems(p => p.map(i => i.id === selected.id
+                ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), pro: next } }
+                : i));
+            return (
+              <div className="rounded-md border border-border bg-card p-2 text-xs">
+                <AudioPanel value={pro} onChange={onChangePro} meter={null} />
+              </div>
+            );
+          })()}
 
           {selected && (selected.kind === "audio" || (selected.kind === "video" && !selected.silenced)) && (() => {
             const afx: AudioFx = selected.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] };

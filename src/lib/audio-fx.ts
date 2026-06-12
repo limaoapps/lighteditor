@@ -7,6 +7,9 @@
  */
 
 import { createVoiceEffect, defaultVoiceParams, type VoiceEffectName, type VoiceEffectParams } from "./audio-effects";
+import { buildEffectsRack, type EffectsRack } from "./audio/chain";
+import { type AudioFxPro, DEFAULT_AUDIO_FX_PRO, hasAudioFxPro } from "./audio/types";
+export type { AudioFxPro } from "./audio/types";
 
 /** Mapeia presets de voz (incluindo legados) para o efeito modular correspondente. */
 function mapVoicePresetToEffect(vp: VoicePreset | undefined | null): VoiceEffectName {
@@ -70,6 +73,7 @@ export type AudioFx = {
   positionDepth: number; // -1 (Frente) .. 1 (Trás)
   voicePreset?: VoicePreset; // efeito de voz
   voiceParams?: VoiceEffectParams; // parâmetros do efeito de voz (intensidades)
+  pro?: AudioFxPro; // novo motor Tone.js (EQ multibanda + efeitos pro)
 };
 
 
@@ -89,6 +93,7 @@ export const DEFAULT_AUDIO_FX: AudioFx = {
   positionDepth: 0,
   voicePreset: "none",
   voiceParams: {},
+  pro: DEFAULT_AUDIO_FX_PRO,
 };
 
 
@@ -104,6 +109,7 @@ export function hasAudioFx(fx?: Partial<AudioFx> | null): boolean {
   if (Math.abs((fx.stereoWidth ?? 100) - 100) > 1) return true;
   if (Math.abs(fx.positionDepth ?? 0) > 0.01) return true;
   if (fx.voicePreset && fx.voicePreset !== "none") return true;
+  if (hasAudioFxPro(fx.pro)) return true;
   return false;
 }
 
@@ -362,7 +368,34 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
   revMix.connect(ambDry);
   revMix.connect(ambConv);
   ambMix.connect(out);
-  out.connect(muteGain);
+
+  // ===== Rack Pro (Tone.js): inserido entre `out` e `muteGain`. Bypass quando desabilitado. =====
+  let proRack: EffectsRack | null = null;
+  const proIn = ctx.createGain(); proIn.gain.value = 1;
+  const proOut = ctx.createGain(); proOut.gain.value = 1;
+  out.connect(proIn);
+  let proActive = false;
+  const ensureProRack = (): EffectsRack => {
+    if (!proRack) {
+      proRack = buildEffectsRack(ctx);
+      proRack.output.connect(proOut);
+    }
+    return proRack;
+  };
+  const setProRouting = (active: boolean) => {
+    if (active === proActive) return;
+    proActive = active;
+    try { proIn.disconnect(); } catch { /* */ }
+    try { proOut.disconnect(); } catch { /* */ }
+    if (active) {
+      ensureProRack();
+      proIn.connect(proRack!.input);
+      proOut.connect(muteGain);
+    } else {
+      proIn.connect(muteGain);
+    }
+  };
+  setProRouting(false);
 
   let lastReverbPreset: ReverbPreset = "none";
   let lastAmb: Ambience = "none";
@@ -466,8 +499,15 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
         : (typeof intensityRaw === "number" ? Math.max(0, Math.min(1, intensityRaw)) : 1);
       voiceWet.gain.value = intensity;
       voiceDry.gain.value = vp === "none" ? 1 : (1 - intensity);
+
+      // Pro rack (Tone.js)
+      const pro = fx.pro;
+      const proOn = !!(pro && pro.enabled);
+      setProRouting(proOn);
+      if (proOn) ensureProRack().update(pro!);
     },
     setMuted(m: boolean) { muteGain.gain.value = m ? 0 : 1; },
+    dispose() { try { proRack?.dispose(); } catch { /* */ } },
   };
 
   if (opts?.initialFx) api.setFx(opts.initialFx);

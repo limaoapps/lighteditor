@@ -188,6 +188,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
 
   const limiterSlot = buildSlot(ctx, () => new Tone.Limiter(-3));
   limiterSlot.apply = (st) => {
+    limiterSlot.ensure();
     const n = limiterSlot.node as Tone.Limiter | null;
     if (n) n.threshold.value = st.params.threshold ?? -3;
     setBlend(limiterSlot, st.on, st.intensity);
@@ -195,6 +196,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
 
   const distortionSlot = buildSlot(ctx, () => new Tone.Distortion(0.3));
   distortionSlot.apply = (st) => {
+    distortionSlot.ensure();
     const n = distortionSlot.node as Tone.Distortion | null;
     if (n) n.distortion = Math.max(0, Math.min(1, st.params.amount ?? 0.3));
     setBlend(distortionSlot, st.on, st.intensity);
@@ -202,6 +204,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
 
   const stereoSlot = buildSlot(ctx, () => new Tone.StereoWidener(0.5));
   stereoSlot.apply = (st) => {
+    stereoSlot.ensure();
     const n = stereoSlot.node as Tone.StereoWidener | null;
     if (n) n.width.value = Math.max(0, Math.min(1, st.intensity));
     setBlend(stereoSlot, st.on, 1);
@@ -213,6 +216,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
     return t;
   });
   tremoloSlot.apply = (st) => {
+    tremoloSlot.ensure();
     const n = tremoloSlot.node as Tone.Tremolo | null;
     if (n) { n.frequency.value = st.params.rate ?? 4; n.depth.value = st.params.depth ?? 0.6; }
     setBlend(tremoloSlot, st.on, st.intensity);

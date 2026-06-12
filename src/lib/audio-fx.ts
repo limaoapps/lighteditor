@@ -7,6 +7,9 @@
  */
 
 import { createVoiceEffect, defaultVoiceParams, type VoiceEffectName, type VoiceEffectParams } from "./audio-effects";
+import { buildEffectsRack, type EffectsRack } from "./audio/chain";
+import { type AudioFxPro, DEFAULT_AUDIO_FX_PRO, hasAudioFxPro } from "./audio/types";
+export type { AudioFxPro } from "./audio/types";
 
 /** Mapeia presets de voz (incluindo legados) para o efeito modular correspondente. */
 function mapVoicePresetToEffect(vp: VoicePreset | undefined | null): VoiceEffectName {
@@ -70,6 +73,7 @@ export type AudioFx = {
   positionDepth: number; // -1 (Frente) .. 1 (Trás)
   voicePreset?: VoicePreset; // efeito de voz
   voiceParams?: VoiceEffectParams; // parâmetros do efeito de voz (intensidades)
+  pro?: AudioFxPro; // novo motor Tone.js (EQ multibanda + efeitos pro)
 };
 
 
@@ -89,6 +93,7 @@ export const DEFAULT_AUDIO_FX: AudioFx = {
   positionDepth: 0,
   voicePreset: "none",
   voiceParams: {},
+  pro: DEFAULT_AUDIO_FX_PRO,
 };
 
 
@@ -104,6 +109,7 @@ export function hasAudioFx(fx?: Partial<AudioFx> | null): boolean {
   if (Math.abs((fx.stereoWidth ?? 100) - 100) > 1) return true;
   if (Math.abs(fx.positionDepth ?? 0) > 0.01) return true;
   if (fx.voicePreset && fx.voicePreset !== "none") return true;
+  if (hasAudioFxPro(fx.pro)) return true;
   return false;
 }
 

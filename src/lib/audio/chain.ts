@@ -33,6 +33,7 @@ type Slot = {
   dry: GainNode;
   mix: GainNode;
   node: Tone.ToneAudioNode | null;
+  ensure: () => Tone.ToneAudioNode;
   apply: (st: EffectState, ctx: BaseAudioContext) => Promise<void> | void;
   ready?: () => Promise<void>;
   dispose: () => void;
@@ -57,13 +58,6 @@ function setBlend(slot: Slot, on: boolean, intensity: number) {
 function buildSlot(ctx: BaseAudioContext, factory: () => Tone.ToneAudioNode): Slot {
   const { input, wet, dry, mix } = makeWetDry(ctx);
   let node: Tone.ToneAudioNode | null = null;
-  const slot: Slot = {
-    on: false, input, output: mix, wet, dry, mix, node,
-    async apply() { /* override */ },
-    dispose() {
-      try { node?.disconnect(); node?.dispose(); } catch { /* */ }
-    },
-  };
   const ensure = () => {
     if (!node) {
       node = factory();
@@ -74,6 +68,14 @@ function buildSlot(ctx: BaseAudioContext, factory: () => Tone.ToneAudioNode): Sl
       slot.node = node;
     }
     return node;
+  };
+  const slot: Slot = {
+    on: false, input, output: mix, wet, dry, mix, node,
+    ensure,
+    async apply() { /* override */ },
+    dispose() {
+      try { node?.disconnect(); node?.dispose(); } catch { /* */ }
+    },
   };
   slot.apply = (st) => { ensure(); setBlend(slot, st.on, st.intensity); };
   return slot;
@@ -107,6 +109,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
     wet.connect(mix);
     const slot: Slot = {
       on: false, input, output: mix, wet, dry, mix, node: reverbConvolver,
+      ensure: () => reverbConvolver,
       apply(st: EffectState) {
         const envIdx = Math.round(st.params.env ?? 1);
         const env: ReverbEnv = REVERB_ENV_LIST[Math.max(0, Math.min(REVERB_ENV_LIST.length - 1, envIdx))].id;
@@ -128,6 +131,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
 
   const delaySlot = buildSlot(ctx, () => new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0.3 }));
   delaySlot.apply = (st) => {
+    delaySlot.ensure();
     const n = delaySlot.node as Tone.FeedbackDelay | null;
     if (n) { n.delayTime.value = st.params.time ?? 0.25; n.feedback.value = st.params.feedback ?? 0.3; }
     setBlend(delaySlot, st.on, st.intensity);
@@ -135,6 +139,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
 
   const echoSlot = buildSlot(ctx, () => new Tone.FeedbackDelay({ delayTime: 0.4, feedback: 0.5 }));
   echoSlot.apply = (st) => {
+    echoSlot.ensure();
     const n = echoSlot.node as Tone.FeedbackDelay | null;
     if (n) { n.delayTime.value = st.params.time ?? 0.4; n.feedback.value = st.params.feedback ?? 0.5; }
     setBlend(echoSlot, st.on, st.intensity);
@@ -142,6 +147,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
 
   const pingPongSlot = buildSlot(ctx, () => new Tone.PingPongDelay({ delayTime: 0.25, feedback: 0.4 }));
   pingPongSlot.apply = (st) => {
+    pingPongSlot.ensure();
     const n = pingPongSlot.node as Tone.PingPongDelay | null;
     if (n) { n.delayTime.value = st.params.time ?? 0.25; n.feedback.value = st.params.feedback ?? 0.4; }
     setBlend(pingPongSlot, st.on, st.intensity);
@@ -153,6 +159,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
     return c;
   });
   chorusSlot.apply = (st) => {
+    chorusSlot.ensure();
     const n = chorusSlot.node as Tone.Chorus | null;
     if (n) { n.frequency.value = st.params.rate ?? 1.5; n.depth = st.params.depth ?? 0.7; }
     setBlend(chorusSlot, st.on, st.intensity);
@@ -160,6 +167,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
 
   const phaserSlot = buildSlot(ctx, () => new Tone.Phaser({ frequency: 0.5, octaves: 3, baseFrequency: 350 }));
   phaserSlot.apply = (st) => {
+    phaserSlot.ensure();
     const n = phaserSlot.node as Tone.Phaser | null;
     if (n) { n.frequency.value = st.params.rate ?? 0.5; n.baseFrequency = st.params.baseFreq ?? 350; }
     setBlend(phaserSlot, st.on, st.intensity);
@@ -167,6 +175,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
 
   const compressorSlot = buildSlot(ctx, () => new Tone.Compressor({ threshold: -20, ratio: 4, attack: 0.01, release: 0.2 }));
   compressorSlot.apply = (st) => {
+    compressorSlot.ensure();
     const n = compressorSlot.node as Tone.Compressor | null;
     if (n) {
       n.threshold.value = st.params.threshold ?? -20;
@@ -179,6 +188,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
 
   const limiterSlot = buildSlot(ctx, () => new Tone.Limiter(-3));
   limiterSlot.apply = (st) => {
+    limiterSlot.ensure();
     const n = limiterSlot.node as Tone.Limiter | null;
     if (n) n.threshold.value = st.params.threshold ?? -3;
     setBlend(limiterSlot, st.on, st.intensity);
@@ -186,6 +196,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
 
   const distortionSlot = buildSlot(ctx, () => new Tone.Distortion(0.3));
   distortionSlot.apply = (st) => {
+    distortionSlot.ensure();
     const n = distortionSlot.node as Tone.Distortion | null;
     if (n) n.distortion = Math.max(0, Math.min(1, st.params.amount ?? 0.3));
     setBlend(distortionSlot, st.on, st.intensity);
@@ -193,6 +204,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
 
   const stereoSlot = buildSlot(ctx, () => new Tone.StereoWidener(0.5));
   stereoSlot.apply = (st) => {
+    stereoSlot.ensure();
     const n = stereoSlot.node as Tone.StereoWidener | null;
     if (n) n.width.value = Math.max(0, Math.min(1, st.intensity));
     setBlend(stereoSlot, st.on, 1);
@@ -204,6 +216,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
     return t;
   });
   tremoloSlot.apply = (st) => {
+    tremoloSlot.ensure();
     const n = tremoloSlot.node as Tone.Tremolo | null;
     if (n) { n.frequency.value = st.params.rate ?? 4; n.depth.value = st.params.depth ?? 0.6; }
     setBlend(tremoloSlot, st.on, st.intensity);

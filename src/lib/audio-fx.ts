@@ -224,6 +224,47 @@ export type AudioFxNodes = {
   dispose?: () => void;
 };
 
+function cloneAudioFxPro(base: AudioFxPro = DEFAULT_AUDIO_FX_PRO): AudioFxPro {
+  return {
+    enabled: base.enabled,
+    eq: { ...base.eq, gains: [...base.eq.gains] },
+    effects: Object.fromEntries(
+      Object.entries(base.effects).map(([k, v]) => [k, { ...v, params: { ...v.params } }]),
+    ) as AudioFxPro["effects"],
+    stereo: { ...base.stereo },
+  };
+}
+
+function legacyToToneFx(fx?: AudioFx): AudioFxPro {
+  if (fx?.pro?.enabled) return cloneAudioFxPro(fx.pro);
+  const next = cloneAudioFxPro(DEFAULT_AUDIO_FX_PRO);
+  next.enabled = true;
+  next.eq.bands = 12;
+  next.eq.gains = EQ_BANDS.map((_, i) => fx?.eq?.[i] ?? 0);
+
+  const echoMix = Math.max(0, Math.min(1, (fx?.echoMix ?? 0) / 100));
+  next.effects.echo.on = echoMix > 0.005;
+  next.effects.echo.intensity = echoMix;
+  next.effects.echo.params = { time: Math.max(0.01, Math.min(2, (fx?.echoDelay ?? 300) / 1000)), feedback: Math.max(0, Math.min(0.95, (fx?.echoFeedback ?? 30) / 100)) };
+
+  const reverbMix = Math.max(0, Math.min(1, (fx?.reverbMix ?? 0) / 100));
+  next.effects.reverb.on = reverbMix > 0.005 && !!fx?.reverbPreset && fx.reverbPreset !== "none";
+  next.effects.reverb.intensity = reverbMix;
+  next.effects.reverb.params = { env: fx?.reverbPreset === "cathedral" ? 6 : fx?.reverbPreset === "hall" ? 2 : 1, size: 0.55, decay: 2.2, predelay: 0.02 };
+
+  const width = Math.max(0, Math.min(2, (fx?.stereoWidth ?? 100) / 100));
+  next.effects.stereoWidener.on = (fx?.stereoEnabled !== false) && Math.abs(width - 1) > 0.01;
+  next.effects.stereoWidener.intensity = Math.max(0, Math.min(1, width / 2));
+  next.stereo = {
+    enabled: fx?.stereoEnabled !== false,
+    width,
+    pan: fx?.channelMode === "panned" ? (fx?.pan ?? 0) : 0,
+    invert: fx?.channelMode === "invert",
+    mono: fx?.channelMode === "mono" || fx?.stereoEnabled === false,
+  };
+  return next;
+}
+
 /**
  * Cria a cadeia de nós: input → EQ(12) → channel → echo → reverb → ambient → gain → output
  * (gain SEM clamp — permite até +30 dB e além, deixando o sinal estourar quando o
@@ -233,288 +274,30 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
   const input = ctx.createGain();
   input.gain.value = 1;
 
-  // Position Depth (Frente/Trás)
-  // Frente: Som brilhante (high shelf), menos reverb (dry gain up).
-  // Trás: Som abafado (low pass), mais reverb (wet gain up).
-  const depthFilter = ctx.createBiquadFilter();
-  depthFilter.type = "lowpass";
-  depthFilter.frequency.value = 22000; // start open
-
-  // Mid/Side Matrix for Stereo Width
-  // Mid = (L+R)/2, Side = (L-R)
-  const widthSplitter = ctx.createChannelSplitter(2);
-  const widthMerger = ctx.createChannelMerger(2);
-  const midSum = ctx.createGain(); midSum.gain.value = 0.5;
-  const sideDiff = ctx.createGain(); sideDiff.gain.value = 1;
-  const sideInv = ctx.createGain(); sideInv.gain.value = -1;
-
-  const widthMidGain = ctx.createGain(); // Mid intensity
-  const widthSideGain = ctx.createGain(); // Side intensity
-  
-  // Connections for Width:
-  // L -> midSum, R -> midSum (Mid = (L+R)/2)
-  // L -> sideDiff, R -> sideInv -> sideDiff (Side = L-R)
-  widthSplitter.connect(midSum, 0); 
-  widthSplitter.connect(midSum, 1);
-  widthSplitter.connect(sideDiff, 0);
-  widthSplitter.connect(sideInv, 1);
-  sideInv.connect(sideDiff);
-
-  midSum.connect(widthMidGain);
-  sideDiff.connect(widthSideGain);
-
-  // Re-matrix: L = Mid + Side, R = Mid - Side
-  const widthSideNeg = ctx.createGain(); widthSideNeg.gain.value = -1;
-  widthMidGain.connect(widthMerger, 0, 0); // L <- Mid
-  widthSideGain.connect(widthMerger, 0, 0); // L <- Side
-  widthMidGain.connect(widthMerger, 0, 1); // R <- Mid
-  widthSideGain.connect(widthSideNeg);
-  widthSideNeg.connect(widthMerger, 0, 1); // R <- -Side
-
-
-  // EQ 12 bandas: peaking BiquadFilters em série
-  const eqNodes: BiquadFilterNode[] = EQ_BANDS.map((f, idx) => {
-    const b = ctx.createBiquadFilter();
-    b.type = idx === 0 ? "lowshelf" : idx === EQ_BANDS.length - 1 ? "highshelf" : "peaking";
-    b.frequency.value = f;
-    b.Q.value = 1.0;
-    b.gain.value = 0;
-    return b;
-  });
-
-  // Canal (pan/mono/swap) — implementado via ChannelSplitter + Merger
+  const rack = buildEffectsRack(ctx);
+  const gain = ctx.createGain();
+  gain.gain.value = dbToGain(opts?.initialGainDb ?? 0);
+  const muteGain = ctx.createGain();
+  muteGain.gain.value = 1;
+  const output = ctx.createGain();
   const splitter = ctx.createChannelSplitter(2);
-  const merger = ctx.createChannelMerger(2);
-  // gains independentes para cada saída L/R a partir de L/R do splitter
-  const gLL = ctx.createGain(); const gLR = ctx.createGain();
-  const gRL = ctx.createGain(); const gRR = ctx.createGain();
-  // padrão estéreo
-  gLL.gain.value = 1; gLR.gain.value = 0; gRL.gain.value = 0; gRR.gain.value = 1;
-  splitter.connect(gLL, 0); splitter.connect(gRL, 0);
-  splitter.connect(gLR, 1); splitter.connect(gRR, 1);
-  gLL.connect(merger, 0, 0); gLR.connect(merger, 0, 0);
-  gRL.connect(merger, 0, 1); gRR.connect(merger, 0, 1);
 
-  // Echo
-  const echoDry = ctx.createGain(); echoDry.gain.value = 1;
-  const echoWet = ctx.createGain(); echoWet.gain.value = 0;
-  const echoDelay = ctx.createDelay(2.0); echoDelay.delayTime.value = 0.3;
-  const echoFb = ctx.createGain(); echoFb.gain.value = 0.3;
-  const echoMix = ctx.createGain(); echoMix.gain.value = 1;
-  // signal → echoDelay → echoFb → echoDelay (feedback loop)
-  echoDelay.connect(echoFb); echoFb.connect(echoDelay);
-  echoDelay.connect(echoWet);
-  // dry + wet → echoMix
-  echoDry.connect(echoMix); echoWet.connect(echoMix);
-
-  // Reverb
-  const revDry = ctx.createGain(); revDry.gain.value = 1;
-  const revWet = ctx.createGain(); revWet.gain.value = 0;
-  const conv = ctx.createConvolver(); conv.normalize = true;
-  const revMix = ctx.createGain(); revMix.gain.value = 1;
-  revDry.connect(revMix); conv.connect(revWet); revWet.connect(revMix);
-
-  // Ambient (segunda convolver)
-  const ambDry = ctx.createGain(); ambDry.gain.value = 1;
-  const ambWet = ctx.createGain(); ambWet.gain.value = 0;
-  const ambConv = ctx.createConvolver(); ambConv.normalize = true;
-  const ambMix = ctx.createGain(); ambMix.gain.value = 1;
-  ambDry.connect(ambMix); ambConv.connect(ambWet); ambWet.connect(ambMix);
-
-  // Gain final (sem clamp)
-  const out = ctx.createGain(); out.gain.value = 1;
-  const muteGain = ctx.createGain(); muteGain.gain.value = 1;
-
-  // ===== Bloco de Voice FX (modular — voiceEffects DSP chain) =====
-  // input → voiceIn → [currentVoice.input → currentVoice.output] → voiceOutGain → depthFilter
-  // O sub-grafo do efeito é construído dinamicamente pelo módulo audio-effects.ts
-  // (mesmos nós usados em pré-visualização e exportação offline).
-  const voiceIn = ctx.createGain(); voiceIn.gain.value = 1;
-  const voiceWet = ctx.createGain(); voiceWet.gain.value = 1; // saída do efeito
-  const voiceDry = ctx.createGain(); voiceDry.gain.value = 0; // bypass original (para mix de intensidade)
-  const voiceOutGain = ctx.createGain(); voiceOutGain.gain.value = 1; // compensação de volume
-  let currentVoiceNode: { input: AudioNode; output: AudioNode; dispose: () => void } | null = null;
-  const installVoiceEffect = (preset: VoicePreset, params?: VoiceEffectParams) => {
-    if (currentVoiceNode) {
-      try { voiceIn.disconnect(currentVoiceNode.input); } catch { /* ignore */ }
-      try { currentVoiceNode.output.disconnect(voiceWet); } catch { /* ignore */ }
-      try { currentVoiceNode.dispose(); } catch { /* ignore */ }
-      currentVoiceNode = null;
-    }
-    const name = mapVoicePresetToEffect(preset);
-    const mergedParams = { ...defaultVoiceParams(name), ...(params ?? {}) };
-    const node = createVoiceEffect(ctx, name, mergedParams);
-    voiceIn.connect(node.input);
-    node.output.connect(voiceWet);
-    currentVoiceNode = node;
-  };
-  installVoiceEffect("none");
-
-  // Caminho: input → voiceIn → (efeito → voiceWet) || (voiceDry) → voiceOutGain → depthFilter
-  input.connect(voiceIn);
-  voiceIn.connect(voiceDry);
-  voiceWet.connect(voiceOutGain);
-  voiceDry.connect(voiceOutGain);
-  voiceOutGain.connect(depthFilter);
-  depthFilter.connect(widthSplitter);
-
-  let prev: AudioNode = widthMerger;
-  for (const b of eqNodes) { prev.connect(b); prev = b; }
-  prev.connect(splitter);
-  merger.connect(echoDry);
-  merger.connect(echoDelay);
-  echoMix.connect(revDry);
-  echoMix.connect(conv);
-  revMix.connect(ambDry);
-  revMix.connect(ambConv);
-  ambMix.connect(out);
-
-  // ===== Rack Pro (Tone.js): inserido entre `out` e `muteGain`. Bypass quando desabilitado. =====
-  let proRack: EffectsRack | null = null;
-  const proIn = ctx.createGain(); proIn.gain.value = 1;
-  const proOut = ctx.createGain(); proOut.gain.value = 1;
-  out.connect(proIn);
-  let proActive = false;
-  const ensureProRack = (): EffectsRack => {
-    if (!proRack) {
-      proRack = buildEffectsRack(ctx);
-      proRack.output.connect(proOut);
-    }
-    return proRack;
-  };
-  const setProRouting = (active: boolean) => {
-    if (active === proActive) return;
-    proActive = active;
-    try { proIn.disconnect(); } catch { /* */ }
-    try { proOut.disconnect(); } catch { /* */ }
-    if (active) {
-      ensureProRack();
-      proIn.connect(proRack!.input);
-      proOut.connect(muteGain);
-    } else {
-      proIn.connect(muteGain);
-    }
-  };
-  setProRouting(false);
-
-  let lastReverbPreset: ReverbPreset = "none";
-  let lastAmb: Ambience = "none";
-  let lastVoice: VoicePreset = "none";
-  let lastVoiceParamsKey = "";
+  input.connect(rack.input);
+  rack.output.connect(gain);
+  gain.connect(muteGain);
+  muteGain.connect(output);
+  muteGain.connect(splitter);
 
   const api: AudioFxNodes = {
-    input, output: muteGain, splitter,
-    setGain(db: number) {
-      // sem clamp — permite estouro proposital
-      out.gain.value = dbToGain(db);
-    },
-    setFx(fx: AudioFx) {
-      // EQ
-      for (let i = 0; i < eqNodes.length; i++) {
-        eqNodes[i].gain.value = fx.eq[i] ?? 0;
-      }
-      // Position Depth
-      const depth = fx.positionDepth ?? 0;
-      if (depth > 0) {
-        // Trás: low pass abafa o som
-        depthFilter.type = "lowpass";
-        depthFilter.frequency.value = 20000 - depth * 18000;
-      } else {
-        // Frente: high shelf dá brilho (aproximado)
-        depthFilter.type = "highshelf";
-        depthFilter.frequency.value = 4000;
-        depthFilter.gain.value = Math.abs(depth) * 6;
-      }
-
-      // Stereo Width / Enable
-      const stereoOn = fx.stereoEnabled !== false;
-      const widthVal = stereoOn ? (fx.stereoWidth ?? 100) / 100 : 0;
-      widthMidGain.gain.value = 1;
-      widthSideGain.gain.value = widthVal;
-
-      // Canal (Roteamento conforme regras técnicas)
-      const m = fx.channelMode;
-      console.log(`[AudioFX] Modo de canal ativo: ${m.toUpperCase()}`);
-      
-      if (m === "mono") {
-        gLL.gain.value = 0.5; gLR.gain.value = 0.5;
-        gRL.gain.value = 0.5; gRR.gain.value = 0.5;
-      } else if (m === "left") {
-        gLL.gain.value = 1; gLR.gain.value = 0;
-        gRL.gain.value = 1; gRR.gain.value = 0;
-      } else if (m === "right") {
-        gLL.gain.value = 0; gLR.gain.value = 1;
-        gRL.gain.value = 0; gRR.gain.value = 1;
-      } else if (m === "invert") {
-        gLL.gain.value = 0; gLR.gain.value = 1;
-        gRL.gain.value = 1; gRR.gain.value = 0;
-      } else {
-        // Estéreo ou Panned
-        const p = fx.pan ?? 0;
-        const angle = (p + 1) * (Math.PI / 4);
-        gLL.gain.value = Math.cos(angle); 
-        gLR.gain.value = 0;
-        gRL.gain.value = 0; 
-        gRR.gain.value = Math.sin(angle);
-      }
-
-
-      // Echo
-      const eMix = Math.max(0, Math.min(1, (fx.echoMix ?? 0) / 100));
-      echoDry.gain.value = 1 - eMix * 0.5;
-      echoWet.gain.value = eMix;
-      echoDelay.delayTime.value = Math.max(0.001, Math.min(2.0, (fx.echoDelay ?? 300) / 1000));
-      echoFb.gain.value = Math.max(0, Math.min(0.95, (fx.echoFeedback ?? 30) / 100));
-      // Reverb
-      const rMix = Math.max(0, Math.min(1, (fx.reverbMix ?? 0) / 100));
-      revDry.gain.value = 1 - rMix * 0.6;
-      revWet.gain.value = rMix;
-      if (fx.reverbPreset !== lastReverbPreset) {
-        lastReverbPreset = fx.reverbPreset;
-        const ir = irForReverb(ctx, fx.reverbPreset);
-        try { conv.buffer = ir; } catch { /* ignore */ }
-      }
-      // Ambience
-      if (fx.ambience !== lastAmb) {
-        lastAmb = fx.ambience;
-        const a = irForAmbience(ctx, fx.ambience);
-        try { ambConv.buffer = a ? a.ir : null; } catch { /* ignore */ }
-        ambDry.gain.value = a ? 1 - a.wet * 0.6 : 1;
-        ambWet.gain.value = a ? a.wet : 0;
-      }
-      // Voice preset (modular — reconstrói o sub-grafo de DSP)
-      const vp: VoicePreset = fx.voicePreset ?? "none";
-      const paramsKey = JSON.stringify(fx.voiceParams ?? {});
-      if (vp !== lastVoice || paramsKey !== lastVoiceParamsKey) {
-        lastVoice = vp;
-        lastVoiceParamsKey = paramsKey;
-        installVoiceEffect(vp, fx.voiceParams);
-        const s = vp !== "none" ? VOICE_SPECS[vp] : null;
-        voiceOutGain.gain.value = s ? dbToGain(s.outGainDb) : 1;
-      }
-      // Intensidade global do efeito de voz (wet/dry mix). 0..1 → 100% = efeito puro.
-      const intensityRaw = fx.voiceParams?.intensity;
-      const intensity = vp === "none"
-        ? 0
-        : (typeof intensityRaw === "number" ? Math.max(0, Math.min(1, intensityRaw)) : 1);
-      voiceWet.gain.value = intensity;
-      voiceDry.gain.value = vp === "none" ? 1 : (1 - intensity);
-
-      // Pro rack (Tone.js) — só roteia áudio pela cadeia Tone quando há
-      // efeito/EQ/estéreo realmente ativo. Apenas marcar "Ativar" sem ligar
-      // nada NÃO insere a cadeia no caminho do sinal (evita silêncio caso
-      // algum nó Tone tenha problema de roteamento).
-      const pro = fx.pro;
-      const proOn = hasAudioFxPro(pro);
-      if (proOn) ensureProRack().update(pro!);
-      setProRouting(proOn);
-    },
+    input,
+    output,
+    splitter,
+    setGain(db: number) { gain.gain.value = dbToGain(db); },
+    setFx(fx: AudioFx) { rack.update(legacyToToneFx(fx)); },
     setMuted(m: boolean) { muteGain.gain.value = m ? 0 : 1; },
-    dispose() { try { proRack?.dispose(); } catch { /* */ } },
+    dispose() { try { rack.dispose(); } catch { /* */ } },
   };
-
-  if (opts?.initialFx) api.setFx(opts.initialFx);
-  if (typeof opts?.initialGainDb === "number") api.setGain(opts.initialGainDb);
+  api.setFx(opts?.initialFx ?? DEFAULT_AUDIO_FX);
   return api;
 }
 

@@ -67,16 +67,9 @@ function buildSlot(ctx: BaseAudioContext, factory: () => Tone.ToneAudioNode): Sl
   const ensure = () => {
     if (!node) {
       node = factory();
-      // Tone node → wet → mix
-      // input → node → wet
-      try {
-        input.connect((node as any).input ?? (node as unknown as AudioNode));
-        ((node as any).output ?? (node as unknown as AudioNode)).connect(wet);
-      } catch {
-        // some Tone nodes expose getter only
-        Tone.connect(input as any, node as any);
-        Tone.connect(node as any, wet as any);
-      }
+      // input (native) → node (Tone) → wet (native)
+      Tone.connect(input as unknown as Tone.ToneAudioNode, node as unknown as Tone.ToneAudioNode);
+      Tone.connect(node as unknown as Tone.ToneAudioNode, wet as unknown as Tone.ToneAudioNode);
       wet.connect(mix);
       slot.node = node;
     }

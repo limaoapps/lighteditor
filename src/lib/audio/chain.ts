@@ -102,10 +102,8 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
   const reverbConvolver = makeReverb();
   const reverbSlot = (() => {
     const { input, wet, dry, mix } = makeWetDry(ctx);
-    try {
-      input.connect((reverbConvolver as any).input ?? (reverbConvolver as unknown as AudioNode));
-      ((reverbConvolver as any).output ?? (reverbConvolver as unknown as AudioNode)).connect(wet);
-    } catch { /* */ }
+    Tone.connect(input as unknown as Tone.ToneAudioNode, reverbConvolver as unknown as Tone.ToneAudioNode);
+    Tone.connect(reverbConvolver as unknown as Tone.ToneAudioNode, wet as unknown as Tone.ToneAudioNode);
     wet.connect(mix);
     const slot: Slot = {
       on: false, input, output: mix, wet, dry, mix, node: reverbConvolver,

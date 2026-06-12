@@ -109,6 +109,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
     wet.connect(mix);
     const slot: Slot = {
       on: false, input, output: mix, wet, dry, mix, node: reverbConvolver,
+      ensure: () => reverbConvolver,
       apply(st: EffectState) {
         const envIdx = Math.round(st.params.env ?? 1);
         const env: ReverbEnv = REVERB_ENV_LIST[Math.max(0, Math.min(REVERB_ENV_LIST.length - 1, envIdx))].id;
@@ -130,6 +131,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
 
   const delaySlot = buildSlot(ctx, () => new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0.3 }));
   delaySlot.apply = (st) => {
+    delaySlot.ensure();
     const n = delaySlot.node as Tone.FeedbackDelay | null;
     if (n) { n.delayTime.value = st.params.time ?? 0.25; n.feedback.value = st.params.feedback ?? 0.3; }
     setBlend(delaySlot, st.on, st.intensity);
@@ -137,6 +139,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
 
   const echoSlot = buildSlot(ctx, () => new Tone.FeedbackDelay({ delayTime: 0.4, feedback: 0.5 }));
   echoSlot.apply = (st) => {
+    echoSlot.ensure();
     const n = echoSlot.node as Tone.FeedbackDelay | null;
     if (n) { n.delayTime.value = st.params.time ?? 0.4; n.feedback.value = st.params.feedback ?? 0.5; }
     setBlend(echoSlot, st.on, st.intensity);
@@ -144,6 +147,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
 
   const pingPongSlot = buildSlot(ctx, () => new Tone.PingPongDelay({ delayTime: 0.25, feedback: 0.4 }));
   pingPongSlot.apply = (st) => {
+    pingPongSlot.ensure();
     const n = pingPongSlot.node as Tone.PingPongDelay | null;
     if (n) { n.delayTime.value = st.params.time ?? 0.25; n.feedback.value = st.params.feedback ?? 0.4; }
     setBlend(pingPongSlot, st.on, st.intensity);

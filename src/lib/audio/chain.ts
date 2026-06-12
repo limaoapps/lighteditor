@@ -33,6 +33,7 @@ type Slot = {
   dry: GainNode;
   mix: GainNode;
   node: Tone.ToneAudioNode | null;
+  ensure: () => Tone.ToneAudioNode;
   apply: (st: EffectState, ctx: BaseAudioContext) => Promise<void> | void;
   ready?: () => Promise<void>;
   dispose: () => void;
@@ -57,13 +58,6 @@ function setBlend(slot: Slot, on: boolean, intensity: number) {
 function buildSlot(ctx: BaseAudioContext, factory: () => Tone.ToneAudioNode): Slot {
   const { input, wet, dry, mix } = makeWetDry(ctx);
   let node: Tone.ToneAudioNode | null = null;
-  const slot: Slot = {
-    on: false, input, output: mix, wet, dry, mix, node,
-    async apply() { /* override */ },
-    dispose() {
-      try { node?.disconnect(); node?.dispose(); } catch { /* */ }
-    },
-  };
   const ensure = () => {
     if (!node) {
       node = factory();
@@ -74,6 +68,14 @@ function buildSlot(ctx: BaseAudioContext, factory: () => Tone.ToneAudioNode): Sl
       slot.node = node;
     }
     return node;
+  };
+  const slot: Slot = {
+    on: false, input, output: mix, wet, dry, mix, node,
+    ensure,
+    async apply() { /* override */ },
+    dispose() {
+      try { node?.disconnect(); node?.dispose(); } catch { /* */ }
+    },
   };
   slot.apply = (st) => { ensure(); setBlend(slot, st.on, st.intensity); };
   return slot;

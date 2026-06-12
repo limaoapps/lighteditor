@@ -499,8 +499,15 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
         : (typeof intensityRaw === "number" ? Math.max(0, Math.min(1, intensityRaw)) : 1);
       voiceWet.gain.value = intensity;
       voiceDry.gain.value = vp === "none" ? 1 : (1 - intensity);
+
+      // Pro rack (Tone.js)
+      const pro = fx.pro;
+      const proOn = !!(pro && pro.enabled);
+      setProRouting(proOn);
+      if (proOn) ensureProRack().update(pro!);
     },
     setMuted(m: boolean) { muteGain.gain.value = m ? 0 : 1; },
+    dispose() { try { proRack?.dispose(); } catch { /* */ } },
   };
 
   if (opts?.initialFx) api.setFx(opts.initialFx);

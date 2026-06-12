@@ -159,6 +159,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
     return c;
   });
   chorusSlot.apply = (st) => {
+    chorusSlot.ensure();
     const n = chorusSlot.node as Tone.Chorus | null;
     if (n) { n.frequency.value = st.params.rate ?? 1.5; n.depth = st.params.depth ?? 0.7; }
     setBlend(chorusSlot, st.on, st.intensity);
@@ -166,6 +167,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
 
   const phaserSlot = buildSlot(ctx, () => new Tone.Phaser({ frequency: 0.5, octaves: 3, baseFrequency: 350 }));
   phaserSlot.apply = (st) => {
+    phaserSlot.ensure();
     const n = phaserSlot.node as Tone.Phaser | null;
     if (n) { n.frequency.value = st.params.rate ?? 0.5; n.baseFrequency = st.params.baseFreq ?? 350; }
     setBlend(phaserSlot, st.on, st.intensity);
@@ -173,6 +175,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
 
   const compressorSlot = buildSlot(ctx, () => new Tone.Compressor({ threshold: -20, ratio: 4, attack: 0.01, release: 0.2 }));
   compressorSlot.apply = (st) => {
+    compressorSlot.ensure();
     const n = compressorSlot.node as Tone.Compressor | null;
     if (n) {
       n.threshold.value = st.params.threshold ?? -20;

@@ -224,6 +224,47 @@ export type AudioFxNodes = {
   dispose?: () => void;
 };
 
+function cloneAudioFxPro(base: AudioFxPro = DEFAULT_AUDIO_FX_PRO): AudioFxPro {
+  return {
+    enabled: base.enabled,
+    eq: { ...base.eq, gains: [...base.eq.gains] },
+    effects: Object.fromEntries(
+      Object.entries(base.effects).map(([k, v]) => [k, { ...v, params: { ...v.params } }]),
+    ) as AudioFxPro["effects"],
+    stereo: { ...base.stereo },
+  };
+}
+
+function legacyToToneFx(fx?: AudioFx): AudioFxPro {
+  if (fx?.pro?.enabled) return cloneAudioFxPro(fx.pro);
+  const next = cloneAudioFxPro(DEFAULT_AUDIO_FX_PRO);
+  next.enabled = true;
+  next.eq.bands = 12;
+  next.eq.gains = EQ_BANDS.map((_, i) => fx?.eq?.[i] ?? 0);
+
+  const echoMix = Math.max(0, Math.min(1, (fx?.echoMix ?? 0) / 100));
+  next.effects.echo.on = echoMix > 0.005;
+  next.effects.echo.intensity = echoMix;
+  next.effects.echo.params = { time: Math.max(0.01, Math.min(2, (fx?.echoDelay ?? 300) / 1000)), feedback: Math.max(0, Math.min(0.95, (fx?.echoFeedback ?? 30) / 100)) };
+
+  const reverbMix = Math.max(0, Math.min(1, (fx?.reverbMix ?? 0) / 100));
+  next.effects.reverb.on = reverbMix > 0.005 && !!fx?.reverbPreset && fx.reverbPreset !== "none";
+  next.effects.reverb.intensity = reverbMix;
+  next.effects.reverb.params = { env: fx?.reverbPreset === "cathedral" ? 6 : fx?.reverbPreset === "hall" ? 2 : 1, size: 0.55, decay: 2.2, predelay: 0.02 };
+
+  const width = Math.max(0, Math.min(2, (fx?.stereoWidth ?? 100) / 100));
+  next.effects.stereoWidener.on = (fx?.stereoEnabled !== false) && Math.abs(width - 1) > 0.01;
+  next.effects.stereoWidener.intensity = Math.max(0, Math.min(1, width / 2));
+  next.stereo = {
+    enabled: fx?.stereoEnabled !== false,
+    width,
+    pan: fx?.channelMode === "panned" ? (fx?.pan ?? 0) : 0,
+    invert: fx?.channelMode === "invert",
+    mono: fx?.channelMode === "mono" || fx?.stereoEnabled === false,
+  };
+  return next;
+}
+
 /**
  * Cria a cadeia de nós: input → EQ(12) → channel → echo → reverb → ambient → gain → output
  * (gain SEM clamp — permite até +30 dB e além, deixando o sinal estourar quando o
@@ -232,6 +273,32 @@ export type AudioFxNodes = {
 export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: AudioFx; initialGainDb?: number }): AudioFxNodes {
   const input = ctx.createGain();
   input.gain.value = 1;
+
+  const rack = buildEffectsRack(ctx);
+  const gain = ctx.createGain();
+  gain.gain.value = dbToGain(opts?.initialGainDb ?? 0);
+  const muteGain = ctx.createGain();
+  muteGain.gain.value = 1;
+  const output = ctx.createGain();
+  const splitter = ctx.createChannelSplitter(2);
+
+  input.connect(rack.input);
+  rack.output.connect(gain);
+  gain.connect(muteGain);
+  muteGain.connect(output);
+  muteGain.connect(splitter);
+
+  const api: AudioFxNodes = {
+    input,
+    output,
+    splitter,
+    setGain(db: number) { gain.gain.value = dbToGain(db); },
+    setFx(fx: AudioFx) { rack.update(legacyToToneFx(fx)); },
+    setMuted(m: boolean) { muteGain.gain.value = m ? 0 : 1; },
+    dispose() { try { rack.dispose(); } catch { /* */ } },
+  };
+  api.setFx(opts?.initialFx ?? DEFAULT_AUDIO_FX);
+  return api;
 
   // Position Depth (Frente/Trás)
   // Frente: Som brilhante (high shelf), menos reverb (dry gain up).

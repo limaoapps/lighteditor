@@ -1078,6 +1078,20 @@ function Editor() {
     return entry;
   }, [ensureAudioCtx, ensureMaster]);
 
+  // Poll selected item's meter (~25 fps)
+  useEffect(() => {
+    if (!selectedId) { setAudioMeter(null); return; }
+    let raf = 0; let last = 0;
+    const tick = (t: number) => {
+      raf = requestAnimationFrame(tick);
+      if (t - last < 40) return; last = t;
+      const g = mediaGraphRef.current[selectedId];
+      const read = g?.nodes.readMeter;
+      if (read) setAudioMeter(read());
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+
   // Apply master L/R gains
   useEffect(() => {
     const m = masterRef.current; const ctx = audioCtxRef.current;

@@ -6,7 +6,7 @@ import {
   Image as ImageIcon, Video as VideoIcon, RotateCw, Maximize2, AlignCenter,
   Lock, Unlock, Undo2, Redo2, Check, Copy as CopyIcon, ClipboardPaste,
   Sparkles, Sliders, Wand2, RotateCcw, Palette, Mic, MicOff,
-  Settings as SettingsIcon, FileText, RefreshCw, Cpu, Info, Magnet,
+  Settings as SettingsIcon, FileText, RefreshCw, Cpu, Info, Magnet, Gauge,
 } from "lucide-react";
 import {
   DEFAULT_AUDIO_FX as DEFAULT_AUDIO_FX_REF,
@@ -225,7 +225,17 @@ type TLItem = {
   fx?: Fx;
   /** Vídeo silenciado (áudio foi separado em uma trilha de áudio paralela). */
   silenced?: boolean;
+  /** Velocidade de reprodução (1 = normal). 0.1 = câmera lenta forte; 10 = ultra rápido. */
+  speed?: number;
 };
+
+/** Duração do clipe na timeline (em segundos), considerando velocidade. */
+const tlDur = (i: { inPoint: number; outPoint: number; speed?: number }) =>
+  (i.outPoint - i.inPoint) / (i.speed && i.speed > 0 ? i.speed : 1);
+
+const SPEED_MIN = 0.1;
+const SPEED_MAX = 10;
+const clampSpeed = (s: number) => Math.max(SPEED_MIN, Math.min(SPEED_MAX, s));
 
 type Track = { id: string; kind: TrackKind; label: string };
 
@@ -741,7 +751,7 @@ function vignetteStyle(fx?: Fx): React.CSSProperties | null {
 
 function computeVisualOpacity(i: TLItem, t: number): number {
   const local = t - i.start;
-  const dur = i.outPoint - i.inPoint;
+  const dur = tlDur(i);
   let v = (i.fx?.opacity ?? 100) / 100;
   if (i.fadeIn && local < i.fadeIn) v *= Math.max(0, local / i.fadeIn);
   if (i.fadeOut && local > dur - i.fadeOut) v *= Math.max(0, (dur - local) / i.fadeOut);
@@ -1177,7 +1187,7 @@ function Editor() {
 
   const selected = items.find(i => i.id === selectedId) ?? null;
   const totalDuration = useMemo(
-    () => items.reduce((m, i) => Math.max(m, i.start + (i.outPoint - i.inPoint)), 0),
+    () => items.reduce((m, i) => Math.max(m, i.start + tlDur(i)), 0),
     [items]
   );
 
@@ -1350,7 +1360,7 @@ function Editor() {
     if (Math.abs(nearest - t) < bestD) { best = nearest; bestD = Math.abs(nearest - t); }
     for (const it of items) {
       if (it.id === excludeId) continue;
-      for (const cand of [it.start, it.start + (it.outPoint - it.inPoint)]) {
+      for (const cand of [it.start, it.start + tlDur(it)]) {
         const d = Math.abs(cand - t);
         if (d < bestD) { best = cand; bestD = d; hitEdge = cand; }
       }
@@ -1374,7 +1384,7 @@ function Editor() {
     }
     for (const it of itemsRef.current) {
       if (it.id === excludeId) continue;
-      for (const cand of [it.start, it.start + (it.outPoint - it.inPoint)]) {
+      for (const cand of [it.start, it.start + tlDur(it)]) {
         const d = Math.abs(cand - t);
         if (d < bestD) { best = cand; bestD = d; }
       }
@@ -1438,7 +1448,7 @@ function Editor() {
     // snapshot de `tracks` capturado por esta closure).
     const targetTrack = opts?.trackId ?? (findMain(wantKind) ?? ensureTrack(wantKind));
     const defaultStart = items.filter(i => i.trackId === targetTrack)
-      .reduce((m, i) => Math.max(m, i.start + (i.outPoint - i.inPoint)), 0);
+      .reduce((m, i) => Math.max(m, i.start + tlDur(i)), 0);
     const start = opts?.start != null ? Math.max(0, opts.start) : defaultStart;
     const it = createTLFromMedia(asset, targetTrack, start, opts?.duration);
 
@@ -1587,6 +1597,13 @@ function Editor() {
     if (selectedId === id) setSelectedId(null);
   };
 
+  /** Atualiza a velocidade de reprodução de um clipe. Mantém inPoint/outPoint (origem)
+   *  e ajusta apenas a duração visível na timeline via `tlDur`. */
+  const setClipSpeed = useCallback((id: string, newSpeed: number) => {
+    const s = clampSpeed(newSpeed);
+    setItems(prev => prev.map(i => i.id === id ? { ...i, speed: s } : i));
+  }, [setItems]);
+
   const removeMedia = (mediaId: string) => {
     setMedia(prev => {
       const target = prev.find(m => m.id === mediaId);
@@ -1613,13 +1630,14 @@ function Editor() {
       const out: TLItem[] = [];
       let newSel: string | null = selectedId;
       for (const it of prev) {
-        const dur = it.outPoint - it.inPoint;
+        const dur = tlDur(it);
         const end = it.start + dur;
         const eligible = !onlyClipId || it.id === onlyClipId;
         if (eligible && t > it.start + 0.05 && t < end - 0.05) {
-          const off = t - it.start;
-          const left: TLItem = { ...it, id: crypto.randomUUID(), outPoint: it.inPoint + off, fadeOut: 0 };
-          const right: TLItem = { ...it, id: crypto.randomUUID(), start: t, inPoint: it.inPoint + off, fadeIn: 0 };
+          const speed = it.speed && it.speed > 0 ? it.speed : 1;
+          const sourceOff = (t - it.start) * speed; // recorta no espaço de origem
+          const left: TLItem = { ...it, id: crypto.randomUUID(), outPoint: it.inPoint + sourceOff, fadeOut: 0 };
+          const right: TLItem = { ...it, id: crypto.randomUUID(), start: t, inPoint: it.inPoint + sourceOff, fadeIn: 0 };
           out.push(left, right);
           if (selectedId === it.id) newSel = left.id;
         } else out.push(it);
@@ -1716,13 +1734,13 @@ function Editor() {
     if (!firstVideoTrackId) return null;
     return items.find(i =>
       i.trackId === firstVideoTrackId && i.kind === "video" &&
-      playhead >= i.start && playhead < i.start + (i.outPoint - i.inPoint)
+      playhead >= i.start && playhead < i.start + tlDur(i)
     ) ?? null;
   }, [items, playhead, firstVideoTrackId]);
 
   const computeAudioGainDb = (i: TLItem, t: number) => {
     const local = t - i.start;
-    const dur = i.outPoint - i.inPoint;
+    const dur = tlDur(i);
     if (local < 0 || local > dur) return -120;
     const audioFadeIn = getAudioFadeIn(i);
     const audioFadeOut = getAudioFadeOut(i);
@@ -1744,8 +1762,10 @@ function Editor() {
     const wanted = activeV1Video.url;
     if (!wanted) { v.pause(); v.removeAttribute("src"); v.load(); return; }
     if (v.src !== wanted) v.src = wanted;
-    const target = activeV1Video.inPoint + (playhead - activeV1Video.start);
+    const _speedV1 = activeV1Video.speed && activeV1Video.speed > 0 ? activeV1Video.speed : 1;
+    const target = activeV1Video.inPoint + (playhead - activeV1Video.start) * _speedV1;
     if (Math.abs(v.currentTime - target) > 0.25) v.currentTime = target;
+    try { v.playbackRate = _speedV1; (v as HTMLVideoElement & { preservesPitch?: boolean }).preservesPitch = true; } catch { /* ignore */ }
     v.muted = !!trackMuted[activeV1Video.trackId] || !!activeV1Video.silenced;
     // Encaminha pelo grafo WebAudio para permitir ganho >0dB e FX.
     const g = attachGraph(activeV1Video.id, v, activeV1Video);
@@ -1780,8 +1800,10 @@ function Editor() {
     const wanted = activeV1Video.url;
     if (!wanted) { bg.pause(); bg.removeAttribute("src"); bg.load(); return; }
     if (bg.src !== wanted) bg.src = wanted;
-    const target = activeV1Video.inPoint + (playhead - activeV1Video.start);
+    const _speedBg = activeV1Video.speed && activeV1Video.speed > 0 ? activeV1Video.speed : 1;
+    const target = activeV1Video.inPoint + (playhead - activeV1Video.start) * _speedBg;
     if (Math.abs(bg.currentTime - target) > 0.25) bg.currentTime = target;
+    try { bg.playbackRate = _speedBg; } catch { /* ignore */ }
     bg.muted = true;
     if (playing) {
       bg.play().catch(() => {});
@@ -1802,7 +1824,7 @@ function Editor() {
     for (const a of audios) {
       const el = audioRefs.current[a.id];
       if (!el) continue;
-      const inRange = playhead >= a.start && playhead < a.start + (a.outPoint - a.inPoint);
+      const inRange = playhead >= a.start && playhead < a.start + tlDur(a);
       const g = attachGraph(a.id, el, a);
       if (g) {
         el.volume = 1;
@@ -1814,8 +1836,10 @@ function Editor() {
         el.volume = Math.min(1, computeAudioGain(a, playhead));
       }
       if (inRange) {
-        const target = a.inPoint + (playhead - a.start);
+        const _speedA = a.speed && a.speed > 0 ? a.speed : 1;
+        const target = a.inPoint + (playhead - a.start) * _speedA;
         if (Math.abs(el.currentTime - target) > 0.25) el.currentTime = target;
+        try { el.playbackRate = _speedA; (el as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch = true; } catch { /* ignore */ }
         if (playing && el.paused) {
           el.play().catch(() => {});
         }
@@ -1827,7 +1851,7 @@ function Editor() {
 
   const overlays = items.filter(i =>
     (i.kind === "image" || i.kind === "text") &&
-    playhead >= i.start && playhead < i.start + (i.outPoint - i.inPoint) &&
+    playhead >= i.start && playhead < i.start + tlDur(i) &&
     !trackMuted[i.trackId]
   );
 
@@ -1854,6 +1878,7 @@ function Editor() {
         start: c.start,
         inPoint: c.inPoint,
         outPoint: c.outPoint,
+        speed: c.speed,
         fadeIn: c.fadeIn,
         fadeOut: c.fadeOut,
         fx: c.fx as SceneItem["fx"],
@@ -1964,51 +1989,56 @@ function Editor() {
       } else if (d.type === "resizeL") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
+          const speed = i.speed && i.speed > 0 ? i.speed : 1;
           let raw = Math.max(0, tSec);
           if (snapResizeRef.current) raw = Math.max(0, snapResizeTimeRef.current(raw, d.id));
           if (d.isImage) {
             const newStart = Math.max(0, Math.min(d.origEnd - 0.1, raw));
-            return { ...i, start: newStart, inPoint: 0, outPoint: d.origEnd - newStart };
+            // Para imagens, outPoint segue a duração de timeline diretamente (speed=1 efetivo).
+            return { ...i, start: newStart, inPoint: 0, outPoint: (d.origEnd - newStart) * (i.speed || 1) };
           }
-          const delta = raw - d.origStart;
-          const newIn = Math.max(0, Math.min(i.outPoint - 0.1, d.origIn + delta));
-          const newStart = Math.max(0, d.origStart + (newIn - d.origIn));
+          const deltaTl = raw - d.origStart;            // delta no espaço da timeline
+          const deltaSrc = deltaTl * speed;             // delta no espaço de origem
+          const newIn = Math.max(0, Math.min(i.outPoint - 0.1, d.origIn + deltaSrc));
+          const newStart = Math.max(0, d.origStart + (newIn - d.origIn) / speed);
           return { ...i, start: newStart, inPoint: newIn };
         }), false);
       } else if (d.type === "resizeR") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
+          const speed = i.speed && i.speed > 0 ? i.speed : 1;
           let raw = Math.max(i.start + 0.1, tSec);
           if (snapResizeRef.current) raw = Math.max(i.start + 0.1, snapResizeTimeRef.current(raw, d.id));
           raw = Math.min(MAX_PROJECT_SEC, raw);
           const sourceCap = i.kind === "image" ? MAX_PROJECT_SEC : i.sourceDuration;
-          const maxOut = Math.min(sourceCap, i.inPoint + Math.max(0.1, MAX_PROJECT_SEC - i.start));
-          const newOut = Math.max(i.inPoint + 0.1, Math.min(maxOut, raw - i.start + i.inPoint));
+          const maxOut = Math.min(sourceCap, i.inPoint + Math.max(0.1, (MAX_PROJECT_SEC - i.start) * speed));
+          const wantedOut = i.inPoint + (raw - i.start) * speed;
+          const newOut = Math.max(i.inPoint + 0.1, Math.min(maxOut, wantedOut));
           return { ...i, outPoint: newOut };
         }), false);
       } else if (d.type === "visualFadeIn") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
-          const dur = i.outPoint - i.inPoint;
+          const dur = tlDur(i);
           return { ...i, fadeIn: Math.max(0, Math.min(dur, tSec - i.start)) };
         }), false);
       } else if (d.type === "visualFadeOut") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
-          const dur = i.outPoint - i.inPoint;
+          const dur = tlDur(i);
           const end = i.start + dur;
           return { ...i, fadeOut: Math.max(0, Math.min(dur, end - tSec)) };
         }), false);
       } else if (d.type === "audioFadeIn") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
-          const dur = i.outPoint - i.inPoint;
+          const dur = tlDur(i);
           return { ...i, audioFadeIn: Math.max(0, Math.min(dur, tSec - i.start)) };
         }), false);
       } else if (d.type === "audioFadeOut") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
-          const dur = i.outPoint - i.inPoint;
+          const dur = tlDur(i);
           const end = i.start + dur;
           return { ...i, audioFadeOut: Math.max(0, Math.min(dur, end - tSec)) };
         }), false);
@@ -2269,7 +2299,7 @@ function Editor() {
       const allForBounds = [...v1clips, ...visualOverlayItems, ...audioClips, ...textItems];
       const minStart = allForBounds.length ? Math.min(...allForBounds.map(c => c.start)) : 0;
       const maxEnd = allForBounds.length
-        ? Math.max(...allForBounds.map(c => c.start + (c.outPoint - c.inPoint)))
+        ? Math.max(...allForBounds.map(c => c.start + tlDur(c)))
         : 0;
       const shift = Math.max(0, minStart);
       const realDuration = Math.max(0.1, maxEnd - shift);
@@ -2362,7 +2392,7 @@ function Editor() {
     for (let k = 0; k < trackItems.length - 1; k++) {
       const a = trackItems[k];
       const b = trackItems[k + 1];
-      const aEnd = a.start + (a.outPoint - a.inPoint);
+      const aEnd = a.start + tlDur(a);
       const gap = b.start - aEnd;
       const j = (aEnd + b.start) / 2;
       const d = Math.abs(t - j);
@@ -2417,7 +2447,7 @@ function Editor() {
         return;
       }
       const trackItems = items.filter(i => i.trackId === trackId).sort((a, b) => a.start - b.start);
-      const hit = trackItems.find(i => t >= i.start && t <= i.start + (i.outPoint - i.inPoint));
+      const hit = trackItems.find(i => t >= i.start && t <= i.start + tlDur(i));
       if (hit) {
         setItems(p => p.map(i => i.id === hit.id ? { ...i, fadeIn: dur, fadeOut: dur, transition: transitionId } : i));
       }
@@ -2430,7 +2460,7 @@ function Editor() {
       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
       const xPx = e.clientX - rect.left;
       const t = Math.max(0, xPx / zoom);
-      const target = items.find(i => i.trackId === trackId && t >= i.start && t <= i.start + (i.outPoint - i.inPoint));
+      const target = items.find(i => i.trackId === trackId && t >= i.start && t <= i.start + tlDur(i));
       if (target) applyTimelineEffect(target.id, effectId);
       return;
     }
@@ -2777,7 +2807,7 @@ function Editor() {
                 const tr = activeV1Video?.transform;
                 const fx = activeV1Video?.fx;
                 const localT = activeV1Video ? playhead - activeV1Video.start : 0;
-                const dur = activeV1Video ? activeV1Video.outPoint - activeV1Video.inPoint : 0;
+                const dur = activeV1Video ? tlDur(activeV1Video) : 0;
                 const zScale = computeZoomScale(fx, localT, dur);
                 const op = activeV1Video ? computeVisualOpacity(activeV1Video, playhead) : 1;
                 const style: React.CSSProperties = tr ? {
@@ -2834,7 +2864,7 @@ function Editor() {
                   const b = getItemBounds(ov);
                   const fx = ov.fx;
                   const localT = playhead - ov.start;
-                  const dur = ov.outPoint - ov.inPoint;
+                  const dur = tlDur(ov);
                   const zScale = computeZoomScale(fx, localT, dur);
                   const op = computeVisualOpacity(ov, playhead);
                   const wrap: React.CSSProperties = {
@@ -3221,7 +3251,7 @@ function Editor() {
 
               <label className="flex items-center gap-2" title="Duplo clique para restaurar">
                 <span className="w-14 text-muted-foreground">Fade In</span>
-                <input type="range" min={0} max={Math.min(5, selected.outPoint - selected.inPoint)} step={0.05} value={getAudioFadeIn(selected)}
+                <input type="range" min={0} max={Math.min(5, tlDur(selected))} step={0.05} value={getAudioFadeIn(selected)}
                   onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFadeIn: Number(e.target.value) } : i))}
                   onDoubleClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFadeIn: 0 } : i))}
                   className="flex-1 accent-[color:var(--primary)]" />
@@ -3229,7 +3259,7 @@ function Editor() {
               </label>
               <label className="flex items-center gap-2" title="Duplo clique para restaurar">
                 <span className="w-14 text-muted-foreground">Fade Out</span>
-                <input type="range" min={0} max={Math.min(5, selected.outPoint - selected.inPoint)} step={0.05} value={getAudioFadeOut(selected)}
+                <input type="range" min={0} max={Math.min(5, tlDur(selected))} step={0.05} value={getAudioFadeOut(selected)}
                   onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFadeOut: Number(e.target.value) } : i))}
                   onDoubleClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFadeOut: 0 } : i))}
                   className="flex-1 accent-[color:var(--primary)]" />
@@ -3622,7 +3652,7 @@ function Editor() {
                           for (let k = 0; k < trackItems.length - 1; k++) {
                             const a = trackItems[k];
                             const b = trackItems[k + 1];
-                            const aEnd = a.start + (a.outPoint - a.inPoint);
+                            const aEnd = a.start + tlDur(a);
                             const gap = b.start - aEnd;
                             if (Math.abs(gap) > 0.25) continue;
                             const hasTrans = ((a.fadeOut ?? 0) > 0.01) && ((b.fadeIn ?? 0) > 0.01);
@@ -3653,7 +3683,7 @@ function Editor() {
                         })()}
 
                         {items.filter(i => i.trackId === tr.id).map(i => {
-                          const dur = i.outPoint - i.inPoint;
+                          const dur = tlDur(i);
                           const w = Math.max(20, dur * zoom);
                           const active = i.id === selectedId;
                           const color = i.kind === "audio" ? "oklch(0.55 0.15 200)" : i.kind === "text" ? "oklch(0.55 0.2 320)" : i.kind === "image" ? "oklch(0.6 0.18 80)" : "oklch(0.55 0.18 155)";
@@ -3704,9 +3734,9 @@ function Editor() {
                                 <div className="pointer-events-none absolute inset-y-0 right-0" style={{ width: visualFoW, background: "linear-gradient(to left, rgba(0,0,0,0.55), transparent)" }} />
                               )}
 
-                              <div data-handle="L" onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); const time = getTimelineTimeFromClientX(e.clientX) ?? i.start; skipHistory.current = true; lastTimelinePointer.current = { x: e.clientX, y: e.clientY }; dragRef.current = { type: "resizeL", id: i.id, origStart: i.start, origIn: i.inPoint, origEnd: i.start + (i.outPoint - i.inPoint), isImage: i.kind === "image", pointerOffsetPx: (time - i.start) * zoom }; }}
+                              <div data-handle="L" onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); const time = getTimelineTimeFromClientX(e.clientX) ?? i.start; skipHistory.current = true; lastTimelinePointer.current = { x: e.clientX, y: e.clientY }; dragRef.current = { type: "resizeL", id: i.id, origStart: i.start, origIn: i.inPoint, origEnd: i.start + tlDur(i), isImage: i.kind === "image", pointerOffsetPx: (time - i.start) * zoom }; }}
                                 className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-ew-resize bg-white/40 hover:bg-white" />
-                              <div data-handle="R" onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); const end = i.start + (i.outPoint - i.inPoint); const time = getTimelineTimeFromClientX(e.clientX) ?? end; skipHistory.current = true; lastTimelinePointer.current = { x: e.clientX, y: e.clientY }; dragRef.current = { type: "resizeR", id: i.id, origOut: i.outPoint, pointerOffsetPx: (time - end) * zoom }; }}
+                              <div data-handle="R" onMouseDown={(e) => { if (locked) return; e.stopPropagation(); setSelectedId(i.id); const end = i.start + tlDur(i); const time = getTimelineTimeFromClientX(e.clientX) ?? end; skipHistory.current = true; lastTimelinePointer.current = { x: e.clientX, y: e.clientY }; dragRef.current = { type: "resizeR", id: i.id, origOut: i.outPoint, pointerOffsetPx: (time - end) * zoom }; }}
                                 className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-ew-resize bg-white/40 hover:bg-white" />
 
                               {hasVisual && (
@@ -3879,8 +3909,8 @@ function Editor() {
         const preset = getTransitionById(transId);
         const maxDur = Math.min(
           5,
-          left.outPoint - left.inPoint,
-          right.outPoint - right.inPoint,
+          tlDur(left),
+          tlDur(right),
         );
         const updateDur = (v: number) => {
           const d = Math.max(0, Math.min(maxDur, v));
@@ -4218,23 +4248,69 @@ function Editor() {
 
       {/* Context menu */}
 
-      {ctxMenu && (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="fixed z-50 min-w-[180px] overflow-hidden rounded-md border border-border bg-popover py-1 text-xs text-popover-foreground shadow-xl"
-          style={{ left: ctxMenu.x, top: ctxMenu.y }}
-        >
-          <button onClick={() => { if (ctxMenu.clipId) copyClip(ctxMenu.clipId); setCtxMenu(null); }}
-            className="flex w-full items-center gap-2 px-3 py-1.5 hover:bg-accent"><CopyIcon className="h-3.5 w-3.5" /> Copiar <span className="ml-auto text-muted-foreground">Ctrl+C</span></button>
-          <button onClick={() => { pasteClip(); setCtxMenu(null); }} disabled={!clipboardRef.current}
-            className="flex w-full items-center gap-2 px-3 py-1.5 hover:bg-accent disabled:opacity-40"><ClipboardPaste className="h-3.5 w-3.5" /> Colar <span className="ml-auto text-muted-foreground">Ctrl+V</span></button>
-          <button onClick={() => { if (ctxMenu.clipId) splitAt(playhead, ctxMenu.clipId); setCtxMenu(null); }}
-            className="flex w-full items-center gap-2 px-3 py-1.5 hover:bg-accent"><Scissors className="h-3.5 w-3.5" /> Dividir na agulha <span className="ml-auto text-muted-foreground">S</span></button>
-          <div className="my-1 h-px bg-border" />
-          <button onClick={() => { if (ctxMenu.clipId) deleteItem(ctxMenu.clipId); setCtxMenu(null); }}
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-destructive hover:bg-accent"><Trash2 className="h-3.5 w-3.5" /> Excluir <span className="ml-auto text-muted-foreground">Del</span></button>
-        </div>
-      )}
+      {ctxMenu && (() => {
+        const clip = ctxMenu.clipId ? items.find(i => i.id === ctxMenu.clipId) : null;
+        const canSpeed = !!clip && (clip.kind === "video" || clip.kind === "audio");
+        const curSpeed = clip?.speed ?? 1;
+        const presets = [0.25, 0.5, 1, 2, 4];
+        return (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="fixed z-50 w-[260px] overflow-hidden rounded-md border border-border bg-popover py-1 text-xs text-popover-foreground shadow-xl"
+            style={{ left: ctxMenu.x, top: ctxMenu.y }}
+          >
+            <button onClick={() => { if (ctxMenu.clipId) copyClip(ctxMenu.clipId); setCtxMenu(null); }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 hover:bg-accent"><CopyIcon className="h-3.5 w-3.5" /> Copiar <span className="ml-auto text-muted-foreground">Ctrl+C</span></button>
+            <button onClick={() => { pasteClip(); setCtxMenu(null); }} disabled={!clipboardRef.current}
+              className="flex w-full items-center gap-2 px-3 py-1.5 hover:bg-accent disabled:opacity-40"><ClipboardPaste className="h-3.5 w-3.5" /> Colar <span className="ml-auto text-muted-foreground">Ctrl+V</span></button>
+            <button onClick={() => { if (ctxMenu.clipId) splitAt(playhead, ctxMenu.clipId); setCtxMenu(null); }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 hover:bg-accent"><Scissors className="h-3.5 w-3.5" /> Dividir na agulha <span className="ml-auto text-muted-foreground">S</span></button>
+
+            {canSpeed && (
+              <>
+                <div className="my-1 h-px bg-border" />
+                <div className="px-3 py-2">
+                  <div className="flex items-center justify-between gap-2 text-[11px] font-medium">
+                    <span className="flex items-center gap-1.5"><Gauge className="h-3.5 w-3.5" /> Velocidade</span>
+                    <span className="font-mono tabular-nums text-primary">{curSpeed.toFixed(2)}x</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={SPEED_MIN}
+                    max={SPEED_MAX}
+                    step={0.01}
+                    value={curSpeed}
+                    onChange={(e) => ctxMenu.clipId && setClipSpeed(ctxMenu.clipId, parseFloat(e.target.value))}
+                    className="mt-1.5 w-full accent-primary"
+                    title="Arraste para ajustar a velocidade (0.1x – 10x)"
+                  />
+                  <div className="mt-1 flex justify-between text-[9px] font-mono text-muted-foreground">
+                    <span>0.1x</span><span>1x</span><span>10x</span>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {presets.map(p => (
+                      <button key={p}
+                        onClick={() => ctxMenu.clipId && setClipSpeed(ctxMenu.clipId, p)}
+                        className={`rounded border px-1.5 py-0.5 text-[10px] font-mono ${Math.abs(curSpeed - p) < 0.005 ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50 hover:bg-accent"}`}>
+                        {p}x
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => ctxMenu.clipId && setClipSpeed(ctxMenu.clipId, 1)}
+                      className="ml-auto rounded border border-border px-1.5 py-0.5 text-[10px] hover:bg-accent"
+                      title="Resetar para 1x">Reset</button>
+                  </div>
+                  <div className="mt-1 text-[9px] text-muted-foreground">Pitch preservado · funciona em vídeo e áudio</div>
+                </div>
+              </>
+            )}
+
+            <div className="my-1 h-px bg-border" />
+            <button onClick={() => { if (ctxMenu.clipId) deleteItem(ctxMenu.clipId); setCtxMenu(null); }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-destructive hover:bg-accent"><Trash2 className="h-3.5 w-3.5" /> Excluir <span className="ml-auto text-muted-foreground">Del</span></button>
+          </div>
+        );
+      })()}
 
       {mediaCtx && (
         <div

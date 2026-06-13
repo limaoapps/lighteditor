@@ -33,6 +33,8 @@ export type WCItem = {
   start: number;
   inPoint: number;
   outPoint: number;
+  /** Velocidade de reprodução (1 = normal). */
+  speed?: number;
   fadeIn?: number;
   fadeOut?: number;
   audioFadeIn?: number;
@@ -494,8 +496,14 @@ function drawTextOverlay(
   ctx.restore();
 }
 
+/** Duração na linha do tempo (em segundos) ajustada por velocidade. */
+function tlDurWC(it: { inPoint: number; outPoint: number; speed?: number }): number {
+  const s = it.speed && it.speed > 0 ? it.speed : 1;
+  return (it.outPoint - it.inPoint) / s;
+}
+
 function computeOpacity(it: WCItem, localT: number): number {
-  const dur = it.outPoint - it.inPoint;
+  const dur = tlDurWC(it);
   let v = (it.fx?.opacity ?? 100) / 100;
   if (it.fadeIn && localT < it.fadeIn) v *= Math.max(0, localT / it.fadeIn);
   if (it.fadeOut && localT > dur - it.fadeOut) v *= Math.max(0, (dur - localT) / it.fadeOut);
@@ -529,7 +537,9 @@ async function buildMixedAudio(opts: WCExportOptions, sampleRate: number): Promi
     const graph = item.audioFx
       ? buildAudioFxGraph(ac, { initialFx: item.audioFx, initialGainDb: 0 })
       : null;
-    const dur = item.outPoint - item.inPoint;
+    const dur = tlDurWC(item);
+    const speedItem = item.speed && item.speed > 0 ? item.speed : 1;
+    try { src.playbackRate.value = speedItem; } catch { /* ignore */ }
     // Envelope de ganho: silêncio nas bordas (durante fade), gainDb no trecho central.
     const gainEnvelope = ac.createGain();
     const startT = item.start;
@@ -716,14 +726,15 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
   };
   const seekActiveVideos = async (t: number) => {
     const activeVideos = [...v1clips, ...visualItems].filter(c => {
-      const dur = c.outPoint - c.inPoint;
+      const dur = tlDurWC(c);
       return c.kind === "video" && t >= c.start && t < c.start + dur;
     });
     for (const c of activeVideos) {
       const el = await loadFor(c);
       if (!el) continue;
       const v = el as HTMLVideoElement;
-      const srcT = c.inPoint + (t - c.start);
+      const speedExp = c.speed && c.speed > 0 ? c.speed : 1;
+      const srcT = c.inPoint + (t - c.start) * speedExp;
       if (c.id !== lastSeekClipId || Math.abs(v.currentTime - srcT) > (0.5 / fps)) {
         await seekVideo(v, srcT);
         lastSeekClipId = c.id;

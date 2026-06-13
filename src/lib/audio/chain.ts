@@ -86,6 +86,7 @@ export type EffectsRack = {
   output: AudioNode;
   update: (fx: AudioFxPro) => void;
   ready: () => Promise<void>;
+  readMeter: () => { rmsL: number; rmsR: number; peakL: number; peakR: number; clip: boolean };
   dispose: () => void;
 };
 

@@ -6,7 +6,7 @@ import {
   Image as ImageIcon, Video as VideoIcon, RotateCw, Maximize2, AlignCenter,
   Lock, Unlock, Undo2, Redo2, Check, Copy as CopyIcon, ClipboardPaste,
   Sparkles, Sliders, Wand2, RotateCcw, Palette, Mic, MicOff,
-  Settings as SettingsIcon, FileText, RefreshCw, Cpu, Info, Magnet,
+  Settings as SettingsIcon, FileText, RefreshCw, Cpu, Info, Magnet, Gauge,
 } from "lucide-react";
 import {
   DEFAULT_AUDIO_FX as DEFAULT_AUDIO_FX_REF,

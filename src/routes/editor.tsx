@@ -1091,6 +1091,9 @@ function Editor() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
+  }, [selectedId]);
+
+
 
   // Apply master L/R gains
   useEffect(() => {

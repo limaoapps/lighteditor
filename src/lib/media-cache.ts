@@ -103,7 +103,7 @@ export class MediaCache implements MediaResolver {
       const v = this.videos.get(it.id);
       if (!v) continue;
       const speed = it.speed && it.speed > 0 ? it.speed : 1;
-      const tlDuration = (it.outPoint - it.inPoint); // já achatado no projeto da cena
+      const tlDuration = (it.outPoint - it.inPoint) / speed;
       const localActive = absT >= it.start && absT < it.start + tlDuration;
       try { v.playbackRate = speed; } catch { /* ignore */ }
       if (playing && localActive) {

@@ -59,6 +59,8 @@ export type SceneItem = {
   start: number;
   inPoint: number;
   outPoint: number;
+  /** Velocidade de reprodução (1 = normal). Usada pelo resolver para mapear srcT. */
+  speed?: number;
   fadeIn?: number;
   fadeOut?: number;
   fx?: SceneFx;

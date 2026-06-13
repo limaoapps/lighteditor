@@ -1,19 +1,13 @@
 /**
  * Rack de efeitos baseado em Tone.js. Cada efeito é um nó wet/dry com bypass.
  * Compatível com AudioContext (preview) e OfflineAudioContext (export).
- * 
- * Uso:
- *   const rack = buildEffectsRack(ctx);
- *   sourceNode.connect(rack.input);
- *   rack.output.connect(destination);
- *   rack.update(audioFxPro);
- *   // export: await rack.ready();
  */
 import * as Tone from "tone";
-import type { AudioFxPro, EffectId, EffectState, ReverbEnv } from "./types";
+import type { AudioFxPro, EffectState, ReverbEnv } from "./types";
 import { REVERB_ENV_LIST } from "./types";
 import { generateIR, specForEnv } from "./reverb-presets";
 import { buildEq, type EqGraph } from "./eq";
+import { buildMeter, type Meter } from "./meters";
 
 /** Define o contexto Tone para o ctx fornecido (preview ou offline). */
 export function bindToneContext(ctx: BaseAudioContext) {
@@ -245,17 +239,19 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
   let prev: AudioNode = eq.output;
   for (const s of order) { prev.connect(s.input); prev = s.output; }
   prev.connect(splitter);
+  // Meter taps the final signal (post pan/mono)
+  const meter: Meter = buildMeter(ctx);
   if (panNode) {
     merger.connect(panNode); panNode.connect(tail);
+    panNode.connect(meter.input);
   } else {
     merger.connect(tail);
+    merger.connect(meter.input);
   }
 
   const update = (fx: AudioFxPro) => {
-    // EQ
     eq.setBands(fx.eq.bands);
     eq.setGains(fx.eq.gains);
-    // Slots
     const e = fx.effects;
     compressorSlot.apply(e.compressor, ctx);
     distortionSlot.apply(e.distortion, ctx);
@@ -266,10 +262,18 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
     echoSlot.apply(e.echo, ctx);
     pingPongSlot.apply(e.pingPong, ctx);
     reverbSlot.apply(e.reverb, ctx);
-    stereoSlot.apply(e.stereoWidener, ctx);
     limiterSlot.apply(e.limiter, ctx);
-    // Estéreo / pan
+
+    // Estéreo / pan / largura
     const s = fx.stereo;
+    // Wire stereo widener from the StereoPanel "width" slider (0..2),
+    // overriding the effects-tab toggle so users see/hear it immediately.
+    const widthOn = s.enabled && !s.mono && Math.abs(s.width - 1) > 0.01;
+    const widenerState: EffectState = widthOn
+      ? { on: true, intensity: Math.max(0, Math.min(1, s.width / 2)), params: {} }
+      : e.stereoWidener;
+    stereoSlot.apply(widenerState, ctx);
+
     if (s.mono || !s.enabled) {
       gLL.gain.value = 0.5; gLR.gain.value = 0.5;
       gRL.gain.value = 0.5; gRR.gain.value = 0.5;
@@ -288,11 +292,14 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
     output: tail,
     update,
     async ready() { /* sem IR async */ },
+    readMeter: () => meter.read(),
     dispose() {
       try { headIn.disconnect(); tail.disconnect(); } catch { /* */ }
       eq.dispose();
+      meter.dispose();
       [compressorSlot, distortionSlot, chorusSlot, phaserSlot, tremoloSlot,
        delaySlot, echoSlot, pingPongSlot, reverbSlot, stereoSlot, limiterSlot].forEach(s => s.dispose());
     },
   };
 }
+

@@ -217,10 +217,11 @@ export function irForAmbience(ctx: BaseAudioContext, amb: Ambience): { ir: Audio
 export type AudioFxNodes = {
   input: AudioNode;
   output: AudioNode;
-  splitter: ChannelSplitterNode; // Permite conectar analisadores externos por canal
+  splitter: ChannelSplitterNode;
   setGain: (db: number) => void;
   setFx: (fx: AudioFx) => void;
   setMuted: (m: boolean) => void;
+  readMeter: () => { rmsL: number; rmsR: number; peakL: number; peakR: number; clip: boolean };
   dispose?: () => void;
 };
 
@@ -295,6 +296,7 @@ export function buildAudioFxGraph(ctx: BaseAudioContext, opts?: { initialFx?: Au
     setGain(db: number) { gain.gain.value = dbToGain(db); },
     setFx(fx: AudioFx) { rack.update(legacyToToneFx(fx)); },
     setMuted(m: boolean) { muteGain.gain.value = m ? 0 : 1; },
+    readMeter: () => rack.readMeter(),
     dispose() { try { rack.dispose(); } catch { /* */ } },
   };
   api.setFx(opts?.initialFx ?? DEFAULT_AUDIO_FX);

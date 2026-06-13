@@ -114,8 +114,14 @@ export function computeZoomScale(fx: SceneFx | undefined, localT: number, dur: n
   return fx.zoom.dir === "in" ? 1 + speedMul * p : 1 + speedMul * (1 - p);
 }
 
+/** Duração na linha do tempo considerando velocidade. */
+export function tlDurScene(it: { inPoint: number; outPoint: number; speed?: number }): number {
+  const s = it.speed && it.speed > 0 ? it.speed : 1;
+  return (it.outPoint - it.inPoint) / s;
+}
+
 export function computeOpacity(it: SceneItem, localT: number): number {
-  const dur = it.outPoint - it.inPoint;
+  const dur = tlDurScene(it);
   let v = (it.fx?.opacity ?? 100) / 100;
   if (it.fadeIn && localT < it.fadeIn) v *= Math.max(0, localT / it.fadeIn);
   if (it.fadeOut && localT > dur - it.fadeOut) v *= Math.max(0, (dur - localT) / it.fadeOut);
@@ -435,10 +441,10 @@ export function drawScene(
   ctx.restore();
 
   // V1 ativo
-  const active = scene.v1Items.find(c => t >= c.start && t < c.start + (c.outPoint - c.inPoint));
+  const active = scene.v1Items.find(c => t >= c.start && t < c.start + tlDurScene(c));
   if (active) {
     const localT = t - active.start;
-    const dur = active.outPoint - active.inPoint;
+    const dur = tlDurScene(active);
     const src = media.resolve(active, t);
     if (src) {
       const sw = (src as HTMLVideoElement).videoWidth || (src as HTMLImageElement).naturalWidth || active.width || targetW;
@@ -450,7 +456,7 @@ export function drawScene(
   // Backgrounds (blur/mirror) das camadas
   const visual = [...scene.visualItems].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
   for (const it of visual) {
-    const dur = it.outPoint - it.inPoint;
+    const dur = tlDurScene(it);
     const localT = t - it.start;
     if (localT < 0 || localT > dur) continue;
     if (it.fx?.fillMode !== "blur" && it.fx?.fillMode !== "mirror") continue;
@@ -463,7 +469,7 @@ export function drawScene(
 
   // Foreground das camadas
   for (const it of visual) {
-    const dur = it.outPoint - it.inPoint;
+    const dur = tlDurScene(it);
     const localT = t - it.start;
     if (localT < 0 || localT > dur) continue;
     const src = media.resolve(it, t);
@@ -477,7 +483,7 @@ export function drawScene(
   const texts = [...scene.textItems].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
   for (const it of texts) {
     if (!it.text?.content) continue;
-    const dur = it.outPoint - it.inPoint;
+    const dur = tlDurScene(it);
     const localT = t - it.start;
     if (localT < 0 || localT > dur) continue;
     drawTextOverlay(ctx, it, localT, dur, targetW, targetH);

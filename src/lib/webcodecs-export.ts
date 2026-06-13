@@ -726,14 +726,15 @@ export async function exportWithWebCodecs(opts: WCExportOptions): Promise<Blob> 
   };
   const seekActiveVideos = async (t: number) => {
     const activeVideos = [...v1clips, ...visualItems].filter(c => {
-      const dur = c.outPoint - c.inPoint;
+      const dur = tlDurWC(c);
       return c.kind === "video" && t >= c.start && t < c.start + dur;
     });
     for (const c of activeVideos) {
       const el = await loadFor(c);
       if (!el) continue;
       const v = el as HTMLVideoElement;
-      const srcT = c.inPoint + (t - c.start);
+      const speedExp = c.speed && c.speed > 0 ? c.speed : 1;
+      const srcT = c.inPoint + (t - c.start) * speedExp;
       if (c.id !== lastSeekClipId || Math.abs(v.currentTime - srcT) > (0.5 / fps)) {
         await seekVideo(v, srcT);
         lastSeekClipId = c.id;

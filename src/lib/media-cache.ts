@@ -80,11 +80,13 @@ export class MediaCache implements MediaResolver {
     if (item.kind === "video") {
       const v = this.videos.get(item.id);
       if (!v) return null;
-      const want = item.inPoint + (absT - item.start);
+      const speed = item.speed && item.speed > 0 ? item.speed : 1;
+      const want = item.inPoint + (absT - item.start) * speed;
       // Preview: ajusta currentTime sem aguardar seek (faz catch-up no próximo frame).
       if (Math.abs(v.currentTime - want) > 0.05) {
         try { v.currentTime = Math.max(0, want); } catch { /* ignore */ }
       }
+      try { v.playbackRate = speed; (v as HTMLVideoElement & { preservesPitch?: boolean }).preservesPitch = true; } catch { /* ignore */ }
       return v as unknown as MediaSource;
     }
     if (item.kind === "image") {
@@ -100,7 +102,10 @@ export class MediaCache implements MediaResolver {
       if (it.kind !== "video") continue;
       const v = this.videos.get(it.id);
       if (!v) continue;
-      const localActive = absT >= it.start && absT < it.start + (it.outPoint - it.inPoint);
+      const speed = it.speed && it.speed > 0 ? it.speed : 1;
+      const tlDuration = (it.outPoint - it.inPoint); // já achatado no projeto da cena
+      const localActive = absT >= it.start && absT < it.start + tlDuration;
+      try { v.playbackRate = speed; } catch { /* ignore */ }
       if (playing && localActive) {
         if (v.paused) { v.play().catch(() => { /* ignore */ }); }
       } else if (!v.paused) {

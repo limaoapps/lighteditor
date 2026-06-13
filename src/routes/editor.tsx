@@ -225,7 +225,17 @@ type TLItem = {
   fx?: Fx;
   /** Vídeo silenciado (áudio foi separado em uma trilha de áudio paralela). */
   silenced?: boolean;
+  /** Velocidade de reprodução (1 = normal). 0.1 = câmera lenta forte; 10 = ultra rápido. */
+  speed?: number;
 };
+
+/** Duração do clipe na timeline (em segundos), considerando velocidade. */
+const tlDur = (i: { inPoint: number; outPoint: number; speed?: number }) =>
+  (i.outPoint - i.inPoint) / (i.speed && i.speed > 0 ? i.speed : 1);
+
+const SPEED_MIN = 0.1;
+const SPEED_MAX = 10;
+const clampSpeed = (s: number) => Math.max(SPEED_MIN, Math.min(SPEED_MAX, s));
 
 type Track = { id: string; kind: TrackKind; label: string };
 

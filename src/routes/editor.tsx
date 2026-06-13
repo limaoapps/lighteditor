@@ -830,6 +830,7 @@ function CornerHandles({ id, tr, onStartScale }: { id: string; tr: Transform; on
 function Editor() {
   const [showMobilePanel, setShowMobilePanel] = useState(false);
   const [showMobileInspector, setShowMobileInspector] = useState(false);
+  const [audioMeter, setAudioMeter] = useState<{ rmsL: number; rmsR: number; peakL: number; peakR: number; clip: boolean } | null>(null);
   // Carrega todas as Google Fonts uma única vez
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -1076,6 +1077,23 @@ function Editor() {
     }
     return entry;
   }, [ensureAudioCtx, ensureMaster]);
+
+  // Poll selected item's meter (~25 fps)
+  useEffect(() => {
+    if (!selectedId) { setAudioMeter(null); return; }
+    let raf = 0; let last = 0;
+    const tick = (t: number) => {
+      raf = requestAnimationFrame(tick);
+      if (t - last < 40) return; last = t;
+      const g = mediaGraphRef.current[selectedId];
+      const read = g?.nodes.readMeter;
+      if (read) setAudioMeter(read());
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [selectedId]);
+
+
 
   // Apply master L/R gains
   useEffect(() => {
@@ -3228,253 +3246,11 @@ function Editor() {
                 : i));
             return (
               <div className="rounded-md border border-border bg-card p-2 text-xs">
-                <AudioPanel value={pro} onChange={onChangePro} meter={null} />
+                <AudioPanel value={pro} onChange={onChangePro} meter={audioMeter} />
               </div>
             );
           })()}
 
-          {selected && (selected.kind === "audio" || (selected.kind === "video" && !selected.silenced)) && (() => {
-            const afx: AudioFx = selected.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] };
-            const patchAfx = (patch: Partial<AudioFx>) =>
-              setItems(p => p.map(i => i.id === selected.id
-                ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), ...patch } }
-                : i));
-            const patchEq = (idx: number, val: number) => {
-              const next = [...afx.eq]; next[idx] = val;
-              patchAfx({ eq: next });
-            };
-            const resetEq = () => patchAfx({ eq: new Array(EQ_BANDS.length).fill(0) });
-            return (
-              <div className="space-y-3 rounded-md border border-border bg-card p-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Equalizador · 12 bandas</div>
-                  <button onClick={resetEq} className="text-[10px] text-muted-foreground hover:text-primary">reset</button>
-                </div>
-                <div className="grid grid-cols-12 gap-1">
-                  {EQ_BANDS.map((f, idx) => (
-                    <div key={f} className="flex flex-col items-center gap-1">
-                      <input
-                        type="range" min={-18} max={18} step={0.5}
-                        value={afx.eq[idx] ?? 0}
-                        onChange={(e) => patchEq(idx, Number(e.target.value))}
-                        onDoubleClick={() => patchEq(idx, 0)}
-                        className="h-20 accent-[color:var(--primary)]"
-                        style={{ writingMode: "vertical-lr", direction: "rtl", WebkitAppearance: "slider-vertical" } as React.CSSProperties}
-                        title={`${f}Hz · ${(afx.eq[idx] ?? 0).toFixed(1)}dB`}
-                      />
-                      <span className="font-mono text-[9px] text-muted-foreground">
-                        {f >= 1000 ? `${(f/1000).toFixed(f%1000===0?0:1)}k` : f}
-                      </span>
-                      <span className="font-mono text-[9px] tabular-nums">{(afx.eq[idx] ?? 0) > 0 ? "+" : ""}{(afx.eq[idx] ?? 0).toFixed(0)}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="border-t border-border pt-2">
-                  <div className="mb-1 flex items-center justify-between">
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Efeito de Voz</div>
-                    {(afx.voicePreset && afx.voicePreset !== "none") && (
-                      <button onClick={() => patchAfx({ voicePreset: "none" })} className="text-[10px] text-muted-foreground hover:text-primary">limpar</button>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-4 gap-1">
-                    {([
-                      { v: "none",       l: "Original" },
-                      { v: "robot",      l: "Robô" },
-                      { v: "monster",    l: "Monstro" },
-                      { v: "demon",      l: "Diabólica" },
-                      { v: "alien",      l: "ET" },
-                      { v: "megaphone",  l: "Megafone" },
-                      { v: "radio",      l: "Rádio" },
-                      { v: "telephone",  l: "Telefone" },
-                      { v: "child",      l: "Criança" },
-                      { v: "helium",     l: "Helio" },
-                      { v: "ghost",      l: "Fantasma" },
-                      { v: "cave",       l: "Caverna" },
-                    ] as { v: VoicePreset; l: string }[]).map(p => (
-                      <button key={p.v} onClick={() => patchAfx({ voicePreset: p.v, voiceParams: { ...defaultVoiceParams(p.v as VoiceEffectName), intensity: 1 } })}
-                        className={`rounded-md border px-1.5 py-1 text-[10px] ${ (afx.voicePreset ?? "none") === p.v ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
-                        {p.l}
-                      </button>
-                    ))}
-                  </div>
-                  {(() => {
-                    const vpName = (afx.voicePreset ?? "none") as string;
-                    if (vpName === "none") return null;
-                    const mapName: Record<string, VoiceEffectName> = {
-                      robot: "robot", monster: "monster", demon: "demon", megaphone: "megaphone",
-                      radio: "radio", telephone: "telephone", alien: "alien",
-                      child: "child", helium: "helium", ghost: "ghost", cave: "cave",
-                      whisper: "telephone", chipmunk: "helium", underwater: "monster",
-                    };
-                    const effectiveName = mapName[vpName];
-                    const defs = effectiveName ? VOICE_PARAM_DEFS[effectiveName] : undefined;
-                    const currentParams = afx.voiceParams ?? { ...defaultVoiceParams(effectiveName), intensity: 1 };
-                    const intensity = typeof currentParams.intensity === "number" ? currentParams.intensity : 1;
-                    return (
-                      <div className="mt-2 space-y-1.5 rounded-md border border-border/60 bg-muted/20 p-2">
-                        <div className="flex items-center justify-between">
-                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Parâmetros do efeito</div>
-                          <button
-                            onClick={() => patchAfx({ voiceParams: { ...defaultVoiceParams(effectiveName), intensity: 1 } })}
-                            className="text-[10px] text-muted-foreground hover:text-primary"
-                          >
-                            reset
-                          </button>
-                        </div>
-                        <label className="flex items-center gap-2 text-[11px]">
-                          <span className="w-20 truncate text-muted-foreground">Intensidade</span>
-                          <input
-                            type="range"
-                            min={0} max={1} step={0.01} value={intensity}
-                            onChange={(e) => patchAfx({ voiceParams: { ...currentParams, intensity: Number(e.target.value) } })}
-                            onDoubleClick={() => patchAfx({ voiceParams: { ...currentParams, intensity: 1 } })}
-                            className="flex-1 accent-[color:var(--primary)]"
-                          />
-                          <span className="w-12 text-right font-mono tabular-nums">{Math.round(intensity * 100)}%</span>
-                        </label>
-                        {(defs ?? []).map(def => {
-                          const val = typeof currentParams[def.key] === "number" ? currentParams[def.key] : def.default;
-                          return (
-                            <label key={def.key} className="flex items-center gap-2 text-[11px]">
-                              <span className="w-20 truncate text-muted-foreground">{def.label}</span>
-                              <input
-                                type="range"
-                                min={def.min} max={def.max} step={def.step} value={val}
-                                onChange={(e) => patchAfx({ voiceParams: { ...currentParams, [def.key]: Number(e.target.value) } })}
-                                onDoubleClick={() => patchAfx({ voiceParams: { ...currentParams, [def.key]: def.default } })}
-                                className="flex-1 accent-[color:var(--primary)]"
-                              />
-                              <span className="w-12 text-right font-mono tabular-nums">
-                                {def.step >= 1 ? val.toFixed(0) : val.toFixed(2)}{def.unit ?? ""}
-                              </span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
-                </div>
-
-
-                <div className="border-t border-border pt-2">
-                  <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Reverb</div>
-                  <div className="grid grid-cols-5 gap-1">
-                    {(["none","room","hall","plate","cathedral"] as ReverbPreset[]).map(p => (
-                      <button key={p} onClick={() => patchAfx({ reverbPreset: p, reverbMix: p === "none" ? 0 : Math.max(20, afx.reverbMix) })}
-                        className={`rounded-md border px-1.5 py-1 text-[10px] capitalize ${afx.reverbPreset === p ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
-                        {p === "none" ? "off" : p}
-                      </button>
-                    ))}
-                  </div>
-                  <label className="mt-2 flex items-center gap-2">
-                    <span className="w-12 text-muted-foreground">Mix</span>
-                    <input type="range" min={0} max={100} step={1} value={afx.reverbMix}
-                      onChange={(e) => patchAfx({ reverbMix: Number(e.target.value) })}
-                      className="flex-1 accent-[color:var(--primary)]" />
-                    <span className="w-9 text-right font-mono tabular-nums">{afx.reverbMix}%</span>
-                  </label>
-                </div>
-
-                <div className="border-t border-border pt-2">
-
-                  <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Echo / Delay</div>
-                  <label className="flex items-center gap-2">
-                    <span className="w-12 text-muted-foreground">Mix</span>
-                    <input type="range" min={0} max={100} step={1} value={afx.echoMix}
-                      onChange={(e) => patchAfx({ echoMix: Number(e.target.value) })}
-                      className="flex-1 accent-[color:var(--primary)]" />
-                    <span className="w-9 text-right font-mono tabular-nums">{afx.echoMix}%</span>
-                  </label>
-                  <label className="mt-1 flex items-center gap-2">
-                    <span className="w-12 text-muted-foreground">Delay</span>
-                    <input type="range" min={10} max={2000} step={5} value={afx.echoDelay}
-                      onChange={(e) => patchAfx({ echoDelay: Number(e.target.value) })}
-                      className="flex-1 accent-[color:var(--primary)]" />
-                    <span className="w-12 text-right font-mono tabular-nums">{afx.echoDelay}ms</span>
-                  </label>
-                  <label className="mt-1 flex items-center gap-2">
-                    <span className="w-12 text-muted-foreground">Feedback</span>
-                    <input type="range" min={0} max={95} step={1} value={afx.echoFeedback}
-                      onChange={(e) => patchAfx({ echoFeedback: Number(e.target.value) })}
-                      className="flex-1 accent-[color:var(--primary)]" />
-                    <span className="w-9 text-right font-mono tabular-nums">{afx.echoFeedback}%</span>
-                  </label>
-                </div>
-
-                <div className="border-t border-border pt-2">
-                  <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Ambiente</div>
-                  <div className="grid grid-cols-3 gap-1">
-                    {(["none","room","hall","cave","outdoor","underwater", "lounge"] as Ambience[]).map(a => (
-                      <button key={a} onClick={() => patchAfx({ ambience: a })}
-                        className={`rounded-md border px-1.5 py-1 text-[10px] capitalize ${afx.ambience === a ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
-                        {a === "none" ? "off" : a === "underwater" ? "submerso" : a === "outdoor" ? "ext." : a === "room" ? "sala" : a === "hall" ? "salão" : a === "cave" ? "caverna" : a === "lounge" ? "lounge" : a}
-                      </button>
-                    ))}
-
-                  </div>
-                </div>
-
-                <div className="border-t border-border pt-2">
-                  <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">Canais</div>
-                  <div className="flex flex-col gap-2">
-                    <div className="grid grid-cols-2 gap-1">
-                      {(["stereo","mono"] as ChannelMode[]).map(m => (
-                        <button key={m} onClick={() => patchAfx({ channelMode: m })}
-                          className={`rounded-md border px-1.5 py-1 text-[10px] capitalize ${afx.channelMode === m ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
-                          {m === "stereo" ? "Estéreo" : "Mono"}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase">Estéreo</span>
-                      <button
-                        onClick={() => patchAfx({ stereoEnabled: !(afx.stereoEnabled ?? true) })}
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-md border transition-colors ${(afx.stereoEnabled ?? true) ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground"}`}
-                      >
-                        {(afx.stereoEnabled ?? true) ? "LIGADO" : "DESLIGADO"}
-                      </button>
-                    </div>
-                    {(afx.stereoEnabled ?? true) && (
-                      <label className="flex items-center gap-2">
-                        <span className="w-12 text-muted-foreground">Intens.</span>
-                        <input type="range" min={0} max={200} step={1} value={afx.stereoWidth ?? 100}
-                          onChange={(e) => patchAfx({ stereoWidth: Number(e.target.value) })}
-                          className="flex-1 accent-[color:var(--primary)]" />
-                        <span className="w-10 text-right font-mono tabular-nums">{afx.stereoWidth ?? 100}%</span>
-                      </label>
-                    )}
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-[8px] font-bold text-muted-foreground uppercase">
-                        <span>Balanço</span>
-                        <span>
-                          {afx.pan === 0 || !afx.pan 
-                            ? "Centro" 
-                            : afx.pan < 0 
-                              ? `E ${Math.abs(Math.round(afx.pan * 100))}%` 
-                              : `D ${Math.round(afx.pan * 100)}%`}
-                        </span>
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <input 
-                          type="range" min="-1" max="1" step="0.01" 
-                          value={afx.pan ?? 0}
-                          onChange={(e) => patchAfx({ pan: Number(e.target.value), channelMode: "panned" })}
-                          onDoubleClick={() => patchAfx({ pan: 0, channelMode: "stereo" })}
-                          className="w-full h-1 rounded bg-muted appearance-none cursor-pointer accent-primary" 
-                          title="Balanço (Pan) - Duplo clique para centralizar"
-                        />
-                        <div className="grid grid-cols-2 gap-4 px-0.5">
-                          <ChannelMeter peak={panPeaks.L} label="E" />
-                          <ChannelMeter peak={panPeaks.R} label="D" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
 
 
           {selected && selected.fx && (selected.kind === "image" || selected.kind === "video" || selected.kind === "text") && (() => {
@@ -4308,276 +4084,19 @@ function Editor() {
                   </div>
                 )}
 
-                {/* Audio Effects (EQ, Ambience, Reverb, Echo) */}
-                {(selected.kind === "audio" || (selected.kind === "video" && !selected.silenced)) && (
-
-                  <div className="space-y-6">
-                    {/* Equalizer */}
-                    <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Sliders className="h-4 w-4 text-primary" />
-                        <span className="text-sm font-semibold">Equalizador (12 bandas)</span>
-                      </div>
-                      <div className="flex h-32 items-end justify-between gap-1 overflow-x-auto pb-2">
-                        {EQ_BANDS.map((freq, idx) => (
-                          <div key={freq} className="flex flex-col items-center gap-1 min-w-[30px]">
-                            <div className="relative group/eq h-20 w-1.5 rounded-full bg-muted">
-                              <div
-                                className="absolute bottom-0 left-0 right-0 rounded-full bg-primary transition-all"
-                                style={{ height: `${(((selected.audioFx?.eq?.[idx] ?? 0) + 18) / 36) * 100}%` }}
-                              />
-                              {/* Valor numérico flutuante ao ajustar */}
-                              <div className="absolute -top-6 left-1/2 -translate-x-1/2 rounded bg-primary px-1 text-[10px] font-mono text-primary-foreground opacity-0 transition-opacity group-active/eq:opacity-100 group-hover/eq:opacity-100 pointer-events-none whitespace-nowrap z-20">
-                                {(selected.audioFx?.eq?.[idx] ?? 0).toFixed(1)}
-                              </div>
-                              <input
-                                type="range" min="-18" max="18" step="0.5"
-                                value={selected.audioFx?.eq?.[idx] ?? 0}
-                                onChange={(e) => {
-                                  const val = Number(e.target.value);
-                                  setItems(p => p.map(i => {
-                                    if (i.id !== selected.id) return i;
-                                    const baseFx = i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] };
-                                    const nextEq = [...baseFx.eq];
-                                    nextEq[idx] = val;
-                                    return { ...i, audioFx: { ...baseFx, eq: nextEq } };
-                                  }));
-                                }}
-                                className="absolute inset-0 z-10 w-full h-full opacity-0 cursor-pointer orientation-vertical"
-                                style={{ WebkitAppearance: "slider-vertical" } as CSSProperties}
-                              />
-                            </div>
-                            <span className="text-[8px] text-muted-foreground font-mono">
-                              {freq >= 1000 ? `${freq / 1000}k` : freq}
-                            </span>
-                          </div>
-                        ))}
-
-                      </div>
+                {/* Audio Pro Panel (mobile) */}
+                {(selected.kind === "audio" || (selected.kind === "video" && !selected.silenced)) && (() => {
+                  const pro: AudioFxPro = selected.audioFx?.pro ?? DEFAULT_AUDIO_FX_PRO;
+                  const onChangePro = (next: AudioFxPro) =>
+                    setItems(p => p.map(i => i.id === selected.id
+                      ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), pro: next } }
+                      : i));
+                  return (
+                    <div className="rounded-2xl border border-border bg-card p-4">
+                      <AudioPanel value={pro} onChange={onChangePro} meter={audioMeter} />
                     </div>
-
-                    {/* Ambience & Reverb */}
-                    <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Sparkles className="h-4 w-4 text-primary" />
-                        <span className="text-sm font-semibold">Ambiente e Reverb</span>
-                      </div>
-                      
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <label className="text-[10px] uppercase font-bold text-muted-foreground">Ambiente</label>
-                          <select
-                            value={selected.audioFx?.ambience ?? "none"}
-                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), ambience: e.target.value as Ambience } } : i))}
-
-                            className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
-                          >
-                            <option value="none">Nenhum</option>
-                            <option value="room">Sala</option>
-                            <option value="hall">Salão</option>
-                            <option value="cave">Caverna</option>
-                            <option value="outdoor">Ar Livre</option>
-                            <option value="underwater">Subaquático</option>
-                          </select>
-                        </div>
-
-                        <div className="space-y-2">
-                          <label className="text-[10px] uppercase font-bold text-muted-foreground">Preset de Reverb</label>
-                          <select
-                            value={selected.audioFx?.reverbPreset ?? "none"}
-                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), reverbPreset: e.target.value as ReverbPreset } } : i))}
-
-                            className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm"
-                          >
-                            <option value="none">Nenhum</option>
-                            <option value="room">Quarto</option>
-                            <option value="hall">Hall</option>
-                            <option value="plate">Placa</option>
-                            <option value="cathedral">Catedral</option>
-                            <option value="auditorium">Auditório</option>
-                            <option value="cinema">Cinema</option>
-                          </select>
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="flex justify-between">
-                            <label className="text-[10px] uppercase font-bold text-muted-foreground">Mix do Reverb</label>
-                            <span className="text-xs font-mono">{(selected.audioFx?.reverbMix ?? 0).toFixed(0)}%</span>
-                          </div>
-                          <input type="range" min="0" max="100" value={selected.audioFx?.reverbMix ?? 0}
-                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), reverbMix: Number(e.target.value) } } : i))}
-
-                            className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Espacialização (Surround) */}
-                    <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Sparkles className="h-4 w-4 text-primary" />
-                        <span className="text-sm font-semibold">Espacialização (Surround)</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { val: "none", label: "Desligado" },
-                          { val: "surround_light", label: "Surround Leve" },
-                          { val: "surround_med", label: "Surround Médio" },
-                          { val: "surround_strong", label: "Surround Forte" },
-                          { val: "lounge", label: "Som Lounge" },
-                        ].map((s) => (
-                          <button
-                            key={s.val}
-                            onClick={() => {
-                              setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), ambience: s.val as Ambience } } : i));
-                            }}
-                            className={`rounded-lg border py-2 text-xs font-medium transition-colors ${selected.audioFx?.ambience === s.val ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:bg-accent"}`}
-                          >
-                            {s.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Echo / Delay */}
-                    <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
-                      <div className="flex items-center gap-2 mb-2">
-                        <RefreshCw className="h-4 w-4 text-primary" />
-                        <span className="text-sm font-semibold">Eco / Delay</span>
-                      </div>
-
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <div className="flex justify-between">
-                            <label className="text-[10px] uppercase font-bold text-muted-foreground">Mix do Eco</label>
-                            <span className="text-xs font-mono">{(selected.audioFx?.echoMix ?? 0).toFixed(0)}%</span>
-                          </div>
-                          <input type="range" min="0" max="100" value={selected.audioFx?.echoMix ?? 0}
-                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), echoMix: Number(e.target.value) } } : i))}
-
-                            className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="flex justify-between">
-                            <label className="text-[10px] uppercase font-bold text-muted-foreground">Atraso (Delay)</label>
-                            <span className="text-xs font-mono">{selected.audioFx?.echoDelay ?? 300}ms</span>
-                          </div>
-                          <input type="range" min="0" max="50" step="1" value={selected.audioFx?.echoDelay ?? 300}
-                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), echoDelay: Number(e.target.value) } } : i))}
-
-                            className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="flex justify-between">
-                            <label className="text-[10px] uppercase font-bold text-muted-foreground">Feedback (Repetição)</label>
-                            <span className="text-xs font-mono">{selected.audioFx?.echoFeedback ?? 30}%</span>
-                          </div>
-                          <input type="range" min="0" max="95" value={selected.audioFx?.echoFeedback ?? 30}
-                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), echoFeedback: Number(e.target.value) } } : i))}
-
-                            className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Largura Estéreo & Posição 3D */}
-                    <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Maximize2 className="h-4 w-4 text-primary" />
-                        <span className="text-sm font-semibold">Largura Estéreo & Posição 3D</span>
-                      </div>
-                      
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-center">
-                            <label className="text-[10px] uppercase font-bold text-muted-foreground">Estéreo</label>
-                            <button
-                              onClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), stereoEnabled: !(i.audioFx?.stereoEnabled ?? true) } } : i))}
-                              className={`text-[10px] font-bold px-2 py-1 rounded-md border transition-colors ${(selected.audioFx?.stereoEnabled ?? true) ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground"}`}
-                            >
-                              {(selected.audioFx?.stereoEnabled ?? true) ? "LIGADO" : "DESLIGADO"}
-                            </button>
-                          </div>
-                          {(selected.audioFx?.stereoEnabled ?? true) && (
-                            <>
-                              <div className="flex justify-between">
-                                <label className="text-[10px] uppercase font-bold text-muted-foreground">Intensidade</label>
-                                <span className="text-xs font-mono">{(selected.audioFx?.stereoWidth ?? 100).toFixed(0)}%</span>
-                              </div>
-                              <input type="range" min="0" max="200" value={selected.audioFx?.stereoWidth ?? 100}
-                                onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), stereoWidth: Number(e.target.value) } } : i))}
-                                className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
-                            </>
-                          )}
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="flex justify-between">
-                            <label className="text-[10px] uppercase font-bold text-muted-foreground">Profundidade (Frente ↔ Trás)</label>
-                            <span className="text-xs font-mono">{(selected.audioFx?.positionDepth ?? 0) < 0 ? "Frente" : (selected.audioFx?.positionDepth ?? 0) > 0 ? "Trás" : "Centro"}</span>
-                          </div>
-                          <input type="range" min="-1" max="1" step="0.01" value={selected.audioFx?.positionDepth ?? 0}
-                            onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), positionDepth: Number(e.target.value) } } : i))}
-                            className="w-full h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Channel Mode */}
-                    <div className="space-y-4 rounded-2xl bg-card p-5 border border-border shadow-sm">
-                      <div className="flex items-center gap-2 mb-2">
-                        <SettingsIcon className="h-4 w-4 text-primary" />
-                        <span className="text-sm font-semibold">Modo de Canal</span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        {[
-                          { val: "stereo", label: "Estéreo" },
-                          { val: "mono", label: "Mono" },
-                          { val: "left", label: "Esq." },
-                          { val: "right", label: "Dir." },
-                          { val: "invert", label: "Inverter" },
-                        ].map((m) => (
-                          <button
-                            key={m.val}
-                            onClick={() => {
-                              setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), channelMode: m.val as ChannelMode } } : i));
-                            }}
-                            className={`rounded-lg border py-2 text-xs font-medium transition-colors ${(selected.audioFx?.channelMode ?? "stereo") === m.val ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-muted-foreground hover:bg-accent"}`}
-                          >
-                            {m.label}
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Gradual Balance Control (Centro -> Esquerda/Direita) */}
-                      <div className="space-y-2 mt-4">
-                        <div className="flex justify-between items-center">
-                          <label className="text-[10px] uppercase font-bold text-muted-foreground">Posição Horizontal (Pan)</label>
-                          <span className="text-[10px] font-mono text-primary">
-                            {selected.audioFx?.pan === 0 || !selected.audioFx?.pan ? "CENTRO" : 
-                             selected.audioFx.pan < 0 ? `${Math.abs(selected.audioFx.pan * 100).toFixed(0)}% ESQ` : 
-                             `${(selected.audioFx.pan * 100).toFixed(0)}% DIR`}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-[10px] font-bold text-muted-foreground">L</span>
-                          <input 
-                            type="range" min="-1" max="1" step="0.01" 
-                            value={selected.audioFx?.pan ?? 0}
-                            onChange={(e) => {
-                              const val = Number(e.target.value);
-                              setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFx: { ...(i.audioFx ?? { ...DEFAULT_AUDIO_FX_REF, eq: [...DEFAULT_AUDIO_FX_REF.eq] }), pan: val, channelMode: "panned" } } : i));
-                            }}
-                            className="flex-1 h-1.5 rounded-lg bg-muted appearance-none cursor-pointer accent-primary" 
-                          />
-                          <span className="text-[10px] font-bold text-muted-foreground">R</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Visual params for image/video */}
                 {(selected.kind === "image" || selected.kind === "video") && selected.transform && selected.fx && (

@@ -1975,26 +1975,31 @@ function Editor() {
       } else if (d.type === "resizeL") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
+          const speed = i.speed && i.speed > 0 ? i.speed : 1;
           let raw = Math.max(0, tSec);
           if (snapResizeRef.current) raw = Math.max(0, snapResizeTimeRef.current(raw, d.id));
           if (d.isImage) {
             const newStart = Math.max(0, Math.min(d.origEnd - 0.1, raw));
-            return { ...i, start: newStart, inPoint: 0, outPoint: d.origEnd - newStart };
+            // Para imagens, outPoint segue a duração de timeline diretamente (speed=1 efetivo).
+            return { ...i, start: newStart, inPoint: 0, outPoint: (d.origEnd - newStart) * (i.speed || 1) };
           }
-          const delta = raw - d.origStart;
-          const newIn = Math.max(0, Math.min(i.outPoint - 0.1, d.origIn + delta));
-          const newStart = Math.max(0, d.origStart + (newIn - d.origIn));
+          const deltaTl = raw - d.origStart;            // delta no espaço da timeline
+          const deltaSrc = deltaTl * speed;             // delta no espaço de origem
+          const newIn = Math.max(0, Math.min(i.outPoint - 0.1, d.origIn + deltaSrc));
+          const newStart = Math.max(0, d.origStart + (newIn - d.origIn) / speed);
           return { ...i, start: newStart, inPoint: newIn };
         }), false);
       } else if (d.type === "resizeR") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
+          const speed = i.speed && i.speed > 0 ? i.speed : 1;
           let raw = Math.max(i.start + 0.1, tSec);
           if (snapResizeRef.current) raw = Math.max(i.start + 0.1, snapResizeTimeRef.current(raw, d.id));
           raw = Math.min(MAX_PROJECT_SEC, raw);
           const sourceCap = i.kind === "image" ? MAX_PROJECT_SEC : i.sourceDuration;
-          const maxOut = Math.min(sourceCap, i.inPoint + Math.max(0.1, MAX_PROJECT_SEC - i.start));
-          const newOut = Math.max(i.inPoint + 0.1, Math.min(maxOut, raw - i.start + i.inPoint));
+          const maxOut = Math.min(sourceCap, i.inPoint + Math.max(0.1, (MAX_PROJECT_SEC - i.start) * speed));
+          const wantedOut = i.inPoint + (raw - i.start) * speed;
+          const newOut = Math.max(i.inPoint + 0.1, Math.min(maxOut, wantedOut));
           return { ...i, outPoint: newOut };
         }), false);
       } else if (d.type === "visualFadeIn") {

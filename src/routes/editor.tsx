@@ -1597,6 +1597,13 @@ function Editor() {
     if (selectedId === id) setSelectedId(null);
   };
 
+  /** Atualiza a velocidade de reprodução de um clipe. Mantém inPoint/outPoint (origem)
+   *  e ajusta apenas a duração visível na timeline via `tlDur`. */
+  const setClipSpeed = useCallback((id: string, newSpeed: number) => {
+    const s = clampSpeed(newSpeed);
+    setItems(prev => prev.map(i => i.id === id ? { ...i, speed: s } : i));
+  }, [setItems]);
+
   const removeMedia = (mediaId: string) => {
     setMedia(prev => {
       const target = prev.find(m => m.id === mediaId);

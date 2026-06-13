@@ -1870,7 +1870,9 @@ function Editor() {
         height: c.height,
         start: c.start,
         inPoint: c.inPoint,
-        outPoint: c.outPoint,
+        // Achata para o renderer: outPoint passa a representar inPoint + duração de timeline.
+        outPoint: c.inPoint + tlDur(c),
+        speed: c.speed,
         fadeIn: c.fadeIn,
         fadeOut: c.fadeOut,
         fx: c.fx as SceneItem["fx"],

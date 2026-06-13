@@ -1755,8 +1755,10 @@ function Editor() {
     const wanted = activeV1Video.url;
     if (!wanted) { v.pause(); v.removeAttribute("src"); v.load(); return; }
     if (v.src !== wanted) v.src = wanted;
-    const target = activeV1Video.inPoint + (playhead - activeV1Video.start);
+    const _speedV1 = activeV1Video.speed && activeV1Video.speed > 0 ? activeV1Video.speed : 1;
+    const target = activeV1Video.inPoint + (playhead - activeV1Video.start) * _speedV1;
     if (Math.abs(v.currentTime - target) > 0.25) v.currentTime = target;
+    try { v.playbackRate = _speedV1; (v as HTMLVideoElement & { preservesPitch?: boolean }).preservesPitch = true; } catch { /* ignore */ }
     v.muted = !!trackMuted[activeV1Video.trackId] || !!activeV1Video.silenced;
     // Encaminha pelo grafo WebAudio para permitir ganho >0dB e FX.
     const g = attachGraph(activeV1Video.id, v, activeV1Video);
@@ -1791,8 +1793,10 @@ function Editor() {
     const wanted = activeV1Video.url;
     if (!wanted) { bg.pause(); bg.removeAttribute("src"); bg.load(); return; }
     if (bg.src !== wanted) bg.src = wanted;
-    const target = activeV1Video.inPoint + (playhead - activeV1Video.start);
+    const _speedBg = activeV1Video.speed && activeV1Video.speed > 0 ? activeV1Video.speed : 1;
+    const target = activeV1Video.inPoint + (playhead - activeV1Video.start) * _speedBg;
     if (Math.abs(bg.currentTime - target) > 0.25) bg.currentTime = target;
+    try { bg.playbackRate = _speedBg; } catch { /* ignore */ }
     bg.muted = true;
     if (playing) {
       bg.play().catch(() => {});
@@ -1825,8 +1829,10 @@ function Editor() {
         el.volume = Math.min(1, computeAudioGain(a, playhead));
       }
       if (inRange) {
-        const target = a.inPoint + (playhead - a.start);
+        const _speedA = a.speed && a.speed > 0 ? a.speed : 1;
+        const target = a.inPoint + (playhead - a.start) * _speedA;
         if (Math.abs(el.currentTime - target) > 0.25) el.currentTime = target;
+        try { el.playbackRate = _speedA; (el as HTMLAudioElement & { preservesPitch?: boolean }).preservesPitch = true; } catch { /* ignore */ }
         if (playing && el.paused) {
           el.play().catch(() => {});
         }

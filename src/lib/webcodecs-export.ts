@@ -496,8 +496,14 @@ function drawTextOverlay(
   ctx.restore();
 }
 
+/** Duração na linha do tempo (em segundos) ajustada por velocidade. */
+function tlDurWC(it: { inPoint: number; outPoint: number; speed?: number }): number {
+  const s = it.speed && it.speed > 0 ? it.speed : 1;
+  return (it.outPoint - it.inPoint) / s;
+}
+
 function computeOpacity(it: WCItem, localT: number): number {
-  const dur = it.outPoint - it.inPoint;
+  const dur = tlDurWC(it);
   let v = (it.fx?.opacity ?? 100) / 100;
   if (it.fadeIn && localT < it.fadeIn) v *= Math.max(0, localT / it.fadeIn);
   if (it.fadeOut && localT > dur - it.fadeOut) v *= Math.max(0, (dur - localT) / it.fadeOut);
@@ -531,7 +537,9 @@ async function buildMixedAudio(opts: WCExportOptions, sampleRate: number): Promi
     const graph = item.audioFx
       ? buildAudioFxGraph(ac, { initialFx: item.audioFx, initialGainDb: 0 })
       : null;
-    const dur = item.outPoint - item.inPoint;
+    const dur = tlDurWC(item);
+    const speedItem = item.speed && item.speed > 0 ? item.speed : 1;
+    try { src.playbackRate.value = speedItem; } catch { /* ignore */ }
     // Envelope de ganho: silêncio nas bordas (durante fade), gainDb no trecho central.
     const gainEnvelope = ac.createGain();
     const startT = item.start;

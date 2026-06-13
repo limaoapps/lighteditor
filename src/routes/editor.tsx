@@ -4248,23 +4248,69 @@ function Editor() {
 
       {/* Context menu */}
 
-      {ctxMenu && (
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="fixed z-50 min-w-[180px] overflow-hidden rounded-md border border-border bg-popover py-1 text-xs text-popover-foreground shadow-xl"
-          style={{ left: ctxMenu.x, top: ctxMenu.y }}
-        >
-          <button onClick={() => { if (ctxMenu.clipId) copyClip(ctxMenu.clipId); setCtxMenu(null); }}
-            className="flex w-full items-center gap-2 px-3 py-1.5 hover:bg-accent"><CopyIcon className="h-3.5 w-3.5" /> Copiar <span className="ml-auto text-muted-foreground">Ctrl+C</span></button>
-          <button onClick={() => { pasteClip(); setCtxMenu(null); }} disabled={!clipboardRef.current}
-            className="flex w-full items-center gap-2 px-3 py-1.5 hover:bg-accent disabled:opacity-40"><ClipboardPaste className="h-3.5 w-3.5" /> Colar <span className="ml-auto text-muted-foreground">Ctrl+V</span></button>
-          <button onClick={() => { if (ctxMenu.clipId) splitAt(playhead, ctxMenu.clipId); setCtxMenu(null); }}
-            className="flex w-full items-center gap-2 px-3 py-1.5 hover:bg-accent"><Scissors className="h-3.5 w-3.5" /> Dividir na agulha <span className="ml-auto text-muted-foreground">S</span></button>
-          <div className="my-1 h-px bg-border" />
-          <button onClick={() => { if (ctxMenu.clipId) deleteItem(ctxMenu.clipId); setCtxMenu(null); }}
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-destructive hover:bg-accent"><Trash2 className="h-3.5 w-3.5" /> Excluir <span className="ml-auto text-muted-foreground">Del</span></button>
-        </div>
-      )}
+      {ctxMenu && (() => {
+        const clip = ctxMenu.clipId ? items.find(i => i.id === ctxMenu.clipId) : null;
+        const canSpeed = !!clip && (clip.kind === "video" || clip.kind === "audio");
+        const curSpeed = clip?.speed ?? 1;
+        const presets = [0.25, 0.5, 1, 2, 4];
+        return (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="fixed z-50 w-[260px] overflow-hidden rounded-md border border-border bg-popover py-1 text-xs text-popover-foreground shadow-xl"
+            style={{ left: ctxMenu.x, top: ctxMenu.y }}
+          >
+            <button onClick={() => { if (ctxMenu.clipId) copyClip(ctxMenu.clipId); setCtxMenu(null); }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 hover:bg-accent"><CopyIcon className="h-3.5 w-3.5" /> Copiar <span className="ml-auto text-muted-foreground">Ctrl+C</span></button>
+            <button onClick={() => { pasteClip(); setCtxMenu(null); }} disabled={!clipboardRef.current}
+              className="flex w-full items-center gap-2 px-3 py-1.5 hover:bg-accent disabled:opacity-40"><ClipboardPaste className="h-3.5 w-3.5" /> Colar <span className="ml-auto text-muted-foreground">Ctrl+V</span></button>
+            <button onClick={() => { if (ctxMenu.clipId) splitAt(playhead, ctxMenu.clipId); setCtxMenu(null); }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 hover:bg-accent"><Scissors className="h-3.5 w-3.5" /> Dividir na agulha <span className="ml-auto text-muted-foreground">S</span></button>
+
+            {canSpeed && (
+              <>
+                <div className="my-1 h-px bg-border" />
+                <div className="px-3 py-2">
+                  <div className="flex items-center justify-between gap-2 text-[11px] font-medium">
+                    <span className="flex items-center gap-1.5"><Gauge className="h-3.5 w-3.5" /> Velocidade</span>
+                    <span className="font-mono tabular-nums text-primary">{curSpeed.toFixed(2)}x</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={SPEED_MIN}
+                    max={SPEED_MAX}
+                    step={0.01}
+                    value={curSpeed}
+                    onChange={(e) => ctxMenu.clipId && setClipSpeed(ctxMenu.clipId, parseFloat(e.target.value))}
+                    className="mt-1.5 w-full accent-primary"
+                    title="Arraste para ajustar a velocidade (0.1x – 10x)"
+                  />
+                  <div className="mt-1 flex justify-between text-[9px] font-mono text-muted-foreground">
+                    <span>0.1x</span><span>1x</span><span>10x</span>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {presets.map(p => (
+                      <button key={p}
+                        onClick={() => ctxMenu.clipId && setClipSpeed(ctxMenu.clipId, p)}
+                        className={`rounded border px-1.5 py-0.5 text-[10px] font-mono ${Math.abs(curSpeed - p) < 0.005 ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50 hover:bg-accent"}`}>
+                        {p}x
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => ctxMenu.clipId && setClipSpeed(ctxMenu.clipId, 1)}
+                      className="ml-auto rounded border border-border px-1.5 py-0.5 text-[10px] hover:bg-accent"
+                      title="Resetar para 1x">Reset</button>
+                  </div>
+                  <div className="mt-1 text-[9px] text-muted-foreground">Pitch preservado · funciona em vídeo e áudio</div>
+                </div>
+              </>
+            )}
+
+            <div className="my-1 h-px bg-border" />
+            <button onClick={() => { if (ctxMenu.clipId) deleteItem(ctxMenu.clipId); setCtxMenu(null); }}
+              className="flex w-full items-center gap-2 px-3 py-1.5 text-destructive hover:bg-accent"><Trash2 className="h-3.5 w-3.5" /> Excluir <span className="ml-auto text-muted-foreground">Del</span></button>
+          </div>
+        );
+      })()}
 
       {mediaCtx && (
         <div

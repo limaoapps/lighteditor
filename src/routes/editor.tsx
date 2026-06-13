@@ -830,6 +830,7 @@ function CornerHandles({ id, tr, onStartScale }: { id: string; tr: Transform; on
 function Editor() {
   const [showMobilePanel, setShowMobilePanel] = useState(false);
   const [showMobileInspector, setShowMobileInspector] = useState(false);
+  const [audioMeter, setAudioMeter] = useState<{ rmsL: number; rmsR: number; peakL: number; peakR: number; clip: boolean } | null>(null);
   // Carrega todas as Google Fonts uma única vez
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -3228,7 +3229,7 @@ function Editor() {
                 : i));
             return (
               <div className="rounded-md border border-border bg-card p-2 text-xs">
-                <AudioPanel value={pro} onChange={onChangePro} meter={null} />
+                <AudioPanel value={pro} onChange={onChangePro} meter={audioMeter} />
               </div>
             );
           })()}

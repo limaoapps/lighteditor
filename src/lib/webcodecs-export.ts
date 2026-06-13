@@ -33,6 +33,8 @@ export type WCItem = {
   start: number;
   inPoint: number;
   outPoint: number;
+  /** Velocidade de reprodução (1 = normal). */
+  speed?: number;
   fadeIn?: number;
   fadeOut?: number;
   audioFadeIn?: number;

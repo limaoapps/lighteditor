@@ -751,7 +751,7 @@ function vignetteStyle(fx?: Fx): React.CSSProperties | null {
 
 function computeVisualOpacity(i: TLItem, t: number): number {
   const local = t - i.start;
-  const dur = i.outPoint - i.inPoint;
+  const dur = tlDur(i);
   let v = (i.fx?.opacity ?? 100) / 100;
   if (i.fadeIn && local < i.fadeIn) v *= Math.max(0, local / i.fadeIn);
   if (i.fadeOut && local > dur - i.fadeOut) v *= Math.max(0, (dur - local) / i.fadeOut);
@@ -1187,7 +1187,7 @@ function Editor() {
 
   const selected = items.find(i => i.id === selectedId) ?? null;
   const totalDuration = useMemo(
-    () => items.reduce((m, i) => Math.max(m, i.start + (i.outPoint - i.inPoint)), 0),
+    () => items.reduce((m, i) => Math.max(m, i.start + tlDur(i)), 0),
     [items]
   );
 
@@ -1360,7 +1360,7 @@ function Editor() {
     if (Math.abs(nearest - t) < bestD) { best = nearest; bestD = Math.abs(nearest - t); }
     for (const it of items) {
       if (it.id === excludeId) continue;
-      for (const cand of [it.start, it.start + (it.outPoint - it.inPoint)]) {
+      for (const cand of [it.start, it.start + tlDur(it)]) {
         const d = Math.abs(cand - t);
         if (d < bestD) { best = cand; bestD = d; hitEdge = cand; }
       }
@@ -1384,7 +1384,7 @@ function Editor() {
     }
     for (const it of itemsRef.current) {
       if (it.id === excludeId) continue;
-      for (const cand of [it.start, it.start + (it.outPoint - it.inPoint)]) {
+      for (const cand of [it.start, it.start + tlDur(it)]) {
         const d = Math.abs(cand - t);
         if (d < bestD) { best = cand; bestD = d; }
       }
@@ -1448,7 +1448,7 @@ function Editor() {
     // snapshot de `tracks` capturado por esta closure).
     const targetTrack = opts?.trackId ?? (findMain(wantKind) ?? ensureTrack(wantKind));
     const defaultStart = items.filter(i => i.trackId === targetTrack)
-      .reduce((m, i) => Math.max(m, i.start + (i.outPoint - i.inPoint)), 0);
+      .reduce((m, i) => Math.max(m, i.start + tlDur(i)), 0);
     const start = opts?.start != null ? Math.max(0, opts.start) : defaultStart;
     const it = createTLFromMedia(asset, targetTrack, start, opts?.duration);
 
@@ -1623,13 +1623,14 @@ function Editor() {
       const out: TLItem[] = [];
       let newSel: string | null = selectedId;
       for (const it of prev) {
-        const dur = it.outPoint - it.inPoint;
+        const dur = tlDur(it);
         const end = it.start + dur;
         const eligible = !onlyClipId || it.id === onlyClipId;
         if (eligible && t > it.start + 0.05 && t < end - 0.05) {
-          const off = t - it.start;
-          const left: TLItem = { ...it, id: crypto.randomUUID(), outPoint: it.inPoint + off, fadeOut: 0 };
-          const right: TLItem = { ...it, id: crypto.randomUUID(), start: t, inPoint: it.inPoint + off, fadeIn: 0 };
+          const speed = it.speed && it.speed > 0 ? it.speed : 1;
+          const sourceOff = (t - it.start) * speed; // recorta no espaço de origem
+          const left: TLItem = { ...it, id: crypto.randomUUID(), outPoint: it.inPoint + sourceOff, fadeOut: 0 };
+          const right: TLItem = { ...it, id: crypto.randomUUID(), start: t, inPoint: it.inPoint + sourceOff, fadeIn: 0 };
           out.push(left, right);
           if (selectedId === it.id) newSel = left.id;
         } else out.push(it);
@@ -1726,13 +1727,13 @@ function Editor() {
     if (!firstVideoTrackId) return null;
     return items.find(i =>
       i.trackId === firstVideoTrackId && i.kind === "video" &&
-      playhead >= i.start && playhead < i.start + (i.outPoint - i.inPoint)
+      playhead >= i.start && playhead < i.start + tlDur(i)
     ) ?? null;
   }, [items, playhead, firstVideoTrackId]);
 
   const computeAudioGainDb = (i: TLItem, t: number) => {
     const local = t - i.start;
-    const dur = i.outPoint - i.inPoint;
+    const dur = tlDur(i);
     if (local < 0 || local > dur) return -120;
     const audioFadeIn = getAudioFadeIn(i);
     const audioFadeOut = getAudioFadeOut(i);
@@ -1812,7 +1813,7 @@ function Editor() {
     for (const a of audios) {
       const el = audioRefs.current[a.id];
       if (!el) continue;
-      const inRange = playhead >= a.start && playhead < a.start + (a.outPoint - a.inPoint);
+      const inRange = playhead >= a.start && playhead < a.start + tlDur(a);
       const g = attachGraph(a.id, el, a);
       if (g) {
         el.volume = 1;
@@ -1837,7 +1838,7 @@ function Editor() {
 
   const overlays = items.filter(i =>
     (i.kind === "image" || i.kind === "text") &&
-    playhead >= i.start && playhead < i.start + (i.outPoint - i.inPoint) &&
+    playhead >= i.start && playhead < i.start + tlDur(i) &&
     !trackMuted[i.trackId]
   );
 
@@ -1999,26 +2000,26 @@ function Editor() {
       } else if (d.type === "visualFadeIn") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
-          const dur = i.outPoint - i.inPoint;
+          const dur = tlDur(i);
           return { ...i, fadeIn: Math.max(0, Math.min(dur, tSec - i.start)) };
         }), false);
       } else if (d.type === "visualFadeOut") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
-          const dur = i.outPoint - i.inPoint;
+          const dur = tlDur(i);
           const end = i.start + dur;
           return { ...i, fadeOut: Math.max(0, Math.min(dur, end - tSec)) };
         }), false);
       } else if (d.type === "audioFadeIn") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
-          const dur = i.outPoint - i.inPoint;
+          const dur = tlDur(i);
           return { ...i, audioFadeIn: Math.max(0, Math.min(dur, tSec - i.start)) };
         }), false);
       } else if (d.type === "audioFadeOut") {
         setItems(prev => prev.map(i => {
           if (i.id !== d.id) return i;
-          const dur = i.outPoint - i.inPoint;
+          const dur = tlDur(i);
           const end = i.start + dur;
           return { ...i, audioFadeOut: Math.max(0, Math.min(dur, end - tSec)) };
         }), false);
@@ -2279,7 +2280,7 @@ function Editor() {
       const allForBounds = [...v1clips, ...visualOverlayItems, ...audioClips, ...textItems];
       const minStart = allForBounds.length ? Math.min(...allForBounds.map(c => c.start)) : 0;
       const maxEnd = allForBounds.length
-        ? Math.max(...allForBounds.map(c => c.start + (c.outPoint - c.inPoint)))
+        ? Math.max(...allForBounds.map(c => c.start + tlDur(c)))
         : 0;
       const shift = Math.max(0, minStart);
       const realDuration = Math.max(0.1, maxEnd - shift);
@@ -2372,7 +2373,7 @@ function Editor() {
     for (let k = 0; k < trackItems.length - 1; k++) {
       const a = trackItems[k];
       const b = trackItems[k + 1];
-      const aEnd = a.start + (a.outPoint - a.inPoint);
+      const aEnd = a.start + tlDur(a);
       const gap = b.start - aEnd;
       const j = (aEnd + b.start) / 2;
       const d = Math.abs(t - j);
@@ -2427,7 +2428,7 @@ function Editor() {
         return;
       }
       const trackItems = items.filter(i => i.trackId === trackId).sort((a, b) => a.start - b.start);
-      const hit = trackItems.find(i => t >= i.start && t <= i.start + (i.outPoint - i.inPoint));
+      const hit = trackItems.find(i => t >= i.start && t <= i.start + tlDur(i));
       if (hit) {
         setItems(p => p.map(i => i.id === hit.id ? { ...i, fadeIn: dur, fadeOut: dur, transition: transitionId } : i));
       }
@@ -2440,7 +2441,7 @@ function Editor() {
       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
       const xPx = e.clientX - rect.left;
       const t = Math.max(0, xPx / zoom);
-      const target = items.find(i => i.trackId === trackId && t >= i.start && t <= i.start + (i.outPoint - i.inPoint));
+      const target = items.find(i => i.trackId === trackId && t >= i.start && t <= i.start + tlDur(i));
       if (target) applyTimelineEffect(target.id, effectId);
       return;
     }
@@ -2787,7 +2788,7 @@ function Editor() {
                 const tr = activeV1Video?.transform;
                 const fx = activeV1Video?.fx;
                 const localT = activeV1Video ? playhead - activeV1Video.start : 0;
-                const dur = activeV1Video ? activeV1Video.outPoint - activeV1Video.inPoint : 0;
+                const dur = activeV1Video ? tlDur(activeV1Video) : 0;
                 const zScale = computeZoomScale(fx, localT, dur);
                 const op = activeV1Video ? computeVisualOpacity(activeV1Video, playhead) : 1;
                 const style: React.CSSProperties = tr ? {
@@ -2844,7 +2845,7 @@ function Editor() {
                   const b = getItemBounds(ov);
                   const fx = ov.fx;
                   const localT = playhead - ov.start;
-                  const dur = ov.outPoint - ov.inPoint;
+                  const dur = tlDur(ov);
                   const zScale = computeZoomScale(fx, localT, dur);
                   const op = computeVisualOpacity(ov, playhead);
                   const wrap: React.CSSProperties = {
@@ -3231,7 +3232,7 @@ function Editor() {
 
               <label className="flex items-center gap-2" title="Duplo clique para restaurar">
                 <span className="w-14 text-muted-foreground">Fade In</span>
-                <input type="range" min={0} max={Math.min(5, selected.outPoint - selected.inPoint)} step={0.05} value={getAudioFadeIn(selected)}
+                <input type="range" min={0} max={Math.min(5, tlDur(selected))} step={0.05} value={getAudioFadeIn(selected)}
                   onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFadeIn: Number(e.target.value) } : i))}
                   onDoubleClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFadeIn: 0 } : i))}
                   className="flex-1 accent-[color:var(--primary)]" />
@@ -3239,7 +3240,7 @@ function Editor() {
               </label>
               <label className="flex items-center gap-2" title="Duplo clique para restaurar">
                 <span className="w-14 text-muted-foreground">Fade Out</span>
-                <input type="range" min={0} max={Math.min(5, selected.outPoint - selected.inPoint)} step={0.05} value={getAudioFadeOut(selected)}
+                <input type="range" min={0} max={Math.min(5, tlDur(selected))} step={0.05} value={getAudioFadeOut(selected)}
                   onChange={(e) => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFadeOut: Number(e.target.value) } : i))}
                   onDoubleClick={() => setItems(p => p.map(i => i.id === selected.id ? { ...i, audioFadeOut: 0 } : i))}
                   className="flex-1 accent-[color:var(--primary)]" />
@@ -3632,7 +3633,7 @@ function Editor() {
                           for (let k = 0; k < trackItems.length - 1; k++) {
                             const a = trackItems[k];
                             const b = trackItems[k + 1];
-                            const aEnd = a.start + (a.outPoint - a.inPoint);
+                            const aEnd = a.start + tlDur(a);
                             const gap = b.start - aEnd;
                             if (Math.abs(gap) > 0.25) continue;
                             const hasTrans = ((a.fadeOut ?? 0) > 0.01) && ((b.fadeIn ?? 0) > 0.01);
@@ -3663,7 +3664,7 @@ function Editor() {
                         })()}
 
                         {items.filter(i => i.trackId === tr.id).map(i => {
-                          const dur = i.outPoint - i.inPoint;
+                          const dur = tlDur(i);
                           const w = Math.max(20, dur * zoom);
                           const active = i.id === selectedId;
                           const color = i.kind === "audio" ? "oklch(0.55 0.15 200)" : i.kind === "text" ? "oklch(0.55 0.2 320)" : i.kind === "image" ? "oklch(0.6 0.18 80)" : "oklch(0.55 0.18 155)";
@@ -3889,8 +3890,8 @@ function Editor() {
         const preset = getTransitionById(transId);
         const maxDur = Math.min(
           5,
-          left.outPoint - left.inPoint,
-          right.outPoint - right.inPoint,
+          tlDur(left),
+          tlDur(right),
         );
         const updateDur = (v: number) => {
           const d = Math.max(0, Math.min(maxDur, v));

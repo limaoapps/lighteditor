@@ -74,7 +74,7 @@ export function EffectsRack({ effects, onChange }: EffectsRackProps) {
               <Button size="sm" variant="ghost" onClick={() => reset(id)}>Reset</Button>
             </div>
             <div className={`grid grid-cols-1 gap-2 ${st.on ? "" : "opacity-50 pointer-events-none"}`}>
-              <ParamSlider label="Intensidade" min={0} max={1} step={0.01} value={st.intensity} onChange={(v) => patch(id, { intensity: v })} />
+              <ParamSlider label="Intensidade" min={0} max={1} step={0.01} value={st.intensity} defaultValue={DEFAULT_EFFECTS[id].intensity} onChange={(v) => patch(id, { intensity: v })} />
               {PARAM_DEFS[id].map((p) => {
                 const def = (DEFAULT_EFFECTS[id].params as Record<string, number>)[p.key] ?? 0;
                 return (

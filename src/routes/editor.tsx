@@ -1118,6 +1118,16 @@ function Editor() {
     m.gainR.gain.setTargetAtTime(dbToGain(masterDbR), t, 0.01);
   }, [masterDbL, masterDbR]);
 
+  // Apply global volume (master output multiplier) + also drive HTML media volume
+  useEffect(() => {
+    const m = masterRef.current; const ctx = audioCtxRef.current;
+    const v = Math.max(0, Math.min(1, globalVolume));
+    if (m && ctx) m.globalGain.gain.setTargetAtTime(v, ctx.currentTime, 0.01);
+    if (videoElRef.current) videoElRef.current.volume = v;
+    if (videoBgElRef.current) videoBgElRef.current.volume = v;
+    Object.values(audioRefs.current).forEach(a => { try { a.volume = v; } catch { /* */ } });
+  }, [globalVolume]);
+
   // Peak meters (rAF)
   useEffect(() => {
     let raf = 0;

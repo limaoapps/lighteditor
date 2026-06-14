@@ -1005,6 +1005,7 @@ function Editor() {
   const [masterPeakR, setMasterPeakR] = useState(0);
   const [masterClipL, setMasterClipL] = useState(false);
   const [masterClipR, setMasterClipR] = useState(false);
+  const [globalVolume, setGlobalVolume] = useState(1); // 0..1, multiplier applied post-master
   const sideDragRef = useRef<{ side: "L" | "R"; startX: number; startW: number } | null>(null);
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -1043,6 +1044,7 @@ function Editor() {
   const masterRef = useRef<{
     input: GainNode; splitter: ChannelSplitterNode; merger: ChannelMergerNode;
     gainL: GainNode; gainR: GainNode; analyserL: AnalyserNode; analyserR: AnalyserNode;
+    globalGain: GainNode;
   } | null>(null);
   const ensureMaster = useCallback((ctx: AudioContext) => {
     if (masterRef.current) return masterRef.current;
@@ -1053,13 +1055,15 @@ function Editor() {
     const gainR = ctx.createGain();
     const analyserL = ctx.createAnalyser();
     const analyserR = ctx.createAnalyser();
+    const globalGain = ctx.createGain();
     analyserL.fftSize = 1024; analyserR.fftSize = 1024;
     input.connect(splitter);
     splitter.connect(gainL, 0); splitter.connect(gainR, 1);
     gainL.connect(analyserL); gainR.connect(analyserR);
     analyserL.connect(merger, 0, 0); analyserR.connect(merger, 0, 1);
-    merger.connect(ctx.destination);
-    masterRef.current = { input, splitter, merger, gainL, gainR, analyserL, analyserR };
+    merger.connect(globalGain);
+    globalGain.connect(ctx.destination);
+    masterRef.current = { input, splitter, merger, gainL, gainR, analyserL, analyserR, globalGain };
     return masterRef.current;
   }, []);
   const attachGraph = useCallback((id: string, el: HTMLMediaElement, item: TLItem) => {

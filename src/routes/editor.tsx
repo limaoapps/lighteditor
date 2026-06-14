@@ -4253,11 +4253,21 @@ function Editor() {
         const canSpeed = !!clip && (clip.kind === "video" || clip.kind === "audio");
         const curSpeed = clip?.speed ?? 1;
         const presets = [0.25, 0.5, 1, 2, 4];
+        // Flip menu upward when there isn't enough space below the click point.
+        const MENU_W = 260;
+        const ESTIMATED_H = canSpeed ? 320 : 150;
+        const vw = typeof window !== "undefined" ? window.innerWidth : 1920;
+        const vh = typeof window !== "undefined" ? window.innerHeight : 1080;
+        const openUp = ctxMenu.y + ESTIMATED_H > vh - 8;
+        const left = Math.min(ctxMenu.x, vw - MENU_W - 8);
+        const style: React.CSSProperties = openUp
+          ? { left, bottom: Math.max(8, vh - ctxMenu.y) }
+          : { left, top: ctxMenu.y };
         return (
           <div
             onClick={(e) => e.stopPropagation()}
             className="fixed z-50 w-[260px] overflow-hidden rounded-md border border-border bg-popover py-1 text-xs text-popover-foreground shadow-xl"
-            style={{ left: ctxMenu.x, top: ctxMenu.y }}
+            style={style}
           >
             <button onClick={() => { if (ctxMenu.clipId) copyClip(ctxMenu.clipId); setCtxMenu(null); }}
               className="flex w-full items-center gap-2 px-3 py-1.5 hover:bg-accent"><CopyIcon className="h-3.5 w-3.5" /> Copiar <span className="ml-auto text-muted-foreground">Ctrl+C</span></button>
@@ -4281,8 +4291,9 @@ function Editor() {
                     step={0.01}
                     value={curSpeed}
                     onChange={(e) => ctxMenu.clipId && setClipSpeed(ctxMenu.clipId, parseFloat(e.target.value))}
+                    onDoubleClick={() => ctxMenu.clipId && setClipSpeed(ctxMenu.clipId, 1)}
                     className="mt-1.5 w-full accent-primary"
-                    title="Arraste para ajustar a velocidade (0.1x – 10x)"
+                    title="Arraste para ajustar a velocidade (0.1x – 10x) · duplo clique = 1x"
                   />
                   <div className="mt-1 flex justify-between text-[9px] font-mono text-muted-foreground">
                     <span>0.1x</span><span>1x</span><span>10x</span>

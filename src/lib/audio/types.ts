@@ -125,5 +125,6 @@ export function hasAudioFxPro(p?: AudioFxPro | null): boolean {
   if (Math.abs(p.stereo.pan) > 0.01) return true;
   if (Math.abs(p.stereo.width - 1) > 0.01) return true;
   if (p.stereo.invert) return true;
+  if (p.stereo.surround) return true;
   return false;
 }

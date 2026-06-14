@@ -296,25 +296,30 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
     reverbSlot.apply(e.reverb, ctx);
     limiterSlot.apply(e.limiter, ctx);
 
-    // Estéreo / pan / largura
+    // ===== Stereo / pan / width / surround =====
     const s = fx.stereo;
-    // Wire stereo widener from the StereoPanel "width" slider (0..2),
-    // overriding the effects-tab toggle so users see/hear it immediately.
-    const widthOn = s.enabled && !s.mono && Math.abs(s.width - 1) > 0.01;
-    const widenerState: EffectState = widthOn
-      ? { on: true, intensity: Math.max(0, Math.min(1, s.width / 2)), params: {} }
-      : e.stereoWidener;
-    stereoSlot.apply(widenerState, ctx);
+    // Keep Tone.StereoWidener (rack tab) independent — only when user toggled it.
+    stereoSlot.apply(e.stereoWidener, ctx);
 
-    if (s.mono || !s.enabled) {
-      gLL.gain.value = 0.5; gLR.gain.value = 0.5;
-      gRL.gain.value = 0.5; gRR.gain.value = 0.5;
-    } else if (s.invert) {
-      gLL.gain.value = 0; gLR.gain.value = 1;
-      gRL.gain.value = 1; gRR.gain.value = 0;
+    const surround = !!s.surround && !s.mono && s.enabled;
+    if (!s.enabled || s.mono) {
+      // Mono fold-down: route only Mid to both channels (side = 0).
+      sideWidth.gain.value = 0;
+      midToL.gain.value = 1; midToR.gain.value = 1;
+      sideToL.gain.value = 0; sideToR.gain.value = 0;
+      sideDelay.delayTime.value = 0;
     } else {
-      gLL.gain.value = 1; gLR.gain.value = 0;
-      gRL.gain.value = 0; gRR.gain.value = 1;
+      const width = Math.max(0, Math.min(2, s.width));
+      sideWidth.gain.value = width;
+      sideDelay.delayTime.value = surround ? 0.015 : 0; // 15ms Haas for spatial cue
+      if (s.invert) {
+        // Swap L/R by flipping side polarity assignment.
+        midToL.gain.value = 1; midToR.gain.value = 1;
+        sideToL.gain.value = -1; sideToR.gain.value = 1;
+      } else {
+        midToL.gain.value = 1; midToR.gain.value = 1;
+        sideToL.gain.value = 1; sideToR.gain.value = -1;
+      }
     }
     if (panNode) panNode.pan.value = Math.max(-1, Math.min(1, s.pan));
   };

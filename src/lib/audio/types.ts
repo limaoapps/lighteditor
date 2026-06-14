@@ -37,7 +37,7 @@ export type AudioFxPro = {
   enabled: boolean;
   eq: { bands: EqBandCount; gains: number[]; preset?: EqPreset };
   effects: Record<EffectId, EffectState>;
-  stereo: { enabled: boolean; width: number; pan: number; invert: boolean; mono: boolean };
+  stereo: { enabled: boolean; width: number; pan: number; invert: boolean; mono: boolean; surround?: boolean };
 };
 
 export const DEFAULT_EFFECTS: Record<EffectId, EffectState> = {
@@ -58,7 +58,7 @@ export const DEFAULT_AUDIO_FX_PRO: AudioFxPro = {
   enabled: false,
   eq: { bands: 12, gains: new Array(12).fill(0), preset: "flat" },
   effects: structuredClone(DEFAULT_EFFECTS),
-  stereo: { enabled: true, width: 1.0, pan: 0, invert: false, mono: false },
+  stereo: { enabled: true, width: 1.0, pan: 0, invert: false, mono: false, surround: false },
 };
 
 export const EQ_PRESETS: Record<EqPreset, Record<EqBandCount, number[]>> = {

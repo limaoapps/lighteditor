@@ -7,7 +7,7 @@ const Slider = React.forwardRef<
   React.ElementRef<typeof SliderPrimitive.Root>,
   React.ComponentPropsWithoutRef<typeof SliderPrimitive.Root>
 >(({ className, onDoubleClick, defaultValue, onValueChange, ...props }, ref) => {
-  const handleDoubleClick = (e: React.MouseEvent<HTMLSpanElement>) => {
+  const handleDoubleClick: React.MouseEventHandler<HTMLDivElement> = (e) => {
     onDoubleClick?.(e);
     if (e.defaultPrevented) return;
     if (Array.isArray(defaultValue) && onValueChange) {

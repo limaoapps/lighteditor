@@ -399,26 +399,27 @@ function MasterFader({ label, db, setDb, peak, clip, onClearClip }: {
   const labelColor = db > 6 ? "text-red-400" : db > 0 ? "text-yellow-300" : "text-emerald-400";
   // Zero-dB tick position (in %)
   const zeroPct = 1 - (0 - minDb) / (maxDb - minDb);
-  const dbTicks = [12, 6, 0, -6, -12, -30, -60];
+  const dbTicks = [12, 6, 0, -6, -12, -24, -40, -60];
   const tickTop = (tick: number) => `${(1 - (tick - minDb) / (maxDb - minDb)) * 100}%`;
   const peakDbLabel = peak > 0.00001 ? `${peakDb >= 0 ? "+" : ""}${peakDb.toFixed(1)}` : "-∞";
   return (
-    <div className="flex h-full flex-col items-center gap-1 select-none">
+    <div className="flex h-full w-[58px] flex-col items-center gap-1 select-none">
+      <div className="text-[10px] font-bold tracking-wider text-muted-foreground">{label}</div>
       <button
         onClick={onClearClip}
         title={clip ? "Clipping detectado — clique para limpar" : "Sem clipping"}
-        className={`h-2.5 w-5 shrink-0 rounded-sm transition ${clip ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.9)] animate-pulse" : "bg-zinc-700"}`}
+        className={`h-2 w-8 shrink-0 rounded-sm transition ${clip ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.9)] animate-pulse" : "bg-zinc-700"}`}
       />
       <div className="flex min-h-0 flex-1 items-stretch gap-1">
-        <div className="relative w-9 shrink-0 font-mono text-[11px] leading-none font-semibold tabular-nums text-muted-foreground">
+        <div className="relative w-7 shrink-0 font-mono text-[9px] leading-none tabular-nums text-muted-foreground/80">
           {dbTicks.map(tick => (
-            <div key={tick} className="absolute right-0 -translate-y-1/2" style={{ top: tickTop(tick) }}>
+            <div key={tick} className="absolute right-0 -translate-y-1/2 px-0.5" style={{ top: tickTop(tick) }}>
               {tick > 0 ? `+${tick}` : tick}
             </div>
           ))}
         </div>
         {/* Meter */}
-        <div className="relative w-2.5 overflow-hidden rounded bg-zinc-900 ring-1 ring-zinc-800">
+        <div className="relative w-2 overflow-hidden rounded bg-zinc-900 ring-1 ring-zinc-800">
           <div
             className="absolute inset-x-0 bottom-0 transition-[height] duration-75"
             style={{
@@ -426,7 +427,6 @@ function MasterFader({ label, db, setDb, peak, clip, onClearClip }: {
               background: "linear-gradient(to top, #22c55e 0%, #22c55e 55%, #eab308 75%, #ef4444 92%)",
             }}
           />
-          {/* 0dB tick */}
           <div className="pointer-events-none absolute inset-x-0 h-px bg-white/40" style={{ top: `${zeroPct * 100}%` }} />
         </div>
         {/* Fader */}
@@ -435,21 +435,20 @@ function MasterFader({ label, db, setDb, peak, clip, onClearClip }: {
           onPointerDown={onPointer}
           onDoubleClick={() => setDb(0)}
           title={`${label}: ${db > 0 ? "+" : ""}${db.toFixed(1)} dB (duplo clique = 0)`}
-          className="relative w-5 cursor-ns-resize rounded bg-zinc-900 ring-1 ring-zinc-800"
+          className="relative w-4 cursor-ns-resize rounded bg-zinc-900 ring-1 ring-zinc-800"
         >
           <div className="absolute inset-x-1 top-0 bottom-0 rounded bg-gradient-to-b from-red-500/40 via-yellow-400/20 to-emerald-500/10" />
           <div className="pointer-events-none absolute inset-x-0 h-px bg-white/30" style={{ top: `${zeroPct * 100}%` }} />
           <div
-            className={`absolute left-1/2 h-2.5 w-5 -translate-x-1/2 rounded-sm shadow ring-1 ring-black/50 ${db > 6 ? "bg-red-500" : db > 0 ? "bg-yellow-400" : "bg-zinc-200"}`}
-            style={{ top: `calc(${knobPct * 100}% - 5px)` }}
+            className={`absolute left-1/2 h-2 w-5 -translate-x-1/2 rounded-sm shadow ring-1 ring-black/50 ${db > 6 ? "bg-red-500" : db > 0 ? "bg-yellow-400" : "bg-zinc-200"}`}
+            style={{ top: `calc(${knobPct * 100}% - 4px)` }}
           />
         </div>
       </div>
-      <div className={`shrink-0 font-mono text-[12px] font-semibold tabular-nums ${labelColor}`}>
+      <div className={`shrink-0 font-mono text-[11px] font-semibold tabular-nums ${labelColor}`}>
         {db > 0 ? "+" : ""}{db.toFixed(1)}
       </div>
-      <div className="shrink-0 font-mono text-[10px] text-muted-foreground">pk {peakDbLabel}</div>
-      <div className="shrink-0 text-[12px] font-bold text-muted-foreground">{label}</div>
+      <div className="shrink-0 font-mono text-[9px] text-muted-foreground">pk {peakDbLabel}</div>
     </div>
   );
 }

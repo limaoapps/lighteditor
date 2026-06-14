@@ -217,20 +217,52 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
     setBlend(tremoloSlot, st.on, st.intensity);
   };
 
-  // Pan + estéreo final via WebAudio puro (mais leve + funciona offline)
-  const panNode = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+  // ===== Stereo / Pan stage =====
+  // M/S (Mid/Side) processing for true, audible width control:
+  //   Mid = (L + R) / 2
+  //   Side = (L - R) / 2
+  //   Lout = Mid + width * Side
+  //   Rout = Mid - width * Side
+  // width = 0 → mono, 1 → original, 2 → wide; surround adds a Haas delay on side.
+  const stereoIn = ctx.createGain();
   const splitter = ctx.createChannelSplitter(2);
-  const merger = ctx.createChannelMerger(2);
-  const gLL = ctx.createGain(); const gLR = ctx.createGain();
-  const gRL = ctx.createGain(); const gRR = ctx.createGain();
-  gLL.gain.value = 1; gLR.gain.value = 0; gRL.gain.value = 0; gRR.gain.value = 1;
-  splitter.connect(gLL, 0); splitter.connect(gRL, 0);
-  splitter.connect(gLR, 1); splitter.connect(gRR, 1);
-  gLL.connect(merger, 0, 0); gLR.connect(merger, 0, 0);
-  gRL.connect(merger, 0, 1); gRR.connect(merger, 0, 1);
+  stereoIn.connect(splitter);
 
-  // Cadeia: headIn → EQ → comp → distortion → chorus → phaser → tremolo →
-  //         delay → echo → pingPong → reverb → stereoWidener → splitter/merger → pan → tail
+  // Encode Mid
+  const lToMid = ctx.createGain(); lToMid.gain.value = 0.5;
+  const rToMid = ctx.createGain(); rToMid.gain.value = 0.5;
+  const midBus = ctx.createGain();
+  splitter.connect(lToMid, 0); splitter.connect(rToMid, 1);
+  lToMid.connect(midBus); rToMid.connect(midBus);
+
+  // Encode Side
+  const lToSide = ctx.createGain(); lToSide.gain.value = 0.5;
+  const rToSide = ctx.createGain(); rToSide.gain.value = -0.5;
+  const sideBus = ctx.createGain();
+  splitter.connect(lToSide, 0); splitter.connect(rToSide, 1);
+  lToSide.connect(sideBus); rToSide.connect(sideBus);
+
+  // Width gain on side
+  const sideWidth = ctx.createGain(); sideWidth.gain.value = 1;
+  // Optional Haas delay for surround
+  const sideDelay = ctx.createDelay(0.05); sideDelay.delayTime.value = 0;
+  sideBus.connect(sideDelay); sideDelay.connect(sideWidth);
+
+  // Decode → L = mid + side ; R = mid - side
+  const merger = ctx.createChannelMerger(2);
+  const midToL = ctx.createGain(); midToL.gain.value = 1;
+  const midToR = ctx.createGain(); midToR.gain.value = 1;
+  const sideToL = ctx.createGain(); sideToL.gain.value = 1;
+  const sideToR = ctx.createGain(); sideToR.gain.value = -1;
+  midBus.connect(midToL); midBus.connect(midToR);
+  sideWidth.connect(sideToL); sideWidth.connect(sideToR);
+  midToL.connect(merger, 0, 0); sideToL.connect(merger, 0, 0);
+  midToR.connect(merger, 0, 1); sideToR.connect(merger, 0, 1);
+
+  // Pan stage
+  const panNode = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+
+  // Cadeia FX (mantém o Tone.StereoWidener como ferramenta extra do rack)
   const order: Slot[] = [
     compressorSlot, distortionSlot, chorusSlot, phaserSlot, tremoloSlot,
     delaySlot, echoSlot, pingPongSlot, reverbSlot, stereoSlot, limiterSlot,
@@ -238,7 +270,7 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
   headIn.connect(eq.input);
   let prev: AudioNode = eq.output;
   for (const s of order) { prev.connect(s.input); prev = s.output; }
-  prev.connect(splitter);
+  prev.connect(stereoIn);
   // Meter taps the final signal (post pan/mono)
   const meter: Meter = buildMeter(ctx);
   if (panNode) {
@@ -264,25 +296,30 @@ export function buildEffectsRack(ctx: BaseAudioContext): EffectsRack {
     reverbSlot.apply(e.reverb, ctx);
     limiterSlot.apply(e.limiter, ctx);
 
-    // Estéreo / pan / largura
+    // ===== Stereo / pan / width / surround =====
     const s = fx.stereo;
-    // Wire stereo widener from the StereoPanel "width" slider (0..2),
-    // overriding the effects-tab toggle so users see/hear it immediately.
-    const widthOn = s.enabled && !s.mono && Math.abs(s.width - 1) > 0.01;
-    const widenerState: EffectState = widthOn
-      ? { on: true, intensity: Math.max(0, Math.min(1, s.width / 2)), params: {} }
-      : e.stereoWidener;
-    stereoSlot.apply(widenerState, ctx);
+    // Keep Tone.StereoWidener (rack tab) independent — only when user toggled it.
+    stereoSlot.apply(e.stereoWidener, ctx);
 
-    if (s.mono || !s.enabled) {
-      gLL.gain.value = 0.5; gLR.gain.value = 0.5;
-      gRL.gain.value = 0.5; gRR.gain.value = 0.5;
-    } else if (s.invert) {
-      gLL.gain.value = 0; gLR.gain.value = 1;
-      gRL.gain.value = 1; gRR.gain.value = 0;
+    const surround = !!s.surround && !s.mono && s.enabled;
+    if (!s.enabled || s.mono) {
+      // Mono fold-down: route only Mid to both channels (side = 0).
+      sideWidth.gain.value = 0;
+      midToL.gain.value = 1; midToR.gain.value = 1;
+      sideToL.gain.value = 0; sideToR.gain.value = 0;
+      sideDelay.delayTime.value = 0;
     } else {
-      gLL.gain.value = 1; gLR.gain.value = 0;
-      gRL.gain.value = 0; gRR.gain.value = 1;
+      const width = Math.max(0, Math.min(2, s.width));
+      sideWidth.gain.value = width;
+      sideDelay.delayTime.value = surround ? 0.015 : 0; // 15ms Haas for spatial cue
+      if (s.invert) {
+        // Swap L/R by flipping side polarity assignment.
+        midToL.gain.value = 1; midToR.gain.value = 1;
+        sideToL.gain.value = -1; sideToR.gain.value = 1;
+      } else {
+        midToL.gain.value = 1; midToR.gain.value = 1;
+        sideToL.gain.value = 1; sideToR.gain.value = -1;
+      }
     }
     if (panNode) panNode.pan.value = Math.max(-1, Math.min(1, s.pan));
   };

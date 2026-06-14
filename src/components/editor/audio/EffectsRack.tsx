@@ -74,16 +74,20 @@ export function EffectsRack({ effects, onChange }: EffectsRackProps) {
               <Button size="sm" variant="ghost" onClick={() => reset(id)}>Reset</Button>
             </div>
             <div className={`grid grid-cols-1 gap-2 ${st.on ? "" : "opacity-50 pointer-events-none"}`}>
-              <ParamSlider label="Intensidade" min={0} max={1} step={0.01} value={st.intensity} onChange={(v) => patch(id, { intensity: v })} />
-              {PARAM_DEFS[id].map((p) => (
-                <ParamSlider
-                  key={p.key}
-                  label={showEnv && p.key === "env" ? `Ambiente: ${REVERB_ENV_LIST[Math.round(st.params.env ?? 1)]?.label ?? ""}` : p.label}
-                  min={p.min} max={p.max} step={p.step}
-                  value={st.params[p.key] ?? 0}
-                  onChange={(v) => patch(id, { params: { [p.key]: v } })}
-                />
-              ))}
+              <ParamSlider label="Intensidade" min={0} max={1} step={0.01} value={st.intensity} defaultValue={DEFAULT_EFFECTS[id].intensity} onChange={(v) => patch(id, { intensity: v })} />
+              {PARAM_DEFS[id].map((p) => {
+                const def = (DEFAULT_EFFECTS[id].params as Record<string, number>)[p.key] ?? 0;
+                return (
+                  <ParamSlider
+                    key={p.key}
+                    label={showEnv && p.key === "env" ? `Ambiente: ${REVERB_ENV_LIST[Math.round(st.params.env ?? 1)]?.label ?? ""}` : p.label}
+                    min={p.min} max={p.max} step={p.step}
+                    value={st.params[p.key] ?? 0}
+                    defaultValue={def}
+                    onChange={(v) => patch(id, { params: { [p.key]: v } })}
+                  />
+                );
+              })}
             </div>
           </Card>
         );
@@ -92,11 +96,11 @@ export function EffectsRack({ effects, onChange }: EffectsRackProps) {
   );
 }
 
-function ParamSlider({ label, min, max, step, value, onChange }: { label: string; min: number; max: number; step: number; value: number; onChange: (v: number) => void }) {
+function ParamSlider({ label, min, max, step, value, defaultValue, onChange }: { label: string; min: number; max: number; step: number; value: number; defaultValue?: number; onChange: (v: number) => void }) {
   return (
     <div className="flex items-center gap-2">
       <div className="text-[11px] text-muted-foreground w-32 shrink-0">{label}</div>
-      <Slider min={min} max={max} step={step} value={[value]} onValueChange={(v) => onChange(v[0])} className="flex-1" />
+      <Slider min={min} max={max} step={step} value={[value]} defaultValue={defaultValue != null ? [defaultValue] : undefined} onValueChange={(v) => onChange(v[0])} className="flex-1" />
       <div className="text-[11px] tabular-nums w-12 text-right">{typeof value === "number" ? (Math.abs(value) < 1 ? value.toFixed(2) : value.toFixed(1)) : "0"}</div>
     </div>
   );

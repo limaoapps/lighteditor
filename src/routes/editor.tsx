@@ -399,26 +399,27 @@ function MasterFader({ label, db, setDb, peak, clip, onClearClip }: {
   const labelColor = db > 6 ? "text-red-400" : db > 0 ? "text-yellow-300" : "text-emerald-400";
   // Zero-dB tick position (in %)
   const zeroPct = 1 - (0 - minDb) / (maxDb - minDb);
-  const dbTicks = [12, 6, 0, -6, -12, -30, -60];
+  const dbTicks = [12, 6, 0, -6, -12, -24, -40, -60];
   const tickTop = (tick: number) => `${(1 - (tick - minDb) / (maxDb - minDb)) * 100}%`;
   const peakDbLabel = peak > 0.00001 ? `${peakDb >= 0 ? "+" : ""}${peakDb.toFixed(1)}` : "-∞";
   return (
-    <div className="flex h-full flex-col items-center gap-1 select-none">
+    <div className="flex h-full w-[58px] flex-col items-center gap-1 select-none">
+      <div className="text-[10px] font-bold tracking-wider text-muted-foreground">{label}</div>
       <button
         onClick={onClearClip}
         title={clip ? "Clipping detectado — clique para limpar" : "Sem clipping"}
-        className={`h-2.5 w-5 shrink-0 rounded-sm transition ${clip ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.9)] animate-pulse" : "bg-zinc-700"}`}
+        className={`h-2 w-8 shrink-0 rounded-sm transition ${clip ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.9)] animate-pulse" : "bg-zinc-700"}`}
       />
       <div className="flex min-h-0 flex-1 items-stretch gap-1">
-        <div className="relative w-9 shrink-0 font-mono text-[11px] leading-none font-semibold tabular-nums text-muted-foreground">
+        <div className="relative w-7 shrink-0 font-mono text-[9px] leading-none tabular-nums text-muted-foreground/80">
           {dbTicks.map(tick => (
-            <div key={tick} className="absolute right-0 -translate-y-1/2" style={{ top: tickTop(tick) }}>
+            <div key={tick} className="absolute right-0 -translate-y-1/2 px-0.5" style={{ top: tickTop(tick) }}>
               {tick > 0 ? `+${tick}` : tick}
             </div>
           ))}
         </div>
         {/* Meter */}
-        <div className="relative w-2.5 overflow-hidden rounded bg-zinc-900 ring-1 ring-zinc-800">
+        <div className="relative w-2 overflow-hidden rounded bg-zinc-900 ring-1 ring-zinc-800">
           <div
             className="absolute inset-x-0 bottom-0 transition-[height] duration-75"
             style={{
@@ -426,7 +427,6 @@ function MasterFader({ label, db, setDb, peak, clip, onClearClip }: {
               background: "linear-gradient(to top, #22c55e 0%, #22c55e 55%, #eab308 75%, #ef4444 92%)",
             }}
           />
-          {/* 0dB tick */}
           <div className="pointer-events-none absolute inset-x-0 h-px bg-white/40" style={{ top: `${zeroPct * 100}%` }} />
         </div>
         {/* Fader */}
@@ -435,21 +435,20 @@ function MasterFader({ label, db, setDb, peak, clip, onClearClip }: {
           onPointerDown={onPointer}
           onDoubleClick={() => setDb(0)}
           title={`${label}: ${db > 0 ? "+" : ""}${db.toFixed(1)} dB (duplo clique = 0)`}
-          className="relative w-5 cursor-ns-resize rounded bg-zinc-900 ring-1 ring-zinc-800"
+          className="relative w-4 cursor-ns-resize rounded bg-zinc-900 ring-1 ring-zinc-800"
         >
           <div className="absolute inset-x-1 top-0 bottom-0 rounded bg-gradient-to-b from-red-500/40 via-yellow-400/20 to-emerald-500/10" />
           <div className="pointer-events-none absolute inset-x-0 h-px bg-white/30" style={{ top: `${zeroPct * 100}%` }} />
           <div
-            className={`absolute left-1/2 h-2.5 w-5 -translate-x-1/2 rounded-sm shadow ring-1 ring-black/50 ${db > 6 ? "bg-red-500" : db > 0 ? "bg-yellow-400" : "bg-zinc-200"}`}
-            style={{ top: `calc(${knobPct * 100}% - 5px)` }}
+            className={`absolute left-1/2 h-2 w-5 -translate-x-1/2 rounded-sm shadow ring-1 ring-black/50 ${db > 6 ? "bg-red-500" : db > 0 ? "bg-yellow-400" : "bg-zinc-200"}`}
+            style={{ top: `calc(${knobPct * 100}% - 4px)` }}
           />
         </div>
       </div>
-      <div className={`shrink-0 font-mono text-[12px] font-semibold tabular-nums ${labelColor}`}>
+      <div className={`shrink-0 font-mono text-[11px] font-semibold tabular-nums ${labelColor}`}>
         {db > 0 ? "+" : ""}{db.toFixed(1)}
       </div>
-      <div className="shrink-0 font-mono text-[10px] text-muted-foreground">pk {peakDbLabel}</div>
-      <div className="shrink-0 text-[12px] font-bold text-muted-foreground">{label}</div>
+      <div className="shrink-0 font-mono text-[9px] text-muted-foreground">pk {peakDbLabel}</div>
     </div>
   );
 }
@@ -1005,6 +1004,7 @@ function Editor() {
   const [masterPeakR, setMasterPeakR] = useState(0);
   const [masterClipL, setMasterClipL] = useState(false);
   const [masterClipR, setMasterClipR] = useState(false);
+  const [globalVolume, setGlobalVolume] = useState(1); // 0..1, multiplier applied post-master
   const sideDragRef = useRef<{ side: "L" | "R"; startX: number; startW: number } | null>(null);
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -1043,6 +1043,7 @@ function Editor() {
   const masterRef = useRef<{
     input: GainNode; splitter: ChannelSplitterNode; merger: ChannelMergerNode;
     gainL: GainNode; gainR: GainNode; analyserL: AnalyserNode; analyserR: AnalyserNode;
+    globalGain: GainNode;
   } | null>(null);
   const ensureMaster = useCallback((ctx: AudioContext) => {
     if (masterRef.current) return masterRef.current;
@@ -1053,13 +1054,15 @@ function Editor() {
     const gainR = ctx.createGain();
     const analyserL = ctx.createAnalyser();
     const analyserR = ctx.createAnalyser();
+    const globalGain = ctx.createGain();
     analyserL.fftSize = 1024; analyserR.fftSize = 1024;
     input.connect(splitter);
     splitter.connect(gainL, 0); splitter.connect(gainR, 1);
     gainL.connect(analyserL); gainR.connect(analyserR);
     analyserL.connect(merger, 0, 0); analyserR.connect(merger, 0, 1);
-    merger.connect(ctx.destination);
-    masterRef.current = { input, splitter, merger, gainL, gainR, analyserL, analyserR };
+    merger.connect(globalGain);
+    globalGain.connect(ctx.destination);
+    masterRef.current = { input, splitter, merger, gainL, gainR, analyserL, analyserR, globalGain };
     return masterRef.current;
   }, []);
   const attachGraph = useCallback((id: string, el: HTMLMediaElement, item: TLItem) => {
@@ -1113,6 +1116,15 @@ function Editor() {
     m.gainL.gain.setTargetAtTime(dbToGain(masterDbL), t, 0.01);
     m.gainR.gain.setTargetAtTime(dbToGain(masterDbR), t, 0.01);
   }, [masterDbL, masterDbR]);
+
+  // Apply global volume (master output multiplier).
+  // We control output via the WebAudio globalGain node so it scales every source
+  // (videos, audios, mic) uniformly without touching per-element volumes used by FX graphs.
+  useEffect(() => {
+    const m = masterRef.current; const ctx = audioCtxRef.current;
+    const v = Math.max(0, Math.min(1, globalVolume));
+    if (m && ctx) m.globalGain.gain.setTargetAtTime(v, ctx.currentTime, 0.01);
+  }, [globalVolume]);
 
   // Peak meters (rAF)
   useEffect(() => {
@@ -3533,11 +3545,15 @@ function Editor() {
               <Trash2 className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Excluir</span>
             </button>
             <div className="hidden mx-2 h-5 w-px bg-border sm:block" />
-            <div className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
-              <Volume2 className="h-3.5 w-3.5" />
-              <input type="range" min={0} max={1} step={0.05} defaultValue={1}
-                onChange={(e) => { if (videoElRef.current) videoElRef.current.volume = Number(e.target.value); }}
+            <div className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex" title={`Volume global: ${Math.round(globalVolume * 100)}% (duplo clique = 100%)`}>
+              <button onClick={() => setGlobalVolume(v => v > 0 ? 0 : 1)} className="rounded p-0.5 hover:text-primary" title={globalVolume > 0 ? "Silenciar" : "Reativar"}>
+                {globalVolume > 0 ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5 text-destructive" />}
+              </button>
+              <input type="range" min={0} max={1} step={0.01} value={globalVolume}
+                onChange={(e) => setGlobalVolume(Number(e.target.value))}
+                onDoubleClick={() => setGlobalVolume(1)}
                 className="w-24 accent-[color:var(--primary)]" />
+              <span className="font-mono tabular-nums w-8 text-right">{Math.round(globalVolume * 100)}</span>
             </div>
             <div className="hidden mx-2 h-5 w-px bg-border sm:block" />
             <div className="flex items-center gap-1 sm:gap-1.5 text-xs text-muted-foreground">
@@ -4253,11 +4269,21 @@ function Editor() {
         const canSpeed = !!clip && (clip.kind === "video" || clip.kind === "audio");
         const curSpeed = clip?.speed ?? 1;
         const presets = [0.25, 0.5, 1, 2, 4];
+        // Flip menu upward when there isn't enough space below the click point.
+        const MENU_W = 260;
+        const ESTIMATED_H = canSpeed ? 320 : 150;
+        const vw = typeof window !== "undefined" ? window.innerWidth : 1920;
+        const vh = typeof window !== "undefined" ? window.innerHeight : 1080;
+        const openUp = ctxMenu.y + ESTIMATED_H > vh - 8;
+        const left = Math.min(ctxMenu.x, vw - MENU_W - 8);
+        const style: React.CSSProperties = openUp
+          ? { left, bottom: Math.max(8, vh - ctxMenu.y) }
+          : { left, top: ctxMenu.y };
         return (
           <div
             onClick={(e) => e.stopPropagation()}
             className="fixed z-50 w-[260px] overflow-hidden rounded-md border border-border bg-popover py-1 text-xs text-popover-foreground shadow-xl"
-            style={{ left: ctxMenu.x, top: ctxMenu.y }}
+            style={style}
           >
             <button onClick={() => { if (ctxMenu.clipId) copyClip(ctxMenu.clipId); setCtxMenu(null); }}
               className="flex w-full items-center gap-2 px-3 py-1.5 hover:bg-accent"><CopyIcon className="h-3.5 w-3.5" /> Copiar <span className="ml-auto text-muted-foreground">Ctrl+C</span></button>
@@ -4281,8 +4307,9 @@ function Editor() {
                     step={0.01}
                     value={curSpeed}
                     onChange={(e) => ctxMenu.clipId && setClipSpeed(ctxMenu.clipId, parseFloat(e.target.value))}
+                    onDoubleClick={() => ctxMenu.clipId && setClipSpeed(ctxMenu.clipId, 1)}
                     className="mt-1.5 w-full accent-primary"
-                    title="Arraste para ajustar a velocidade (0.1x – 10x)"
+                    title="Arraste para ajustar a velocidade (0.1x – 10x) · duplo clique = 1x"
                   />
                   <div className="mt-1 flex justify-between text-[9px] font-mono text-muted-foreground">
                     <span>0.1x</span><span>1x</span><span>10x</span>

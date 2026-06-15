@@ -1,117 +1,103 @@
+# Sistema profissional de transições (GL-Transitions)
+
 ## Visão geral
+Adiciona uma camada de transições WebGL entre clipes da timeline, com aba dedicada, biblioteca categorizada, drag & drop, edição de duração e render consistente entre preview e exportação. Arquitetura modular para crescer sem reescrever.
 
-Substituir o pipeline atual `audio-fx.ts` (WebAudio cru) por um novo motor baseado em **Tone.js**, com cadeia modular de efeitos profissionais, EQ multibanda selecionável, presets de reverb por ambiente, medidores em tempo real e nova aba "Áudio" no editor. A cadeia roda tanto na prévia (AudioContext) quanto na exportação (OfflineAudioContext via WebCodecs).
-
-## Escopo confirmado
-- Tudo de uma vez (EQ 12/20/31, todos os efeitos, todos os presets, medidores)
-- Substituir pipeline atual
-- Prévia = exportação
-
-## Arquitetura
-
-```
-src/lib/audio/
-  engine.ts          // Tone.js setup, AudioContext compartilhado
-  chain.ts           // EffectChain (substitui buildAudioFxGraph)
-  effects.ts         // factories Tone (Reverb, Delay, PingPong, Chorus,
-                     //   Phaser, Compressor, Limiter, Distortion, StereoWidener, Tremolo)
-  eq.ts              // EQ 12/20/31 bandas (BiquadFilter em série) + presets
-  reverb-presets.ts  // 10 ambientes (Sala P/M/G, Auditório, Teatro, Igreja,
-                     //   Catedral, Caverna, Estádio, Externo) com size/decay/predelay/wet
-  meters.ts          // VU, RMS, peak, clipping via AnalyserNode
-  voice.ts           // mantém presets de voz atuais reescritos em Tone
-  types.ts           // AudioFxPro (novo formato)
-  serialize.ts       // migração: AudioFx legado → AudioFxPro
+## Estrutura de arquivos (novos)
+```text
+src/lib/transitions/
+  registry.ts        # catálogo + categorias + metadados
+  shaders/           # 1 arquivo .glsl.ts por transição (GLSL do GL-Transitions)
+  gl-runtime.ts      # compila shader, faz render entre 2 texturas (from→to, progress)
+  thumbnail.ts       # gera preview animado (canvas pequeno, 2 cores/imagens)
+  fallback.ts        # cross-dissolve 2D quando WebGL indisponível
+  types.ts           # TransitionDef, TransitionInstance, Category
+src/components/editor/transitions/
+  TransitionsPanel.tsx     # aba "Transições" (busca, categorias, favoritos, recentes)
+  TransitionCard.tsx       # miniatura animada + drag source
+  TransitionBadge.tsx      # bloco visual na timeline (com duração editável)
 ```
 
-`audio-fx.ts` vira shim fino que reexporta para não quebrar imports existentes; `webcodecs-export.ts` passa a usar `chain.ts` com `OfflineAudioContext`.
-
-## Modelo de dados (`AudioFxPro`)
-
+## Modelo de dados
+Adicionar em `src/routes/editor.tsx` (e tipos compartilhados):
 ```ts
-type AudioFxPro = {
-  eq: { bands: 12|20|31; gains: number[]; preset?: EqPreset }
-  effects: {
-    reverb:    { on: boolean; preset: ReverbPreset; size: number; decay: number; predelay: number; wet: number }
-    delay:     { on: boolean; time: number; feedback: number; wet: number }
-    pingPong:  { on: boolean; time: number; feedback: number; wet: number }
-    chorus:    { on: boolean; rate: number; depth: number; wet: number }
-    phaser:    { on: boolean; rate: number; depth: number; wet: number }
-    compressor:{ on: boolean; threshold: number; ratio: number; attack: number; release: number }
-    limiter:   { on: boolean; threshold: number }
-    distortion:{ on: boolean; amount: number; wet: number }
-    tremolo:   { on: boolean; rate: number; depth: number }
-  }
-  stereo: { enabled: boolean; width: number; pan: number; invert: boolean; mode: 'stereo'|'mono' }
-  voice:  { preset: VoicePreset; intensity: number; params: VoiceParams }
-  gainDb: number
-}
+type TransitionInstance = {
+  id: string;
+  trackId: string;          // mesma track dos 2 clipes
+  fromClipId: string;
+  toClipId: string;
+  transitionId: string;     // chave do registry
+  duration: number;         // segundos (default 0.5)
+  params?: Record<string, number>;
+};
 ```
+Persistido junto do projeto. Favoritos e "mais usados" em `localStorage`.
 
-Ordem da cadeia: `input → voice → EQ → compressor → distortion → chorus → phaser → tremolo → delay → pingPong → reverb → stereoWidener → pan → limiter → meter → output`.
+## Runtime WebGL
+- `gl-runtime.ts`: cria um único `WebGL2RenderingContext` offscreen reutilizável. Para cada frame da janela de transição:
+  1. Renderiza o frame do `fromClip` em uma textura (via canvas do `scene-renderer`).
+  2. Renderiza o frame do `toClip` em outra textura.
+  3. Executa o shader GL-Transitions com `progress = (t - start) / duration`.
+  4. Devolve o canvas/ImageBitmap para o renderer principal compor.
+- Suporte a uniforms padrão GL-Transitions (`ratio`, `progress`, `from`, `to`) + parâmetros customizados.
 
-## EQ multibanda
+## Integração preview & export
+- `src/lib/scene-renderer.ts`: durante a janela `[start, start+duration]` da transição, em vez de desenhar `fromClip` e `toClip` empilhados, pede ao `gl-runtime` o frame composto.
+- `src/lib/webcodecs-export.ts`: mesma chamada, garantindo paridade pixel-a-pixel entre preview e MP4 exportado.
+- Fallback automático: se `gl-runtime.isAvailable() === false`, usa `fallback.ts` (cross-dissolve com `globalAlpha`).
 
-- 12 bandas: bandas atuais
-- 20 bandas: ISO 1/2-oitava (25 Hz → 20 kHz)
-- 31 bandas: ISO 1/3-oitava (20 Hz → 20 kHz)
-- Cada banda = BiquadFilter `peaking` (shelf nas extremas), Q ajustado por largura
-- Presets: Flat, Bass Boost, Vocal, Podcast, Pop, Rock, Cinema — armazenados como vetores por contagem de bandas (interpolados quando necessário)
-- Visualização: curva renderizada em canvas a partir da soma das respostas (sample em log)
+## UI / UX
+Aba "Transições" no painel lateral direito, ao lado de Áudio:
+- Campo de busca (filtra por nome em todas as categorias).
+- Tabs/accordion por categoria: Básicas, Slides, Zoom, Glitch, Cinema, 3D, Máscaras.
+- Cada card: miniatura animada em loop (gera ao hover via `thumbnail.ts` com 2 placeholders coloridos), nome, ícone de favorito, contador "usadas".
+- Seção fixa no topo: ★ Favoritas e ↻ Recentes (do `localStorage`).
 
-## Presets de Reverb
+Aplicação:
+- Drag & drop do card sobre a junção de dois clipes da mesma track → cria `TransitionInstance`.
+- Clique em "Aplicar" com 2 clipes selecionados adjacentes → mesma ação.
+- Drop em junção inválida → toast explicativo.
 
-`reverb-presets.ts` define 10 ambientes com `{ size, reflections, decay, wet, predelay, brightness }`. Cada um vira IR sintético via `generateIR` existente. Usuário pode sobrescrever cada parâmetro por clipe.
+Timeline:
+- `TransitionBadge` renderizado sobre a fronteira entre os dois clipes: faixa colorida com nome curto + duração ("0.5s").
+- Arrastar bordas do badge edita a duração (clamp: 0.1s ≤ d ≤ min(clipAdur, clipBdur)).
+- Botão direito no badge → menu: "Trocar transição", "Editar duração", "Remover".
+- Duplo clique → reseta para duração padrão (0.5s).
 
-## Medidores
+## Catálogo inicial (32 transições)
+Mapeadas para shaders oficiais do GL-Transitions (gl-transitions/gl-transitions):
+- Básicas: `fade`, `dissolve`, `LinearBlur` (flash white via cor branca), `InvertedPageCurl`→adaptado para flash black, `crosshatch`/`fadecolor`.
+- Slides: `directionalwarp` (4 direções), `pinwheel`/`Swirl` para push (2 direções).
+- Zoom: `CrossZoom`, `DreamyZoom`, `ZoomInCircles`, `kaleidoscope`, custom smooth zoom.
+- Glitch: `GlitchDisplace`, `GlitchMemories`, `static wipe`/VHS shader, `Mosaic`, `RandomNoise`.
+- Cinema: `CrossWarp`, `DirectionalBlur` (2 variantes), `LuminanceMelt` (light leak), `BurnOut` (film burn).
+- 3D: `cube`, `CubePerspective`, `flyeye`/flip, `doorway` (open/close), `polar_function` (fold).
+- Máscaras: `circleopen`/`circleclose`, `Diamond`, `polkadots` adaptado (star/heart usam alpha mask SVG).
 
-- AnalyserNode no fim da cadeia (pré-output, pós-limiter)
-- `requestAnimationFrame` lê `getFloatTimeDomainData` → RMS, peak, hold-peak, clipping (>0.99)
-- Componente `<MeterBridge>` renderiza barras estilo VU (verde/amarelo/vermelho) com hold de pico
+Cada shader vive em `src/lib/transitions/shaders/<id>.glsl.ts` exportando string. `registry.ts` mapeia id → `{ name, category, glsl, defaultParams, paramSchema }`. Adicionar nova transição = 1 arquivo + 1 linha no registry.
 
-## UI — Aba "Áudio"
+## Dependências
+- `gl-transitions` (catálogo oficial de shaders, MIT)
+- `gl-transition` (runtime helper opcional) — avaliar; se pesado, manter runtime próprio em `gl-runtime.ts`.
 
-Nova aba no painel direito do editor (`src/routes/editor.tsx`), componentizada em:
-
-```
-src/components/editor/audio/
-  AudioPanel.tsx          // tabs internas: EQ | Efeitos | Estéreo | Medidores
-  EqualizerView.tsx       // seletor 12/20/31, sliders verticais, curva, presets
-  EffectsRack.tsx         // cards de cada efeito (on/off + sliders intensidade/params)
-  StereoPanel.tsx         // pan, width, invert, mono/stereo
-  MeterPanel.tsx          // VU L/R, RMS, peak, clip
-```
-
-Visual moderno (cards escuros, sliders verticais para EQ, knobs/sliders para efeitos), responsivo. Reutiliza `Slider`, `Switch`, `Tabs` shadcn já presentes.
-
-## Exportação
-
-`webcodecs-export.ts` passa a instanciar `buildEffectChain(offlineCtx, fxPro)` em vez de `buildAudioFxGraph`. Como Tone.js aceita `BaseAudioContext` por `Tone.setContext`, a mesma cadeia roda offline. Voice effects continuam reescritos em pure WebAudio para garantir suporte offline (Tone usa o ctx ativo).
-
-## Migração & compatibilidade
-
-- `serialize.ts` converte `AudioFx` antigo → `AudioFxPro` ao abrir projeto/clipe (e vice-versa para salvar legado se necessário)
-- `audio-fx.ts` mantém exports `AudioFx`, `DEFAULT_AUDIO_FX`, `hasAudioFx` apontando para os novos tipos via adapter
-- Remoção das partes obsoletas em `editor.tsx` (painel de canais antigo) — substituídas pela nova aba
-
-## Passos de implementação
-
-1. `bun add tone`
-2. Criar `src/lib/audio/{engine,types,eq,reverb-presets,effects,voice,meters,chain,serialize}.ts`
-3. Reescrever `audio-fx.ts` como shim
-4. Trocar `webcodecs-export.ts` para usar `chain.ts`
-5. Criar componentes em `src/components/editor/audio/*`
-6. Remover do `editor.tsx` o painel de áudio atual e renderizar `<AudioPanel>` na aba "Áudio"
-7. Conferir build, testar prévia, ajustar mapeamento legado
+## Plano de implementação (ordem)
+1. Tipos + registry vazio + runtime WebGL com `fade` e `dissolve`.
+2. Integração no `scene-renderer` e `webcodecs-export` (paridade preview/export).
+3. Aba "Transições" com busca, categorias, cards estáticos.
+4. Geração de miniatura animada via `thumbnail.ts`.
+5. Drag & drop + clique para aplicar; badge na timeline com edição de duração.
+6. Favoritos + recentes (localStorage).
+7. Preencher catálogo completo (32 shaders).
+8. Fallback 2D + detecção WebGL.
+9. QA: preview vs export, performance em mobile, transições back-to-back.
 
 ## Riscos
-- Tone.js + OfflineAudioContext: alguns efeitos (Reverb com IR async) precisam `await reverb.ready` antes do `render()`
-- Bundle size: Tone.js ~150 KB gzip — aceitável
-- Latência mobile (Safari): manter `lookAhead = 0` em Tone
-- Refatoração grande de `editor.tsx` — risco de regressão em clipes existentes
+- Performance: compilar shaders sob demanda e cachear. 1 contexto WebGL reutilizado.
+- Custo de render no export: rasterizar fromClip/toClip já está no pipeline; transição adiciona 1 draw call por frame na janela.
+- Star/Heart não existem no GL-Transitions oficial → implementados via mask SVG + shader genérico de mask reveal.
+- Compatibilidade móvel: testar em iOS Safari (WebGL2 limitado → fallback para WebGL1 com `#version 100`).
 
-## Detalhes técnicos relevantes
-- `Tone.setContext(new Tone.Context({ context: ctx }))` para usar AudioContext customizado
-- EQ 31 bandas usa frequências `[20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000, 20000]`
-- Medidor RMS: `sqrt(mean(x²))`; dBFS = `20*log10(rms)`
-- Clipping hold: 500 ms
+## Fora do escopo desta entrega
+- Editor visual de parâmetros por transição (apenas duração nesta v1).
+- Transições em áudio (crossfade já existe no engine atual).
+- Importação de shaders customizados pelo usuário.

@@ -500,7 +500,6 @@ const TIMELINE_EFFECTS: Array<{ id: TimelineEffectId; label: string; hint: strin
 ];
 
 type TransitionPreset = { id: string; label: string; hint: string; dur: number; icon: string };
-type TransitionPreset = { id: string; label: string; hint: string; dur: number; icon: string };
 
 // Catálogo derivado do novo registry GL-Transitions (mantém shape antigo p/ código legado).
 const TRANSITION_GROUPS: Array<{ label: string; items: TransitionPreset[] }> = (() => {

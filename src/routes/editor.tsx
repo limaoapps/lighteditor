@@ -2667,38 +2667,28 @@ function Editor() {
             )}
 
             {leftPanel === "transitions" && (
-              <div className="space-y-3 text-xs">
-                <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Transições</div>
-                <div className="rounded-md border border-dashed border-border bg-card/40 px-2 py-2 text-[10px] text-muted-foreground">
-                  Arraste uma transição entre dois clipes encostados na timeline. Clique no chip de transição já aplicado para ajustar a duração.
-                </div>
-                {TRANSITION_GROUPS.map(group => (
-                  <div key={group.label} className="space-y-1.5">
-                    <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">{group.label}</div>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {group.items.map(t => (
-                        <button
-                          key={t.id}
-                          draggable
-                          onDragStart={(e) => {
-                            draggedTransitionRef.current = t;
-                            e.dataTransfer.setData("application/x-lle-transition", t.id);
-                            e.dataTransfer.effectAllowed = "copy";
-                          }}
-                          onDragEnd={() => { draggedTransitionRef.current = null; setTransitionDragHover(null); }}
-                          onClick={() => selected && setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: t.dur, fadeOut: t.dur, transition: t.id } : i))}
-                          title={selected ? `${t.hint} — clique para aplicar no clipe selecionado, ou arraste entre dois clipes` : `${t.hint} — arraste entre dois clipes na timeline`}
-                          className="flex cursor-grab flex-col items-start gap-0.5 rounded-md border border-border bg-card px-2 py-1.5 text-left hover:border-primary/60 active:cursor-grabbing">
-                          <span className="flex items-center gap-1 text-[11px] font-medium leading-tight">
-                            <span aria-hidden>{t.icon}</span>{t.label}
-                          </span>
-                          <span className="text-[9px] text-muted-foreground">{t.dur.toFixed(1)}s</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <TransitionsPanel
+                onApply={(def) => {
+                  if (!selected) return;
+                  setItems(p => p.map(i =>
+                    i.id === selected.id
+                      ? { ...i, fadeIn: def.defaultDuration, fadeOut: def.defaultDuration, transition: def.id }
+                      : i
+                  ));
+                }}
+                onDragStart={(def, e) => {
+                  draggedTransitionRef.current = {
+                    id: def.id,
+                    label: def.name,
+                    hint: def.name,
+                    dur: def.defaultDuration,
+                    icon: def.icon ?? "◐",
+                  };
+                  e.dataTransfer.setData("application/x-lle-transition", def.id);
+                  e.dataTransfer.effectAllowed = "copy";
+                }}
+                onDragEnd={() => { draggedTransitionRef.current = null; setTransitionDragHover(null); }}
+              />
             )}
 
             {leftPanel === "effects" && (

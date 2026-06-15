@@ -29,8 +29,8 @@ import { VideoFilmstrip } from "@/components/editor/VideoFilmstrip";
 import type { SceneItem } from "@/lib/scene-renderer";
 import type { CachedMediaItem } from "@/lib/media-cache";
 import { TransitionsPanel } from "@/components/editor/transitions/TransitionsPanel";
-import { TRANSITIONS as GL_TRANSITIONS, CATEGORY_LABEL as GL_CATEGORY_LABEL } from "@/lib/transitions/registry";
-import type { TransitionCategory as GLTransitionCategory } from "@/lib/transitions/types";
+import { TRANSITIONS as GL_TRANSITIONS } from "@/lib/transitions/registry";
+import { CATEGORY_LABEL as GL_CATEGORY_LABEL, type TransitionCategory as GLTransitionCategory } from "@/lib/transitions/types";
 
 export const Route = createFileRoute("/editor")({
   head: () => ({

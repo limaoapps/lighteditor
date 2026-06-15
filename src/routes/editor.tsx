@@ -28,6 +28,9 @@ import { Waveform } from "@/components/editor/Waveform";
 import { VideoFilmstrip } from "@/components/editor/VideoFilmstrip";
 import type { SceneItem } from "@/lib/scene-renderer";
 import type { CachedMediaItem } from "@/lib/media-cache";
+import { TransitionsPanel } from "@/components/editor/transitions/TransitionsPanel";
+import { TRANSITIONS as GL_TRANSITIONS } from "@/lib/transitions/registry";
+import { CATEGORY_LABEL as GL_CATEGORY_LABEL, type TransitionCategory as GLTransitionCategory } from "@/lib/transitions/types";
 
 export const Route = createFileRoute("/editor")({
   head: () => ({
@@ -497,71 +500,21 @@ const TIMELINE_EFFECTS: Array<{ id: TimelineEffectId; label: string; hint: strin
 ];
 
 type TransitionPreset = { id: string; label: string; hint: string; dur: number; icon: string };
-const TRANSITION_GROUPS: Array<{ label: string; items: TransitionPreset[] }> = [
-  {
-    label: "Fade / Dissolve",
-    items: [
-      { id: "fade", label: "Fade", hint: "Fade in/out suave", dur: 0.6, icon: "◐" },
-      { id: "cross-dissolve", label: "Cross Dissolve", hint: "Dissolve cruzada entre clipes", dur: 0.8, icon: "✕" },
-      { id: "fade-black", label: "Fade to Black", hint: "Escurece até preto", dur: 0.8, icon: "■" },
-      { id: "fade-white", label: "Fade to White", hint: "Clareia até branco", dur: 0.8, icon: "□" },
-      { id: "dip-color", label: "Dip to Color", hint: "Mergulha em cor sólida", dur: 0.8, icon: "◆" },
-      { id: "film-dissolve", label: "Film Dissolve", hint: "Dissolve fílmica suave", dur: 1.0, icon: "❍" },
-    ],
-  },
-  {
-    label: "Movimento",
-    items: [
-      { id: "slide-left", label: "Slide Esquerda", hint: "Desliza para a esquerda", dur: 0.5, icon: "⇠" },
-      { id: "slide-right", label: "Slide Direita", hint: "Desliza para a direita", dur: 0.5, icon: "⇢" },
-      { id: "slide-up", label: "Slide Cima", hint: "Desliza para cima", dur: 0.5, icon: "⇡" },
-      { id: "slide-down", label: "Slide Baixo", hint: "Desliza para baixo", dur: 0.5, icon: "⇣" },
-      { id: "push-left", label: "Push Esquerda", hint: "Empurra o clipe anterior", dur: 0.5, icon: "⇇" },
-      { id: "push-right", label: "Push Direita", hint: "Empurra o clipe anterior", dur: 0.5, icon: "⇉" },
-      { id: "whip-pan", label: "Whip Pan", hint: "Movimento rápido com borrão", dur: 0.4, icon: "⌇" },
-    ],
-  },
-  {
-    label: "Wipe",
-    items: [
-      { id: "wipe-left", label: "Wipe Esquerda", hint: "Revela da direita p/ esquerda", dur: 0.5, icon: "◧" },
-      { id: "wipe-right", label: "Wipe Direita", hint: "Revela da esquerda p/ direita", dur: 0.5, icon: "◨" },
-      { id: "wipe-up", label: "Wipe Cima", hint: "Revela de baixo p/ cima", dur: 0.5, icon: "⬒" },
-      { id: "wipe-down", label: "Wipe Baixo", hint: "Revela de cima p/ baixo", dur: 0.5, icon: "⬓" },
-      { id: "wipe-clock", label: "Wipe Radial", hint: "Revela em sentido horário", dur: 0.7, icon: "◴" },
-      { id: "wipe-diagonal", label: "Wipe Diagonal", hint: "Revela na diagonal", dur: 0.6, icon: "◰" },
-    ],
-  },
-  {
-    label: "Iris / Forma",
-    items: [
-      { id: "iris-in", label: "Iris In", hint: "Círculo abrindo", dur: 0.6, icon: "○" },
-      { id: "iris-out", label: "Iris Out", hint: "Círculo fechando", dur: 0.6, icon: "●" },
-      { id: "circle-open", label: "Circle Open", hint: "Abertura circular", dur: 0.6, icon: "◯" },
-      { id: "circle-close", label: "Circle Close", hint: "Fechamento circular", dur: 0.6, icon: "⬤" },
-    ],
-  },
-  {
-    label: "Zoom / Escala",
-    items: [
-      { id: "zoom-in", label: "Zoom In", hint: "Aproxima o clipe", dur: 0.5, icon: "⊕" },
-      { id: "zoom-out", label: "Zoom Out", hint: "Afasta o clipe", dur: 0.5, icon: "⊖" },
-      { id: "zoom-blur", label: "Zoom Blur", hint: "Zoom com desfoque", dur: 0.6, icon: "❂" },
-      { id: "spin", label: "Spin", hint: "Rotação rápida", dur: 0.5, icon: "↻" },
-    ],
-  },
-  {
-    label: "Estilo",
-    items: [
-      { id: "blur-trans", label: "Blur", hint: "Transição com desfoque", dur: 0.6, icon: "❄" },
-      { id: "glitch", label: "Glitch", hint: "Distorção digital", dur: 0.4, icon: "⚡" },
-      { id: "light-leak", label: "Light Leak", hint: "Vazamento de luz", dur: 0.7, icon: "✺" },
-      { id: "film-burn", label: "Film Burn", hint: "Queima de película", dur: 0.7, icon: "✷" },
-      { id: "luma-fade", label: "Luma Fade", hint: "Fade por luminância", dur: 0.6, icon: "☼" },
-      { id: "pixelate", label: "Pixelate", hint: "Pixeliza a transição", dur: 0.5, icon: "▦" },
-    ],
-  },
-];
+
+// Catálogo derivado do novo registry GL-Transitions (mantém shape antigo p/ código legado).
+const TRANSITION_GROUPS: Array<{ label: string; items: TransitionPreset[] }> = (() => {
+  const order: GLTransitionCategory[] = ["basicas", "slides", "zoom", "glitch", "cinema", "3d", "mascaras"];
+  return order.map(cat => ({
+    label: GL_CATEGORY_LABEL[cat],
+    items: GL_TRANSITIONS.filter(t => t.category === cat).map(t => ({
+      id: t.id,
+      label: t.name,
+      hint: `${t.name} (${cat})`,
+      dur: t.defaultDuration,
+      icon: t.icon ?? "◐",
+    })),
+  }));
+})();
 
 const ALL_TRANSITIONS: TransitionPreset[] = TRANSITION_GROUPS.flatMap(g => g.items);
 const getTransitionById = (id?: string): TransitionPreset | undefined =>
@@ -2714,38 +2667,28 @@ function Editor() {
             )}
 
             {leftPanel === "transitions" && (
-              <div className="space-y-3 text-xs">
-                <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Transições</div>
-                <div className="rounded-md border border-dashed border-border bg-card/40 px-2 py-2 text-[10px] text-muted-foreground">
-                  Arraste uma transição entre dois clipes encostados na timeline. Clique no chip de transição já aplicado para ajustar a duração.
-                </div>
-                {TRANSITION_GROUPS.map(group => (
-                  <div key={group.label} className="space-y-1.5">
-                    <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">{group.label}</div>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {group.items.map(t => (
-                        <button
-                          key={t.id}
-                          draggable
-                          onDragStart={(e) => {
-                            draggedTransitionRef.current = t;
-                            e.dataTransfer.setData("application/x-lle-transition", t.id);
-                            e.dataTransfer.effectAllowed = "copy";
-                          }}
-                          onDragEnd={() => { draggedTransitionRef.current = null; setTransitionDragHover(null); }}
-                          onClick={() => selected && setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: t.dur, fadeOut: t.dur, transition: t.id } : i))}
-                          title={selected ? `${t.hint} — clique para aplicar no clipe selecionado, ou arraste entre dois clipes` : `${t.hint} — arraste entre dois clipes na timeline`}
-                          className="flex cursor-grab flex-col items-start gap-0.5 rounded-md border border-border bg-card px-2 py-1.5 text-left hover:border-primary/60 active:cursor-grabbing">
-                          <span className="flex items-center gap-1 text-[11px] font-medium leading-tight">
-                            <span aria-hidden>{t.icon}</span>{t.label}
-                          </span>
-                          <span className="text-[9px] text-muted-foreground">{t.dur.toFixed(1)}s</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <TransitionsPanel
+                onApply={(def) => {
+                  if (!selected) return;
+                  setItems(p => p.map(i =>
+                    i.id === selected.id
+                      ? { ...i, fadeIn: def.defaultDuration, fadeOut: def.defaultDuration, transition: def.id }
+                      : i
+                  ));
+                }}
+                onDragStart={(def, e) => {
+                  draggedTransitionRef.current = {
+                    id: def.id,
+                    label: def.name,
+                    hint: def.name,
+                    dur: def.defaultDuration,
+                    icon: def.icon ?? "◐",
+                  };
+                  e.dataTransfer.setData("application/x-lle-transition", def.id);
+                  e.dataTransfer.effectAllowed = "copy";
+                }}
+                onDragEnd={() => { draggedTransitionRef.current = null; setTransitionDragHover(null); }}
+              />
             )}
 
             {leftPanel === "effects" && (

@@ -445,16 +445,23 @@ export function drawScene(
   ctx.fillRect(0, 0, targetW, targetH);
   ctx.restore();
 
-  // V1 ativo
-  const active = scene.v1Items.find(c => t >= c.start && t < c.start + tlDurScene(c));
-  if (active) {
-    const localT = t - active.start;
-    const dur = tlDurScene(active);
-    const src = media.resolve(active, t);
-    if (src) {
-      const sw = (src as HTMLVideoElement).videoWidth || (src as HTMLImageElement).naturalWidth || active.width || targetW;
-      const sh = (src as HTMLVideoElement).videoHeight || (src as HTMLImageElement).naturalHeight || active.height || targetH;
-      drawClipFrame(ctx, src, sw, sh, targetW, targetH, active, localT, dur);
+  // V1 ativo (com suporte a transições GL entre clipes adjacentes na mesma track)
+  const v1Sorted = [...scene.v1Items].sort((a, b) => a.start - b.start);
+  const transitionState = findActiveTransition(v1Sorted, t);
+  if (transitionState) {
+    renderTransitionPair(ctx, transitionState, t, targetW, targetH, media);
+  } else {
+    const active = v1Sorted.find(c => t >= c.start && t < c.start + tlDurScene(c));
+    if (active) {
+      const localT = t - active.start;
+      const dur = tlDurScene(active);
+      const src = media.resolve(active, t);
+      if (src) {
+        const sw = (src as HTMLVideoElement).videoWidth || (src as HTMLImageElement).naturalWidth || active.width || targetW;
+        const sh = (src as HTMLVideoElement).videoHeight || (src as HTMLImageElement).naturalHeight || active.height || targetH;
+        // Suprime fades quando dentro de janela de transição já é tratado acima
+        drawClipFrame(ctx, src, sw, sh, targetW, targetH, active, localT, dur);
+      }
     }
   }
 

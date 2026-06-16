@@ -2350,18 +2350,21 @@ function Editor() {
   // ---- Drag from Media to Timeline ----
   const findNearestJunction = (trackId: string, t: number) => {
     const trackItems = items.filter(i => i.trackId === trackId).sort((a, b) => a.start - b.start);
+    if (trackItems.length < 2) return null;
     let left: typeof trackItems[number] | undefined;
     let right: typeof trackItems[number] | undefined;
     let bestDist = Infinity;
     let junctionT = 0;
+    // Procura o par adjacente cuja "junção" (meio entre fim de A e início de B)
+    // está mais perto do ponteiro. Aceita qualquer gap/sobreposição — ao soltar
+    // os clipes serão encostados automaticamente.
     for (let k = 0; k < trackItems.length - 1; k++) {
       const a = trackItems[k];
       const b = trackItems[k + 1];
       const aEnd = a.start + tlDur(a);
-      const gap = b.start - aEnd;
       const j = (aEnd + b.start) / 2;
       const d = Math.abs(t - j);
-      if (Math.abs(gap) < 0.25 && d < bestDist) { bestDist = d; left = a; right = b; junctionT = j; }
+      if (d < bestDist) { bestDist = d; left = a; right = b; junctionT = j; }
     }
     if (left && right) return { left, right, junctionT, dist: bestDist };
     return null;

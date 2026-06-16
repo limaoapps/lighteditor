@@ -72,6 +72,8 @@ export type SceneItem = {
   /** Box visível em % (calculado por scene-geometry). Quando ausente, é derivado on-the-fly. */
   previewBox?: { wPct: number; hPct: number };
   zIndex?: number;
+  /** Id de transição (GL) aplicada entre este clipe e o adjacente na mesma track. */
+  transition?: string;
 };
 
 export type Scene = {

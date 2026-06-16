@@ -2407,9 +2407,13 @@ function Editor() {
       const t = Math.max(0, xPx / zoom);
       const j = findNearestJunction(trackId, t);
       if (j) {
+        // Encosta os clipes para garantir sobreposição na transição
+        const aEnd = j.left.start + tlDur(j.left);
+        const needSnap = Math.abs(j.right.start - aEnd) > 0.001;
+        const newRightStart = aEnd;
         setItems(p => p.map(i =>
           i.id === j.left.id ? { ...i, fadeOut: dur, transition: transitionId } :
-          i.id === j.right.id ? { ...i, fadeIn: dur, transition: transitionId } : i
+          i.id === j.right.id ? { ...i, fadeIn: dur, transition: transitionId, start: needSnap ? newRightStart : i.start } : i
         ));
         setSelectedTransition({ leftId: j.left.id, rightId: j.right.id });
         return;

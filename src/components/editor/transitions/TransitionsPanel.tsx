@@ -118,7 +118,7 @@ export function TransitionsPanel({ onApply, onDragStart, onDragEnd }: Transition
       </div>
 
       <div className="rounded-md border border-dashed border-border bg-card/40 px-2 py-1.5 text-[10px] text-muted-foreground">
-        Arraste entre dois clipes encostados, ou clique para aplicar ao clipe selecionado.
+        Arraste para a junção entre dois clipes (eles serão encostados automaticamente), ou clique para aplicar ao clipe selecionado.
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">

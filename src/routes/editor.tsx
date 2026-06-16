@@ -2350,18 +2350,21 @@ function Editor() {
   // ---- Drag from Media to Timeline ----
   const findNearestJunction = (trackId: string, t: number) => {
     const trackItems = items.filter(i => i.trackId === trackId).sort((a, b) => a.start - b.start);
+    if (trackItems.length < 2) return null;
     let left: typeof trackItems[number] | undefined;
     let right: typeof trackItems[number] | undefined;
     let bestDist = Infinity;
     let junctionT = 0;
+    // Procura o par adjacente cuja "junção" (meio entre fim de A e início de B)
+    // está mais perto do ponteiro. Aceita qualquer gap/sobreposição — ao soltar
+    // os clipes serão encostados automaticamente.
     for (let k = 0; k < trackItems.length - 1; k++) {
       const a = trackItems[k];
       const b = trackItems[k + 1];
       const aEnd = a.start + tlDur(a);
-      const gap = b.start - aEnd;
       const j = (aEnd + b.start) / 2;
       const d = Math.abs(t - j);
-      if (Math.abs(gap) < 0.25 && d < bestDist) { bestDist = d; left = a; right = b; junctionT = j; }
+      if (d < bestDist) { bestDist = d; left = a; right = b; junctionT = j; }
     }
     if (left && right) return { left, right, junctionT, dist: bestDist };
     return null;
@@ -2404,9 +2407,13 @@ function Editor() {
       const t = Math.max(0, xPx / zoom);
       const j = findNearestJunction(trackId, t);
       if (j) {
+        // Encosta os clipes para garantir sobreposição na transição
+        const aEnd = j.left.start + tlDur(j.left);
+        const needSnap = Math.abs(j.right.start - aEnd) > 0.001;
+        const newRightStart = aEnd;
         setItems(p => p.map(i =>
           i.id === j.left.id ? { ...i, fadeOut: dur, transition: transitionId } :
-          i.id === j.right.id ? { ...i, fadeIn: dur, transition: transitionId } : i
+          i.id === j.right.id ? { ...i, fadeIn: dur, transition: transitionId, start: needSnap ? newRightStart : i.start } : i
         ));
         setSelectedTransition({ leftId: j.left.id, rightId: j.right.id });
         return;
@@ -3613,7 +3620,7 @@ function Editor() {
                             const b = trackItems[k + 1];
                             const aEnd = a.start + tlDur(a);
                             const gap = b.start - aEnd;
-                            if (Math.abs(gap) > 0.25) continue;
+                            if (gap > 0.25) continue;
                             const hasTrans = ((a.fadeOut ?? 0) > 0.01) && ((b.fadeIn ?? 0) > 0.01);
                             if (!hasTrans) continue;
                             const dur = Math.max(a.fadeOut ?? 0, b.fadeIn ?? 0);

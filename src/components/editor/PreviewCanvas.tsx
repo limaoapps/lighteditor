@@ -66,8 +66,8 @@ export function PreviewCanvas({ aspect, v1Items, visualItems, textItems, time, p
     if (!ctx) return;
 
     const itemsKey = JSON.stringify({
-      v: v1Items.map(i => [i.id, i.transform, i.fx, i.previewBox, i.start, i.inPoint, i.outPoint]),
-      ov: visualItems.map(i => [i.id, i.transform, i.fx, i.previewBox, i.start, i.inPoint, i.outPoint]),
+      v: v1Items.map(i => [i.id, i.transform, i.fx, i.previewBox, i.start, i.inPoint, i.outPoint, i.fadeIn, i.fadeOut, (i as { transition?: string }).transition]),
+      ov: visualItems.map(i => [i.id, i.transform, i.fx, i.previewBox, i.start, i.inPoint, i.outPoint, i.fadeIn, i.fadeOut, (i as { transition?: string }).transition]),
       t: textItems.map(i => [i.id, i.transform, i.text, i.fx, i.start, i.inPoint, i.outPoint]),
     });
 

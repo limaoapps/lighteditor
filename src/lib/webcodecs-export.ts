@@ -77,6 +77,7 @@ export type WCItem = {
   transform?: { xPct?: number; yPct?: number; scale?: number; rotation?: number };
   previewBox?: { wPct: number; hPct: number };
   zIndex?: number;
+  transition?: string;
 };
 
 export type WCExportOptions = {

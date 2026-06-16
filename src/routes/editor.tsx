@@ -1851,6 +1851,7 @@ function Editor() {
         transform: c.transform,
         previewBox: bounds ? { wPct: bounds.w, hPct: bounds.h } : undefined,
         zIndex: trackZ(c.trackId),
+        transition: (c as { transition?: string }).transition,
       };
     };
     const v1Items = items

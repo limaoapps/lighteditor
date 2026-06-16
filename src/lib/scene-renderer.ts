@@ -14,6 +14,9 @@
  */
 
 import { computeItemBounds, type ProjectAspect } from "./scene-geometry";
+import { sharedRuntime as sharedGLRuntime } from "./transitions/gl-runtime";
+import { getTransition } from "./transitions/registry";
+import { fallback2D } from "./transitions/fallback";
 
 export type SceneFx = {
   fillMode: "bars" | "blur" | "mirror" | "stretch" | "color";
@@ -69,6 +72,8 @@ export type SceneItem = {
   /** Box visível em % (calculado por scene-geometry). Quando ausente, é derivado on-the-fly. */
   previewBox?: { wPct: number; hPct: number };
   zIndex?: number;
+  /** Id de transição (GL) aplicada entre este clipe e o adjacente na mesma track. */
+  transition?: string;
 };
 
 export type Scene = {
@@ -420,7 +425,119 @@ function drawTextOverlay(
   ctx.restore();
 }
 
-// =============== ENTRADA ÚNICA ===============
+// =============== Transições GL entre clipes ===============
+
+type ActiveTransition = {
+  A: SceneItem;
+  B: SceneItem;
+  transitionId: string;
+  dur: number;
+  winStart: number;
+  winEnd: number;
+};
+
+function findActiveTransition(sorted: SceneItem[], t: number): ActiveTransition | null {
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const A = sorted[i];
+    const B = sorted[i + 1];
+    const transitionId = A.transition || B.transition;
+    if (!transitionId) continue;
+    const aEnd = A.start + tlDurScene(A);
+    // Tolerância: clipes praticamente colados no boundary
+    if (Math.abs(B.start - aEnd) > 0.5) continue;
+    const fadeOut = A.fadeOut ?? 0;
+    const fadeIn = B.fadeIn ?? 0;
+    const dur = Math.max(0.05, Math.min(fadeOut || fadeIn || 0.5, fadeIn || fadeOut || 0.5));
+    const boundary = (aEnd + B.start) / 2;
+    const winStart = boundary - dur;
+    const winEnd = boundary + dur;
+    if (t >= winStart && t <= winEnd) {
+      return { A, B, transitionId, dur, winStart, winEnd };
+    }
+  }
+  return null;
+}
+
+// Cache de offscreens para renderizar frames isolados de A/B
+let _tmpA: OffscreenCanvas | HTMLCanvasElement | null = null;
+let _tmpB: OffscreenCanvas | HTMLCanvasElement | null = null;
+function getTmp(which: "a" | "b", w: number, h: number): OffscreenCanvas | HTMLCanvasElement {
+  const ref = which === "a" ? _tmpA : _tmpB;
+  let c = ref;
+  if (!c) {
+    c = typeof OffscreenCanvas !== "undefined"
+      ? new OffscreenCanvas(w, h)
+      : Object.assign(document.createElement("canvas"), { width: w, height: h });
+  }
+  if (c.width !== w) (c as HTMLCanvasElement).width = w;
+  if (c.height !== h) (c as HTMLCanvasElement).height = h;
+  if (which === "a") _tmpA = c; else _tmpB = c;
+  return c;
+}
+
+function renderClipIsolated(
+  target: OffscreenCanvas | HTMLCanvasElement,
+  item: SceneItem,
+  absT: number,
+  media: MediaResolver,
+  targetW: number,
+  targetH: number,
+) {
+  const ctx = target.getContext("2d") as AnyCtx | null;
+  if (!ctx) return false;
+  ctx.save();
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, targetW, targetH);
+  ctx.restore();
+  const src = media.resolve(item, absT);
+  if (!src) return false;
+  const sw = (src as HTMLVideoElement).videoWidth || (src as HTMLImageElement).naturalWidth || item.width || targetW;
+  const sh = (src as HTMLVideoElement).videoHeight || (src as HTMLImageElement).naturalHeight || item.height || targetH;
+  // Item sem fade para que a transição GL controle a mistura
+  const clean: SceneItem = { ...item, fadeIn: 0, fadeOut: 0, fx: item.fx ? { ...item.fx, opacity: 100 } : item.fx };
+  const dur = tlDurScene(clean);
+  const localT = absT - clean.start;
+  drawClipFrame(ctx, src, sw, sh, targetW, targetH, clean, Math.max(0, Math.min(dur, localT)), dur);
+  return true;
+}
+
+function renderTransitionPair(
+  ctx: AnyCtx,
+  s: ActiveTransition,
+  t: number,
+  targetW: number,
+  targetH: number,
+  media: MediaResolver,
+) {
+  const aEnd = s.A.start + tlDurScene(s.A);
+  const tA = Math.min(aEnd - 0.0001, t);
+  const tB = Math.max(s.B.start + 0.0001, t);
+  const ca = getTmp("a", targetW, targetH);
+  const cb = getTmp("b", targetW, targetH);
+  const okA = renderClipIsolated(ca, s.A, tA, media, targetW, targetH);
+  const okB = renderClipIsolated(cb, s.B, tB, media, targetW, targetH);
+  if (!okA && !okB) return;
+  const progress = Math.max(0, Math.min(1, (t - s.winStart) / Math.max(0.001, s.winEnd - s.winStart)));
+  const def = getTransition(s.transitionId);
+  let drew = false;
+  if (def && okA && okB) {
+    try {
+      const out = sharedGLRuntime().render(def, ca as unknown as TexImageSource, cb as unknown as TexImageSource, progress, targetW, targetH);
+      if (out) {
+        ctx.drawImage(out as unknown as CanvasImageSource, 0, 0, targetW, targetH);
+        drew = true;
+      }
+    } catch {
+      drew = false;
+    }
+  }
+  if (!drew) {
+    // Fallback: cross-dissolve 2D
+    fallback2D(ctx, ca as unknown as CanvasImageSource, cb as unknown as CanvasImageSource, progress, targetW, targetH);
+  }
+}
+
+
 
 /**
  * Desenha a cena inteira no tempo `t` (segundos absolutos da timeline).
@@ -440,16 +557,23 @@ export function drawScene(
   ctx.fillRect(0, 0, targetW, targetH);
   ctx.restore();
 
-  // V1 ativo
-  const active = scene.v1Items.find(c => t >= c.start && t < c.start + tlDurScene(c));
-  if (active) {
-    const localT = t - active.start;
-    const dur = tlDurScene(active);
-    const src = media.resolve(active, t);
-    if (src) {
-      const sw = (src as HTMLVideoElement).videoWidth || (src as HTMLImageElement).naturalWidth || active.width || targetW;
-      const sh = (src as HTMLVideoElement).videoHeight || (src as HTMLImageElement).naturalHeight || active.height || targetH;
-      drawClipFrame(ctx, src, sw, sh, targetW, targetH, active, localT, dur);
+  // V1 ativo (com suporte a transições GL entre clipes adjacentes na mesma track)
+  const v1Sorted = [...scene.v1Items].sort((a, b) => a.start - b.start);
+  const transitionState = findActiveTransition(v1Sorted, t);
+  if (transitionState) {
+    renderTransitionPair(ctx, transitionState, t, targetW, targetH, media);
+  } else {
+    const active = v1Sorted.find(c => t >= c.start && t < c.start + tlDurScene(c));
+    if (active) {
+      const localT = t - active.start;
+      const dur = tlDurScene(active);
+      const src = media.resolve(active, t);
+      if (src) {
+        const sw = (src as HTMLVideoElement).videoWidth || (src as HTMLImageElement).naturalWidth || active.width || targetW;
+        const sh = (src as HTMLVideoElement).videoHeight || (src as HTMLImageElement).naturalHeight || active.height || targetH;
+        // Suprime fades quando dentro de janela de transição já é tratado acima
+        drawClipFrame(ctx, src, sw, sh, targetW, targetH, active, localT, dur);
+      }
     }
   }
 

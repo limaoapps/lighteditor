@@ -3620,7 +3620,7 @@ function Editor() {
                             const b = trackItems[k + 1];
                             const aEnd = a.start + tlDur(a);
                             const gap = b.start - aEnd;
-                            if (Math.abs(gap) > 0.25) continue;
+                            if (gap > 0.25) continue;
                             const hasTrans = ((a.fadeOut ?? 0) > 0.01) && ((b.fadeIn ?? 0) > 0.01);
                             if (!hasTrans) continue;
                             const dur = Math.max(a.fadeOut ?? 0, b.fadeIn ?? 0);

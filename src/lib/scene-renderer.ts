@@ -14,6 +14,9 @@
  */
 
 import { computeItemBounds, type ProjectAspect } from "./scene-geometry";
+import { sharedRuntime as sharedGLRuntime } from "./transitions/gl-runtime";
+import { getTransition } from "./transitions/registry";
+import { fallbackCrossDissolve } from "./transitions/fallback";
 
 export type SceneFx = {
   fillMode: "bars" | "blur" | "mirror" | "stretch" | "color";

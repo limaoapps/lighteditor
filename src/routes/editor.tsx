@@ -1747,6 +1747,22 @@ function Editor() {
     setSelectedId(it.id);
   }, [tracks, ensureTrack, setItems, playhead]);
 
+  const addTitleFromPreset = useCallback((preset: TitlePreset) => {
+    const videoTracks = tracks.filter(t => t.kind === "video");
+    const trackId = videoTracks[0]?.id ?? ensureTrack("video");
+    const base = defaultText();
+    const overrides = preset.build();
+    const it: TLItem = {
+      id: crypto.randomUUID(), kind: "text", trackId, name: preset.name,
+      start: playhead, inPoint: 0, outPoint: preset.dur, sourceDuration: 9999,
+      text: { ...base, ...overrides },
+      fx: { ...DEFAULT_FX },
+      transform: { xPct: preset.transform.xPct, yPct: preset.transform.yPct, scale: 1, rotation: 0 },
+    };
+    setItems(prev => [...prev, it]);
+    setSelectedId(it.id);
+  }, [tracks, ensureTrack, setItems, playhead]);
+
   const deleteItem = (id: string) => {
     setItems(prev => prev.filter(i => i.id !== id));
     if (selectedId === id) setSelectedId(null);

@@ -2208,7 +2208,7 @@ function Editor() {
 
     const v1trackId = [...tracks].reverse().find(t => t.kind === "video")?.id;
     const v1clips = items
-      .filter(i => i.trackId === v1trackId && i.kind === "video")
+      .filter(i => i.trackId === v1trackId && i.kind !== "audio")
       .sort((a, b) => a.start - b.start);
     const visualOverlayItems = items
       .filter(i => i.kind === "image" || (i.kind === "video" && i.trackId !== v1trackId))
@@ -2218,7 +2218,7 @@ function Editor() {
       setError("Adicione pelo menos um vídeo, imagem ou áudio na timeline.");
       return;
     }
-    const missingFiles = [...v1clips, ...visualOverlayItems, ...audioClips].filter(c => !c.file);
+    const missingFiles = [...v1clips, ...visualOverlayItems, ...audioClips].filter(c => c.kind !== "text" && !c.file);
     if (missingFiles.length) {
       const names = missingFiles.map(c => c.name).join(", ");
       console.error("Clipes sem arquivo original:", names);
@@ -2257,7 +2257,7 @@ function Editor() {
         `Resolução: ${targetW}x${targetH} · ${fps} fps · ${vKbps} kbps`,
         `Áudio: AAC ${aKbps} kbps`,
       ]);
-      const textItems = items.filter(i => i.kind === "text" && i.text?.content);
+      const textItems = items.filter(i => i.kind === "text" && i.trackId !== v1trackId && i.text?.content);
       const music = audioClips[0];
 
       // Normaliza a timeline: a exportação reproduz exatamente o que está na timeline,

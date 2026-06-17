@@ -565,25 +565,21 @@ function drawTextOverlay(
   const ltOffsetX = styleKind === "lowerthird" ? (size * 0.18) : 0;
   const textBlockTop = -totalH / 2;
 
-  for (let i = 0; i < lines.length; i++) {
-    let lineText = lines[i];
-    if (animResult.typewriter < 1 && i === 0) {
-      // tipo "typewriter" só na primeira (simplificação visual)
-      const totalChars = lines.reduce((acc, l) => acc + l.length, 0);
-      const shown = Math.floor(totalChars * animResult.typewriter);
-      let remaining = shown;
-      const shownLines: string[] = [];
-      for (const l of lines) {
-        if (remaining <= 0) { shownLines.push(""); continue; }
-        if (remaining >= l.length) { shownLines.push(l); remaining -= l.length; }
-        else { shownLines.push(l.slice(0, remaining)); remaining = 0; }
-      }
-      lineText = shownLines[i];
-    } else if (animResult.typewriter < 1) {
-      // já tratado acima na primeira iteração — pula
-      continue;
-    }
+  // Calcula linhas visíveis para efeito typewriter (caractere a caractere, multi-linha).
+  let visibleLines = lines;
+  if (animResult.typewriter < 1) {
+    const totalChars = lines.reduce((acc, l) => acc + l.length, 0);
+    let remaining = Math.floor(totalChars * animResult.typewriter);
+    visibleLines = lines.map(l => {
+      if (remaining <= 0) return "";
+      if (remaining >= l.length) { remaining -= l.length; return l; }
+      const taken = l.slice(0, remaining); remaining = 0; return taken;
+    });
+  }
 
+  for (let i = 0; i < visibleLines.length; i++) {
+    const lineText = visibleLines[i];
+    if (!lineText) continue;
     const ly = textBlockTop + lineH * (i + 0.5);
     if ((t.strokeWidth ?? 0) > 0) {
       ctx.lineWidth = t.strokeWidth!;
@@ -599,6 +595,7 @@ function drawTextOverlay(
       ctx.fillRect(ux + ltOffsetX, ly + size * 0.45, w, Math.max(1, size * 0.06));
     }
   }
+
 
   // Sublinhado de destaque para títulos
   if (styleKind === "title" && animResult.typewriter >= 1) {

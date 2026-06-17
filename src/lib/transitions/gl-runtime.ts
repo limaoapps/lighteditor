@@ -69,7 +69,7 @@ export class GLTransitionRuntime {
       try {
         const ctx = (this.canvas as HTMLCanvasElement).getContext("webgl", {
           premultipliedAlpha: true,
-          preserveDrawingBuffer: false,
+          preserveDrawingBuffer: true,
           antialias: false,
         }) as WebGLRenderingContext | null;
         if (!ctx) {

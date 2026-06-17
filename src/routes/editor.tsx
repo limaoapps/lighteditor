@@ -1855,13 +1855,13 @@ function Editor() {
       };
     };
     const v1Items = items
-      .filter(i => i.trackId === v1trackId && i.kind === "video" && !trackMuted[i.trackId])
+      .filter(i => i.trackId === v1trackId && i.kind !== "audio" && !trackMuted[i.trackId])
       .map(toScene);
     const visualItems = items
-      .filter(i => (i.kind === "image" || (i.kind === "video" && i.trackId !== v1trackId)) && !trackMuted[i.trackId])
+      .filter(i => (i.kind === "image" || i.kind === "video") && i.trackId !== v1trackId && !trackMuted[i.trackId])
       .map(toScene);
     const textItems = items
-      .filter(i => i.kind === "text" && i.text?.content && !trackMuted[i.trackId])
+      .filter(i => i.kind === "text" && i.trackId !== v1trackId && i.text?.content && !trackMuted[i.trackId])
       .map(toScene);
     return { v1Items, visualItems, textItems };
   }, [items, tracks, aspect, trackMuted, trackZ]);
@@ -2208,7 +2208,7 @@ function Editor() {
 
     const v1trackId = [...tracks].reverse().find(t => t.kind === "video")?.id;
     const v1clips = items
-      .filter(i => i.trackId === v1trackId && i.kind === "video")
+      .filter(i => i.trackId === v1trackId && i.kind !== "audio")
       .sort((a, b) => a.start - b.start);
     const visualOverlayItems = items
       .filter(i => i.kind === "image" || (i.kind === "video" && i.trackId !== v1trackId))
@@ -2218,7 +2218,7 @@ function Editor() {
       setError("Adicione pelo menos um vídeo, imagem ou áudio na timeline.");
       return;
     }
-    const missingFiles = [...v1clips, ...visualOverlayItems, ...audioClips].filter(c => !c.file);
+    const missingFiles = [...v1clips, ...visualOverlayItems, ...audioClips].filter(c => c.kind !== "text" && !c.file);
     if (missingFiles.length) {
       const names = missingFiles.map(c => c.name).join(", ");
       console.error("Clipes sem arquivo original:", names);
@@ -2257,7 +2257,7 @@ function Editor() {
         `Resolução: ${targetW}x${targetH} · ${fps} fps · ${vKbps} kbps`,
         `Áudio: AAC ${aKbps} kbps`,
       ]);
-      const textItems = items.filter(i => i.kind === "text" && i.text?.content);
+      const textItems = items.filter(i => i.kind === "text" && i.trackId !== v1trackId && i.text?.content);
       const music = audioClips[0];
 
       // Normaliza a timeline: a exportação reproduz exatamente o que está na timeline,
@@ -2350,7 +2350,7 @@ function Editor() {
 
   // ---- Drag from Media to Timeline ----
   const findNearestJunction = (trackId: string, t: number) => {
-    const trackItems = items.filter(i => i.trackId === trackId).sort((a, b) => a.start - b.start);
+    const trackItems = items.filter(i => i.trackId === trackId && i.kind !== "audio").sort((a, b) => a.start - b.start);
     if (trackItems.length < 2) return null;
     let left: typeof trackItems[number] | undefined;
     let right: typeof trackItems[number] | undefined;
@@ -2369,6 +2369,25 @@ function Editor() {
     }
     if (left && right) return { left, right, junctionT, dist: bestDist };
     return null;
+  };
+  const applyTransitionAroundItem = (itemId: string, transitionId: string, dur: number) => {
+    const target = items.find(i => i.id === itemId && i.kind !== "audio");
+    if (!target) return false;
+    const trackItems = items.filter(i => i.trackId === target.trackId && i.kind !== "audio").sort((a, b) => a.start - b.start);
+    const idx = trackItems.findIndex(i => i.id === target.id);
+    if (idx < 0 || trackItems.length < 2) return false;
+    const left = idx < trackItems.length - 1 ? trackItems[idx] : trackItems[idx - 1];
+    const right = idx < trackItems.length - 1 ? trackItems[idx + 1] : trackItems[idx];
+    if (!left || !right) return false;
+    const aEnd = left.start + tlDur(left);
+    const d = Math.max(0.05, Math.min(5, tlDur(left), tlDur(right), dur));
+    setItems(p => p.map(i =>
+      i.id === left.id ? { ...i, fadeOut: d, transition: transitionId } :
+      i.id === right.id ? { ...i, fadeIn: d, transition: transitionId, start: aEnd } : i
+    ));
+    setSelectedTransition({ leftId: left.id, rightId: right.id });
+    setPlayhead(Math.max(0, aEnd));
+    return true;
   };
   const onTrackDragOver = (e: React.DragEvent, trackId?: string) => {
     if (
@@ -2419,7 +2438,7 @@ function Editor() {
         setSelectedTransition({ leftId: j.left.id, rightId: j.right.id });
         return;
       }
-      const trackItems = items.filter(i => i.trackId === trackId).sort((a, b) => a.start - b.start);
+      const trackItems = items.filter(i => i.trackId === trackId && i.kind !== "audio").sort((a, b) => a.start - b.start);
       const hit = trackItems.find(i => t >= i.start && t <= i.start + tlDur(i));
       if (hit) {
         setItems(p => p.map(i => i.id === hit.id ? { ...i, fadeIn: dur, fadeOut: dur, transition: transitionId } : i));
@@ -2678,11 +2697,7 @@ function Editor() {
               <TransitionsPanel
                 onApply={(def) => {
                   if (!selected) return;
-                  setItems(p => p.map(i =>
-                    i.id === selected.id
-                      ? { ...i, fadeIn: def.defaultDuration, fadeOut: def.defaultDuration, transition: def.id }
-                      : i
-                  ));
+                  applyTransitionAroundItem(selected.id, def.id, def.defaultDuration);
                 }}
                 onDragStart={(def, e) => {
                   draggedTransitionRef.current = {
@@ -4008,7 +4023,7 @@ function Editor() {
             {leftPanel === "transitions" && (
               <div className="grid grid-cols-2 gap-3">
                 {TRANSITION_GROUPS.flatMap(g => g.items).map(t => (
-                  <button key={t.id} onClick={() => { if (selected) setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: t.dur, fadeOut: t.dur, transition: t.id } : i)); setShowMobilePanel(false); }}
+                  <button key={t.id} onClick={() => { if (selected) applyTransitionAroundItem(selected.id, t.id, t.dur); setShowMobilePanel(false); }}
                     className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 shadow-sm active:bg-accent transition-colors">
                     <span className="text-2xl">{t.icon}</span>
                     <span className="text-[11px] font-medium">{t.label}</span>

@@ -582,10 +582,10 @@ export function drawScene(
       } else {
         const src = media.resolve(active, t);
         if (src) {
-        const sw = (src as HTMLVideoElement).videoWidth || (src as HTMLImageElement).naturalWidth || active.width || targetW;
-        const sh = (src as HTMLVideoElement).videoHeight || (src as HTMLImageElement).naturalHeight || active.height || targetH;
-        // Suprime fades quando dentro de janela de transição já é tratado acima
-        drawClipFrame(ctx, src, sw, sh, targetW, targetH, active, localT, dur);
+          const sw = (src as HTMLVideoElement).videoWidth || (src as HTMLImageElement).naturalWidth || active.width || targetW;
+          const sh = (src as HTMLVideoElement).videoHeight || (src as HTMLImageElement).naturalHeight || active.height || targetH;
+          // Suprime fades quando dentro de janela de transição já é tratado acima
+          drawClipFrame(ctx, src, sw, sh, targetW, targetH, active, localT, dur);
         }
       }
     }
@@ -593,8 +593,8 @@ export function drawScene(
 
   // Camadas visuais adicionais também suportam transição GL entre itens adjacentes da mesma track.
   const visual = [...scene.visualItems].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
-  const texts = [...scene.textItems].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
-  const overlayTransitionCandidates = [...visual, ...texts].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0) || a.start - b.start);
+  const textOverlays = [...scene.textItems].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+  const overlayTransitionCandidates = [...visual, ...textOverlays].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0) || a.start - b.start);
   const visualTransitionIds = new Set<string>();
   for (const trackId of Array.from(new Set(overlayTransitionCandidates.map(it => it.trackId)))) {
     const trackItems = overlayTransitionCandidates.filter(it => it.trackId === trackId).sort((a, b) => a.start - b.start);
@@ -633,8 +633,8 @@ export function drawScene(
   }
 
   // Textos
-  const texts = [...scene.textItems].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
-  for (const it of texts) {
+  for (const it of textOverlays) {
+    if (visualTransitionIds.has(it.id)) continue;
     if (!it.text?.content) continue;
     const dur = tlDurScene(it);
     const localT = t - it.start;

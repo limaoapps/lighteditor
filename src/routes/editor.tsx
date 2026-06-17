@@ -47,6 +47,12 @@ type TrackKind = "video" | "audio";
 
 type Transform = { xPct: number; yPct: number; scale: number; rotation: number };
 type TextAlign = "left" | "center" | "right";
+type TextAnimKind =
+  | "none" | "fade" | "fadeUp" | "fadeDown"
+  | "slideLeft" | "slideRight" | "zoom" | "pop"
+  | "wipeRight" | "wipeLeft" | "typewriter" | "blurIn";
+type TextStyleKind = "default" | "title" | "lowerthird";
+
 type TextProps = {
   content: string;
   fontFamily: string;
@@ -70,6 +76,16 @@ type TextProps = {
   shadowOffsetY: number;   // px
   strokeColor: string;
   strokeWidth: number;     // px
+  // ---- Animação & lower-third ----
+  subtitle?: string;
+  subtitleSize?: number;
+  subtitleColor?: string;
+  styleKind?: TextStyleKind;
+  accentColor?: string;
+  animIn?: TextAnimKind;
+  animOut?: TextAnimKind;
+  animInDur?: number;
+  animOutDur?: number;
 };
 
 // Google Fonts a serem carregadas dinamicamente (família : pesos)
@@ -172,6 +188,180 @@ const defaultText = (): TextProps => ({
   strokeColor: "#000000",
   strokeWidth: 0,
 });
+
+// =============== Presets de Títulos Animados e Lower-Thirds ===============
+type TitlePreset = {
+  id: string;
+  label: string;
+  hint: string;
+  /** Duração padrão (segundos). */
+  dur: number;
+  /** Constrói o TextProps. */
+  build: () => Partial<TextProps> & Pick<TextProps, "content" | "size">;
+  transform: { xPct: number; yPct: number };
+  name: string;
+};
+
+const TITLE_PRESETS: TitlePreset[] = [
+  {
+    id: "title-cinematic", label: "Cinemático", hint: "Fade + sublinhado", dur: 5, name: "Título",
+    transform: { xPct: 50, yPct: 50 },
+    build: () => ({
+      content: "TÍTULO PRINCIPAL", size: 88, bold: true, color: "#ffffff",
+      fontFamily: "'Playfair Display', serif", letterSpacing: 4, align: "center",
+      styleKind: "title", accentColor: "#e5b769",
+      animIn: "fadeUp", animOut: "fade", animInDur: 0.9, animOutDur: 0.6,
+      shadowBlur: 18, shadowColor: "rgba(0,0,0,0.6)", shadowOffsetY: 4,
+    }),
+  },
+  {
+    id: "title-bold-zoom", label: "Bold Zoom", hint: "Impacto", dur: 4, name: "Título",
+    transform: { xPct: 50, yPct: 50 },
+    build: () => ({
+      content: "IMPACTO", size: 140, bold: true, color: "#ffffff",
+      fontFamily: "'Anton', sans-serif", letterSpacing: 2, align: "center",
+      styleKind: "title", accentColor: "#ef4444",
+      animIn: "zoom", animOut: "fade", animInDur: 0.6, animOutDur: 0.4,
+      strokeColor: "#000000", strokeWidth: 2,
+    }),
+  },
+  {
+    id: "title-typewriter", label: "Máquina de Escrever", hint: "Texto digitado", dur: 5, name: "Título",
+    transform: { xPct: 50, yPct: 50 },
+    build: () => ({
+      content: "Era uma vez...", size: 72, bold: false, color: "#ffffff",
+      fontFamily: "'JetBrains Mono', monospace", align: "center",
+      styleKind: "default", animIn: "typewriter", animOut: "fade",
+      animInDur: 2.0, animOutDur: 0.5,
+    }),
+  },
+  {
+    id: "title-slide", label: "Slide Lateral", hint: "Entra pela esquerda", dur: 4, name: "Título",
+    transform: { xPct: 50, yPct: 30 },
+    build: () => ({
+      content: "MANCHETE", size: 96, bold: true, color: "#ffffff",
+      fontFamily: "'Bebas Neue', sans-serif", letterSpacing: 6, align: "center",
+      styleKind: "title", accentColor: "#22d3ee",
+      animIn: "slideLeft", animOut: "slideRight", animInDur: 0.7, animOutDur: 0.6,
+    }),
+  },
+  {
+    id: "title-wipe", label: "Wipe", hint: "Revelação horizontal", dur: 4, name: "Título",
+    transform: { xPct: 50, yPct: 50 },
+    build: () => ({
+      content: "REVELAÇÃO", size: 110, bold: true, color: "#ffffff",
+      fontFamily: "'Oswald', sans-serif", letterSpacing: 4, align: "center",
+      styleKind: "title", accentColor: "#a855f7",
+      animIn: "wipeRight", animOut: "wipeLeft", animInDur: 0.9, animOutDur: 0.7,
+    }),
+  },
+  {
+    id: "title-pop", label: "Pop Bounce", hint: "Salto de entrada", dur: 4, name: "Título",
+    transform: { xPct: 50, yPct: 40 },
+    build: () => ({
+      content: "NOVO!", size: 130, bold: true, color: "#facc15",
+      fontFamily: "'Bangers', sans-serif", letterSpacing: 3, align: "center",
+      styleKind: "title", accentColor: "#facc15",
+      animIn: "pop", animOut: "zoom", animInDur: 0.55, animOutDur: 0.4,
+      strokeColor: "#1f2937", strokeWidth: 4,
+    }),
+  },
+  {
+    id: "title-blur", label: "Foco Suave", hint: "Blur de entrada", dur: 5, name: "Título",
+    transform: { xPct: 50, yPct: 50 },
+    build: () => ({
+      content: "Apresentando", size: 80, bold: false, color: "#ffffff",
+      fontFamily: "'Cormorant Garamond', serif", italic: true, align: "center",
+      styleKind: "title", accentColor: "#f5f5f5",
+      animIn: "blurIn", animOut: "fade", animInDur: 1.0, animOutDur: 0.6,
+    }),
+  },
+  {
+    id: "title-fadeup", label: "Fade Up", hint: "Sobe e aparece", dur: 4, name: "Título",
+    transform: { xPct: 50, yPct: 50 },
+    build: () => ({
+      content: "Sua História", size: 84, bold: true, color: "#ffffff",
+      fontFamily: "'Montserrat', sans-serif", align: "center",
+      styleKind: "title", accentColor: "#10b981",
+      animIn: "fadeUp", animOut: "fadeDown", animInDur: 0.7, animOutDur: 0.6,
+    }),
+  },
+];
+
+const LOWER_THIRD_PRESETS: TitlePreset[] = [
+  {
+    id: "lt-classic", label: "Clássico", hint: "Slide da esquerda", dur: 6, name: "Lower Third",
+    transform: { xPct: 28, yPct: 82 },
+    build: () => ({
+      content: "Nome do Apresentador", size: 44, bold: true, color: "#ffffff",
+      fontFamily: "'Inter', sans-serif", align: "left",
+      styleKind: "lowerthird", accentColor: "#22c55e",
+      bgColor: "#0b0b0d", bgOpacity: 0.85, radius: 6,
+      subtitle: "Cargo · Empresa", subtitleSize: 22, subtitleColor: "rgba(255,255,255,0.8)",
+      animIn: "slideLeft", animOut: "slideLeft", animInDur: 0.6, animOutDur: 0.5,
+    }),
+  },
+  {
+    id: "lt-news", label: "Telejornal", hint: "Vermelho impacto", dur: 6, name: "Lower Third",
+    transform: { xPct: 30, yPct: 84 },
+    build: () => ({
+      content: "ÚLTIMA HORA", size: 48, bold: true, color: "#ffffff",
+      fontFamily: "'Oswald', sans-serif", letterSpacing: 2, align: "left",
+      styleKind: "lowerthird", accentColor: "#dc2626",
+      bgColor: "#000000", bgOpacity: 0.9, radius: 2,
+      subtitle: "Notícia em desenvolvimento", subtitleSize: 22, subtitleColor: "#fca5a5",
+      animIn: "slideRight", animOut: "fade", animInDur: 0.5, animOutDur: 0.5,
+    }),
+  },
+  {
+    id: "lt-minimal", label: "Minimalista", hint: "Fade up suave", dur: 6, name: "Lower Third",
+    transform: { xPct: 25, yPct: 86 },
+    build: () => ({
+      content: "Maria Silva", size: 40, bold: false, color: "#ffffff",
+      fontFamily: "'DM Sans', sans-serif", align: "left",
+      styleKind: "lowerthird", accentColor: "#ffffff",
+      bgColor: "#111827", bgOpacity: 0.6, radius: 10,
+      subtitle: "Diretora Criativa", subtitleSize: 20, subtitleColor: "rgba(255,255,255,0.7)",
+      animIn: "fadeUp", animOut: "fadeDown", animInDur: 0.7, animOutDur: 0.5,
+    }),
+  },
+  {
+    id: "lt-corporate", label: "Corporativo", hint: "Azul + wipe", dur: 6, name: "Lower Third",
+    transform: { xPct: 28, yPct: 82 },
+    build: () => ({
+      content: "João Pereira", size: 42, bold: true, color: "#ffffff",
+      fontFamily: "'Manrope', sans-serif", align: "left",
+      styleKind: "lowerthird", accentColor: "#3b82f6",
+      bgColor: "#0b1220", bgOpacity: 0.9, radius: 4,
+      subtitle: "CEO · Innovate Co.", subtitleSize: 22, subtitleColor: "#93c5fd",
+      animIn: "wipeRight", animOut: "wipeLeft", animInDur: 0.7, animOutDur: 0.5,
+    }),
+  },
+  {
+    id: "lt-modern", label: "Moderno", hint: "Pop bounce", dur: 6, name: "Lower Third",
+    transform: { xPct: 26, yPct: 84 },
+    build: () => ({
+      content: "@usuario", size: 40, bold: true, color: "#0f172a",
+      fontFamily: "'Poppins', sans-serif", align: "left",
+      styleKind: "lowerthird", accentColor: "#0f172a",
+      bgColor: "#facc15", bgOpacity: 0.95, radius: 14,
+      subtitle: "Criador de conteúdo", subtitleSize: 22, subtitleColor: "rgba(15,23,42,0.75)",
+      animIn: "pop", animOut: "fade", animInDur: 0.55, animOutDur: 0.4,
+    }),
+  },
+  {
+    id: "lt-cinema", label: "Cinema", hint: "Blur suave", dur: 6, name: "Lower Third",
+    transform: { xPct: 24, yPct: 86 },
+    build: () => ({
+      content: "Entrevistado", size: 44, bold: false, color: "#f5f5f5",
+      fontFamily: "'Playfair Display', serif", italic: true, align: "left",
+      styleKind: "lowerthird", accentColor: "#e5b769",
+      bgColor: "#0a0a0a", bgOpacity: 0.7, radius: 0,
+      subtitle: "Especialista no assunto", subtitleSize: 20, subtitleColor: "#d4d4d8",
+      animIn: "blurIn", animOut: "fade", animInDur: 0.9, animOutDur: 0.6,
+    }),
+  },
+];
 
 type MediaAsset = {
   id: string;
@@ -1557,6 +1747,22 @@ function Editor() {
     setSelectedId(it.id);
   }, [tracks, ensureTrack, setItems, playhead]);
 
+  const addTitleFromPreset = useCallback((preset: TitlePreset) => {
+    const videoTracks = tracks.filter(t => t.kind === "video");
+    const trackId = videoTracks[0]?.id ?? ensureTrack("video");
+    const base = defaultText();
+    const overrides = preset.build();
+    const it: TLItem = {
+      id: crypto.randomUUID(), kind: "text", trackId, name: preset.name,
+      start: playhead, inPoint: 0, outPoint: preset.dur, sourceDuration: 9999,
+      text: { ...base, ...overrides },
+      fx: { ...DEFAULT_FX },
+      transform: { xPct: preset.transform.xPct, yPct: preset.transform.yPct, scale: 1, rotation: 0 },
+    };
+    setItems(prev => [...prev, it]);
+    setSelectedId(it.id);
+  }, [tracks, ensureTrack, setItems, playhead]);
+
   const deleteItem = (id: string) => {
     setItems(prev => prev.filter(i => i.id !== id));
     if (selectedId === id) setSelectedId(null);
@@ -2682,16 +2888,48 @@ function Editor() {
             )}
 
             {leftPanel === "titles" && (
-              <div className="space-y-2 text-xs">
-                <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Títulos e créditos</div>
-                <button onClick={addText} className="inline-flex w-full items-center gap-2 rounded-md border border-border bg-card px-3 py-2 hover:border-ring/50">
-                  <TypeIcon className="h-3.5 w-3.5 text-primary" /> Título
-                </button>
-                <button onClick={addCredits} className="inline-flex w-full items-center gap-2 rounded-md border border-border bg-card px-3 py-2 hover:border-ring/50">
-                  <FileText className="h-3.5 w-3.5 text-primary" /> Créditos
-                </button>
+              <div className="space-y-3 text-xs">
+                <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Texto simples</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={addText} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2 py-2 hover:border-ring/50">
+                    <TypeIcon className="h-3.5 w-3.5 text-primary" /> Título
+                  </button>
+                  <button onClick={addCredits} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2 py-2 hover:border-ring/50">
+                    <FileText className="h-3.5 w-3.5 text-primary" /> Créditos
+                  </button>
+                </div>
+
+                <div className="px-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Títulos animados</div>
+                <div className="grid grid-cols-1 gap-1.5">
+                  {TITLE_PRESETS.map(p => (
+                    <button key={p.id} onClick={() => addTitleFromPreset(p)}
+                      className="group flex items-center justify-between rounded-md border border-border bg-card px-2.5 py-2 text-left hover:border-ring/50">
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold">{p.label}</div>
+                        <div className="truncate text-[10px] text-muted-foreground">{p.hint}</div>
+                      </div>
+                      <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-primary opacity-0 group-hover:opacity-100">+ add</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="px-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Lower Thirds</div>
+                <div className="grid grid-cols-1 gap-1.5">
+                  {LOWER_THIRD_PRESETS.map(p => (
+                    <button key={p.id} onClick={() => addTitleFromPreset(p)}
+                      className="group flex items-center justify-between rounded-md border border-border bg-card px-2.5 py-2 text-left hover:border-ring/50">
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold">{p.label}</div>
+                        <div className="truncate text-[10px] text-muted-foreground">{p.hint}</div>
+                      </div>
+                      <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-primary opacity-0 group-hover:opacity-100">+ add</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
+
+
 
             {leftPanel === "transitions" && (
               <TransitionsPanel
@@ -3176,6 +3414,60 @@ function Editor() {
                       <span className="text-[10px] text-muted-foreground">Raio</span>
                       <input type="number" value={t.radius}
                         onChange={(e) => updT({ radius: Number(e.target.value) || 0 })}
+                        className="h-7 rounded border border-border bg-background px-2 text-xs" />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-2 rounded border border-border/60 bg-background/40 p-2">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Estilo & Animação</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(["default","title","lowerthird"] as TextStyleKind[]).map(k => (
+                      <button key={k} onClick={() => updT({ styleKind: k })}
+                        className={`rounded border px-1.5 py-1 text-[10px] ${ (t.styleKind ?? "default") === k ? "border-primary bg-primary/15 text-primary" : "border-border bg-background"}`}>
+                        {k === "default" ? "Padrão" : k === "title" ? "Título" : "Lower 3rd"}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="flex items-center gap-2">
+                    <span className="w-14 text-muted-foreground">Destaque</span>
+                    <input type="color" value={t.accentColor ?? "#22c55e"} onChange={(e) => updT({ accentColor: e.target.value })}
+                      className="h-7 w-10 rounded border border-border bg-background" />
+                    <span className="ml-2 flex-1 text-[10px] text-muted-foreground">Barra/sublinhado</span>
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Subtítulo</span>
+                    <input type="text" value={t.subtitle ?? ""} onChange={(e) => updT({ subtitle: e.target.value })}
+                      placeholder="Cargo · Empresa"
+                      className="h-7 w-full rounded border border-border bg-background px-2 text-xs" />
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[10px] text-muted-foreground">Anim. In</span>
+                      <select value={t.animIn ?? "none"} onChange={(e) => updT({ animIn: e.target.value as TextAnimKind })}
+                        className="h-7 rounded border border-border bg-background px-1 text-xs">
+                        {(["none","fade","fadeUp","fadeDown","slideLeft","slideRight","zoom","pop","wipeRight","wipeLeft","typewriter","blurIn"] as TextAnimKind[]).map(a => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[10px] text-muted-foreground">Anim. Out</span>
+                      <select value={t.animOut ?? "none"} onChange={(e) => updT({ animOut: e.target.value as TextAnimKind })}
+                        className="h-7 rounded border border-border bg-background px-1 text-xs">
+                        {(["none","fade","fadeUp","fadeDown","slideLeft","slideRight","zoom","pop","wipeRight","wipeLeft","typewriter","blurIn"] as TextAnimKind[]).map(a => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[10px] text-muted-foreground">Dur. In (s)</span>
+                      <input type="number" step="0.1" min={0} max={5} value={t.animInDur ?? 0.6}
+                        onChange={(e) => updT({ animInDur: Number(e.target.value) || 0 })}
+                        className="h-7 rounded border border-border bg-background px-2 text-xs" />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[10px] text-muted-foreground">Dur. Out (s)</span>
+                      <input type="number" step="0.1" min={0} max={5} value={t.animOutDur ?? 0.5}
+                        onChange={(e) => updT({ animOutDur: Number(e.target.value) || 0 })}
                         className="h-7 rounded border border-border bg-background px-2 text-xs" />
                     </label>
                   </div>
@@ -4009,17 +4301,44 @@ function Editor() {
               </div>
             )}
             {leftPanel === "titles" && (
-              <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => { addText(); setShowMobilePanel(false); }} className="flex flex-col items-center gap-3 rounded-xl border border-border bg-card p-6 shadow-sm active:bg-accent transition-colors">
-                  <div className="rounded-full bg-primary/10 p-3"><TypeIcon className="h-6 w-6 text-primary" /></div>
-                  <span className="font-semibold">Título</span>
-                </button>
-                <button onClick={() => { addCredits(); setShowMobilePanel(false); }} className="flex flex-col items-center gap-3 rounded-xl border border-border bg-card p-6 shadow-sm active:bg-accent transition-colors">
-                  <div className="rounded-full bg-primary/10 p-3"><FileText className="h-6 w-6 text-primary" /></div>
-                  <span className="font-semibold">Créditos</span>
-                </button>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <button onClick={() => { addText(); setShowMobilePanel(false); }} className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 shadow-sm active:bg-accent">
+                    <div className="rounded-full bg-primary/10 p-2"><TypeIcon className="h-5 w-5 text-primary" /></div>
+                    <span className="text-xs font-semibold">Título</span>
+                  </button>
+                  <button onClick={() => { addCredits(); setShowMobilePanel(false); }} className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 shadow-sm active:bg-accent">
+                    <div className="rounded-full bg-primary/10 p-2"><FileText className="h-5 w-5 text-primary" /></div>
+                    <span className="text-xs font-semibold">Créditos</span>
+                  </button>
+                </div>
+                <div>
+                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Títulos animados</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {TITLE_PRESETS.map(p => (
+                      <button key={p.id} onClick={() => { addTitleFromPreset(p); setShowMobilePanel(false); }}
+                        className="rounded-xl border border-border bg-card p-3 text-left shadow-sm active:bg-accent">
+                        <div className="text-sm font-bold">{p.label}</div>
+                        <div className="text-[10px] text-muted-foreground">{p.hint}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Lower Thirds</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {LOWER_THIRD_PRESETS.map(p => (
+                      <button key={p.id} onClick={() => { addTitleFromPreset(p); setShowMobilePanel(false); }}
+                        className="rounded-xl border border-border bg-card p-3 text-left shadow-sm active:bg-accent">
+                        <div className="text-sm font-bold">{p.label}</div>
+                        <div className="text-[10px] text-muted-foreground">{p.hint}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
+
             {leftPanel === "transitions" && (
               <div className="grid grid-cols-2 gap-3">
                 {TRANSITION_GROUPS.flatMap(g => g.items).map(t => (

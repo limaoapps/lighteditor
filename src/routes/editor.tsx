@@ -2350,7 +2350,7 @@ function Editor() {
 
   // ---- Drag from Media to Timeline ----
   const findNearestJunction = (trackId: string, t: number) => {
-    const trackItems = items.filter(i => i.trackId === trackId).sort((a, b) => a.start - b.start);
+    const trackItems = items.filter(i => i.trackId === trackId && i.kind !== "audio").sort((a, b) => a.start - b.start);
     if (trackItems.length < 2) return null;
     let left: typeof trackItems[number] | undefined;
     let right: typeof trackItems[number] | undefined;
@@ -2369,6 +2369,25 @@ function Editor() {
     }
     if (left && right) return { left, right, junctionT, dist: bestDist };
     return null;
+  };
+  const applyTransitionAroundItem = (itemId: string, transitionId: string, dur: number) => {
+    const target = items.find(i => i.id === itemId && i.kind !== "audio");
+    if (!target) return false;
+    const trackItems = items.filter(i => i.trackId === target.trackId && i.kind !== "audio").sort((a, b) => a.start - b.start);
+    const idx = trackItems.findIndex(i => i.id === target.id);
+    if (idx < 0 || trackItems.length < 2) return false;
+    const left = idx < trackItems.length - 1 ? trackItems[idx] : trackItems[idx - 1];
+    const right = idx < trackItems.length - 1 ? trackItems[idx + 1] : trackItems[idx];
+    if (!left || !right) return false;
+    const aEnd = left.start + tlDur(left);
+    const d = Math.max(0.05, Math.min(5, tlDur(left), tlDur(right), dur));
+    setItems(p => p.map(i =>
+      i.id === left.id ? { ...i, fadeOut: d, transition: transitionId } :
+      i.id === right.id ? { ...i, fadeIn: d, transition: transitionId, start: aEnd } : i
+    ));
+    setSelectedTransition({ leftId: left.id, rightId: right.id });
+    setPlayhead(Math.max(0, aEnd));
+    return true;
   };
   const onTrackDragOver = (e: React.DragEvent, trackId?: string) => {
     if (
@@ -2419,7 +2438,7 @@ function Editor() {
         setSelectedTransition({ leftId: j.left.id, rightId: j.right.id });
         return;
       }
-      const trackItems = items.filter(i => i.trackId === trackId).sort((a, b) => a.start - b.start);
+      const trackItems = items.filter(i => i.trackId === trackId && i.kind !== "audio").sort((a, b) => a.start - b.start);
       const hit = trackItems.find(i => t >= i.start && t <= i.start + tlDur(i));
       if (hit) {
         setItems(p => p.map(i => i.id === hit.id ? { ...i, fadeIn: dur, fadeOut: dur, transition: transitionId } : i));

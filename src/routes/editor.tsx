@@ -2697,11 +2697,7 @@ function Editor() {
               <TransitionsPanel
                 onApply={(def) => {
                   if (!selected) return;
-                  setItems(p => p.map(i =>
-                    i.id === selected.id
-                      ? { ...i, fadeIn: def.defaultDuration, fadeOut: def.defaultDuration, transition: def.id }
-                      : i
-                  ));
+                  applyTransitionAroundItem(selected.id, def.id, def.defaultDuration);
                 }}
                 onDragStart={(def, e) => {
                   draggedTransitionRef.current = {

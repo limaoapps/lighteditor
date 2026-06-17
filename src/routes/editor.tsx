@@ -4247,17 +4247,44 @@ function Editor() {
               </div>
             )}
             {leftPanel === "titles" && (
-              <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => { addText(); setShowMobilePanel(false); }} className="flex flex-col items-center gap-3 rounded-xl border border-border bg-card p-6 shadow-sm active:bg-accent transition-colors">
-                  <div className="rounded-full bg-primary/10 p-3"><TypeIcon className="h-6 w-6 text-primary" /></div>
-                  <span className="font-semibold">Título</span>
-                </button>
-                <button onClick={() => { addCredits(); setShowMobilePanel(false); }} className="flex flex-col items-center gap-3 rounded-xl border border-border bg-card p-6 shadow-sm active:bg-accent transition-colors">
-                  <div className="rounded-full bg-primary/10 p-3"><FileText className="h-6 w-6 text-primary" /></div>
-                  <span className="font-semibold">Créditos</span>
-                </button>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <button onClick={() => { addText(); setShowMobilePanel(false); }} className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 shadow-sm active:bg-accent">
+                    <div className="rounded-full bg-primary/10 p-2"><TypeIcon className="h-5 w-5 text-primary" /></div>
+                    <span className="text-xs font-semibold">Título</span>
+                  </button>
+                  <button onClick={() => { addCredits(); setShowMobilePanel(false); }} className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 shadow-sm active:bg-accent">
+                    <div className="rounded-full bg-primary/10 p-2"><FileText className="h-5 w-5 text-primary" /></div>
+                    <span className="text-xs font-semibold">Créditos</span>
+                  </button>
+                </div>
+                <div>
+                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Títulos animados</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {TITLE_PRESETS.map(p => (
+                      <button key={p.id} onClick={() => { addTitleFromPreset(p); setShowMobilePanel(false); }}
+                        className="rounded-xl border border-border bg-card p-3 text-left shadow-sm active:bg-accent">
+                        <div className="text-sm font-bold">{p.label}</div>
+                        <div className="text-[10px] text-muted-foreground">{p.hint}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Lower Thirds</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {LOWER_THIRD_PRESETS.map(p => (
+                      <button key={p.id} onClick={() => { addTitleFromPreset(p); setShowMobilePanel(false); }}
+                        className="rounded-xl border border-border bg-card p-3 text-left shadow-sm active:bg-accent">
+                        <div className="text-sm font-bold">{p.label}</div>
+                        <div className="text-[10px] text-muted-foreground">{p.hint}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
+
             {leftPanel === "transitions" && (
               <div className="grid grid-cols-2 gap-3">
                 {TRANSITION_GROUPS.flatMap(g => g.items).map(t => (

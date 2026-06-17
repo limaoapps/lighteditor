@@ -577,21 +577,27 @@ export function drawScene(
     if (active) {
       const localT = t - active.start;
       const dur = tlDurScene(active);
-      const src = media.resolve(active, t);
-      if (src) {
+      if (active.kind === "text" && active.text?.content) {
+        drawTextOverlay(ctx, active, localT, dur, targetW, targetH);
+      } else {
+        const src = media.resolve(active, t);
+        if (src) {
         const sw = (src as HTMLVideoElement).videoWidth || (src as HTMLImageElement).naturalWidth || active.width || targetW;
         const sh = (src as HTMLVideoElement).videoHeight || (src as HTMLImageElement).naturalHeight || active.height || targetH;
         // Suprime fades quando dentro de janela de transição já é tratado acima
         drawClipFrame(ctx, src, sw, sh, targetW, targetH, active, localT, dur);
+        }
       }
     }
   }
 
   // Camadas visuais adicionais também suportam transição GL entre itens adjacentes da mesma track.
   const visual = [...scene.visualItems].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+  const texts = [...scene.textItems].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+  const overlayTransitionCandidates = [...visual, ...texts].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0) || a.start - b.start);
   const visualTransitionIds = new Set<string>();
-  for (const trackId of Array.from(new Set(visual.map(it => it.trackId)))) {
-    const trackItems = visual.filter(it => it.trackId === trackId).sort((a, b) => a.start - b.start);
+  for (const trackId of Array.from(new Set(overlayTransitionCandidates.map(it => it.trackId)))) {
+    const trackItems = overlayTransitionCandidates.filter(it => it.trackId === trackId).sort((a, b) => a.start - b.start);
     const st = findActiveTransition(trackItems, t);
     if (!st) continue;
     visualTransitionIds.add(st.A.id);

@@ -1855,13 +1855,13 @@ function Editor() {
       };
     };
     const v1Items = items
-      .filter(i => i.trackId === v1trackId && i.kind === "video" && !trackMuted[i.trackId])
+      .filter(i => i.trackId === v1trackId && i.kind !== "audio" && !trackMuted[i.trackId])
       .map(toScene);
     const visualItems = items
-      .filter(i => (i.kind === "image" || (i.kind === "video" && i.trackId !== v1trackId)) && !trackMuted[i.trackId])
+      .filter(i => (i.kind === "image" || i.kind === "video") && i.trackId !== v1trackId && !trackMuted[i.trackId])
       .map(toScene);
     const textItems = items
-      .filter(i => i.kind === "text" && i.text?.content && !trackMuted[i.trackId])
+      .filter(i => i.kind === "text" && i.trackId !== v1trackId && i.text?.content && !trackMuted[i.trackId])
       .map(toScene);
     return { v1Items, visualItems, textItems };
   }, [items, tracks, aspect, trackMuted, trackZ]);

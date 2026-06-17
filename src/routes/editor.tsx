@@ -4023,7 +4023,7 @@ function Editor() {
             {leftPanel === "transitions" && (
               <div className="grid grid-cols-2 gap-3">
                 {TRANSITION_GROUPS.flatMap(g => g.items).map(t => (
-                  <button key={t.id} onClick={() => { if (selected) setItems(p => p.map(i => i.id === selected.id ? { ...i, fadeIn: t.dur, fadeOut: t.dur, transition: t.id } : i)); setShowMobilePanel(false); }}
+                  <button key={t.id} onClick={() => { if (selected) applyTransitionAroundItem(selected.id, t.id, t.dur); setShowMobilePanel(false); }}
                     className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 shadow-sm active:bg-accent transition-colors">
                     <span className="text-2xl">{t.icon}</span>
                     <span className="text-[11px] font-medium">{t.label}</span>

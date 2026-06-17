@@ -189,6 +189,180 @@ const defaultText = (): TextProps => ({
   strokeWidth: 0,
 });
 
+// =============== Presets de Títulos Animados e Lower-Thirds ===============
+type TitlePreset = {
+  id: string;
+  label: string;
+  hint: string;
+  /** Duração padrão (segundos). */
+  dur: number;
+  /** Constrói o TextProps. */
+  build: () => Partial<TextProps> & Pick<TextProps, "content" | "size">;
+  transform: { xPct: number; yPct: number };
+  name: string;
+};
+
+const TITLE_PRESETS: TitlePreset[] = [
+  {
+    id: "title-cinematic", label: "Cinemático", hint: "Fade + sublinhado", dur: 5, name: "Título",
+    transform: { xPct: 50, yPct: 50 },
+    build: () => ({
+      content: "TÍTULO PRINCIPAL", size: 88, bold: true, color: "#ffffff",
+      fontFamily: "'Playfair Display', serif", letterSpacing: 4, align: "center",
+      styleKind: "title", accentColor: "#e5b769",
+      animIn: "fadeUp", animOut: "fade", animInDur: 0.9, animOutDur: 0.6,
+      shadowBlur: 18, shadowColor: "rgba(0,0,0,0.6)", shadowOffsetY: 4,
+    }),
+  },
+  {
+    id: "title-bold-zoom", label: "Bold Zoom", hint: "Impacto", dur: 4, name: "Título",
+    transform: { xPct: 50, yPct: 50 },
+    build: () => ({
+      content: "IMPACTO", size: 140, bold: true, color: "#ffffff",
+      fontFamily: "'Anton', sans-serif", letterSpacing: 2, align: "center",
+      styleKind: "title", accentColor: "#ef4444",
+      animIn: "zoom", animOut: "fade", animInDur: 0.6, animOutDur: 0.4,
+      strokeColor: "#000000", strokeWidth: 2,
+    }),
+  },
+  {
+    id: "title-typewriter", label: "Máquina de Escrever", hint: "Texto digitado", dur: 5, name: "Título",
+    transform: { xPct: 50, yPct: 50 },
+    build: () => ({
+      content: "Era uma vez...", size: 72, bold: false, color: "#ffffff",
+      fontFamily: "'JetBrains Mono', monospace", align: "center",
+      styleKind: "default", animIn: "typewriter", animOut: "fade",
+      animInDur: 2.0, animOutDur: 0.5,
+    }),
+  },
+  {
+    id: "title-slide", label: "Slide Lateral", hint: "Entra pela esquerda", dur: 4, name: "Título",
+    transform: { xPct: 50, yPct: 30 },
+    build: () => ({
+      content: "MANCHETE", size: 96, bold: true, color: "#ffffff",
+      fontFamily: "'Bebas Neue', sans-serif", letterSpacing: 6, align: "center",
+      styleKind: "title", accentColor: "#22d3ee",
+      animIn: "slideLeft", animOut: "slideRight", animInDur: 0.7, animOutDur: 0.6,
+    }),
+  },
+  {
+    id: "title-wipe", label: "Wipe", hint: "Revelação horizontal", dur: 4, name: "Título",
+    transform: { xPct: 50, yPct: 50 },
+    build: () => ({
+      content: "REVELAÇÃO", size: 110, bold: true, color: "#ffffff",
+      fontFamily: "'Oswald', sans-serif", letterSpacing: 4, align: "center",
+      styleKind: "title", accentColor: "#a855f7",
+      animIn: "wipeRight", animOut: "wipeLeft", animInDur: 0.9, animOutDur: 0.7,
+    }),
+  },
+  {
+    id: "title-pop", label: "Pop Bounce", hint: "Salto de entrada", dur: 4, name: "Título",
+    transform: { xPct: 50, yPct: 40 },
+    build: () => ({
+      content: "NOVO!", size: 130, bold: true, color: "#facc15",
+      fontFamily: "'Bangers', sans-serif", letterSpacing: 3, align: "center",
+      styleKind: "title", accentColor: "#facc15",
+      animIn: "pop", animOut: "zoom", animInDur: 0.55, animOutDur: 0.4,
+      strokeColor: "#1f2937", strokeWidth: 4,
+    }),
+  },
+  {
+    id: "title-blur", label: "Foco Suave", hint: "Blur de entrada", dur: 5, name: "Título",
+    transform: { xPct: 50, yPct: 50 },
+    build: () => ({
+      content: "Apresentando", size: 80, bold: false, color: "#ffffff",
+      fontFamily: "'Cormorant Garamond', serif", italic: true, align: "center",
+      styleKind: "title", accentColor: "#f5f5f5",
+      animIn: "blurIn", animOut: "fade", animInDur: 1.0, animOutDur: 0.6,
+    }),
+  },
+  {
+    id: "title-fadeup", label: "Fade Up", hint: "Sobe e aparece", dur: 4, name: "Título",
+    transform: { xPct: 50, yPct: 50 },
+    build: () => ({
+      content: "Sua História", size: 84, bold: true, color: "#ffffff",
+      fontFamily: "'Montserrat', sans-serif", align: "center",
+      styleKind: "title", accentColor: "#10b981",
+      animIn: "fadeUp", animOut: "fadeDown", animInDur: 0.7, animOutDur: 0.6,
+    }),
+  },
+];
+
+const LOWER_THIRD_PRESETS: TitlePreset[] = [
+  {
+    id: "lt-classic", label: "Clássico", hint: "Slide da esquerda", dur: 6, name: "Lower Third",
+    transform: { xPct: 28, yPct: 82 },
+    build: () => ({
+      content: "Nome do Apresentador", size: 44, bold: true, color: "#ffffff",
+      fontFamily: "'Inter', sans-serif", align: "left",
+      styleKind: "lowerthird", accentColor: "#22c55e",
+      bgColor: "#0b0b0d", bgOpacity: 0.85, radius: 6,
+      subtitle: "Cargo · Empresa", subtitleSize: 22, subtitleColor: "rgba(255,255,255,0.8)",
+      animIn: "slideLeft", animOut: "slideLeft", animInDur: 0.6, animOutDur: 0.5,
+    }),
+  },
+  {
+    id: "lt-news", label: "Telejornal", hint: "Vermelho impacto", dur: 6, name: "Lower Third",
+    transform: { xPct: 30, yPct: 84 },
+    build: () => ({
+      content: "ÚLTIMA HORA", size: 48, bold: true, color: "#ffffff",
+      fontFamily: "'Oswald', sans-serif", letterSpacing: 2, align: "left",
+      styleKind: "lowerthird", accentColor: "#dc2626",
+      bgColor: "#000000", bgOpacity: 0.9, radius: 2,
+      subtitle: "Notícia em desenvolvimento", subtitleSize: 22, subtitleColor: "#fca5a5",
+      animIn: "slideRight", animOut: "fade", animInDur: 0.5, animOutDur: 0.5,
+    }),
+  },
+  {
+    id: "lt-minimal", label: "Minimalista", hint: "Fade up suave", dur: 6, name: "Lower Third",
+    transform: { xPct: 25, yPct: 86 },
+    build: () => ({
+      content: "Maria Silva", size: 40, bold: false, color: "#ffffff",
+      fontFamily: "'DM Sans', sans-serif", align: "left",
+      styleKind: "lowerthird", accentColor: "#ffffff",
+      bgColor: "#111827", bgOpacity: 0.6, radius: 10,
+      subtitle: "Diretora Criativa", subtitleSize: 20, subtitleColor: "rgba(255,255,255,0.7)",
+      animIn: "fadeUp", animOut: "fadeDown", animInDur: 0.7, animOutDur: 0.5,
+    }),
+  },
+  {
+    id: "lt-corporate", label: "Corporativo", hint: "Azul + wipe", dur: 6, name: "Lower Third",
+    transform: { xPct: 28, yPct: 82 },
+    build: () => ({
+      content: "João Pereira", size: 42, bold: true, color: "#ffffff",
+      fontFamily: "'Manrope', sans-serif", align: "left",
+      styleKind: "lowerthird", accentColor: "#3b82f6",
+      bgColor: "#0b1220", bgOpacity: 0.9, radius: 4,
+      subtitle: "CEO · Innovate Co.", subtitleSize: 22, subtitleColor: "#93c5fd",
+      animIn: "wipeRight", animOut: "wipeLeft", animInDur: 0.7, animOutDur: 0.5,
+    }),
+  },
+  {
+    id: "lt-modern", label: "Moderno", hint: "Pop bounce", dur: 6, name: "Lower Third",
+    transform: { xPct: 26, yPct: 84 },
+    build: () => ({
+      content: "@usuario", size: 40, bold: true, color: "#0f172a",
+      fontFamily: "'Poppins', sans-serif", align: "left",
+      styleKind: "lowerthird", accentColor: "#0f172a",
+      bgColor: "#facc15", bgOpacity: 0.95, radius: 14,
+      subtitle: "Criador de conteúdo", subtitleSize: 22, subtitleColor: "rgba(15,23,42,0.75)",
+      animIn: "pop", animOut: "fade", animInDur: 0.55, animOutDur: 0.4,
+    }),
+  },
+  {
+    id: "lt-cinema", label: "Cinema", hint: "Blur suave", dur: 6, name: "Lower Third",
+    transform: { xPct: 24, yPct: 86 },
+    build: () => ({
+      content: "Entrevistado", size: 44, bold: false, color: "#f5f5f5",
+      fontFamily: "'Playfair Display', serif", italic: true, align: "left",
+      styleKind: "lowerthird", accentColor: "#e5b769",
+      bgColor: "#0a0a0a", bgOpacity: 0.7, radius: 0,
+      subtitle: "Especialista no assunto", subtitleSize: 20, subtitleColor: "#d4d4d8",
+      animIn: "blurIn", animOut: "fade", animInDur: 0.9, animOutDur: 0.6,
+    }),
+  },
+];
+
 type MediaAsset = {
   id: string;
   kind: ItemKind;

@@ -3418,6 +3418,60 @@ function Editor() {
                     </label>
                   </div>
                 </div>
+
+                <div className="space-y-2 rounded border border-border/60 bg-background/40 p-2">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Estilo & Animação</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(["default","title","lowerthird"] as TextStyleKind[]).map(k => (
+                      <button key={k} onClick={() => updT({ styleKind: k })}
+                        className={`rounded border px-1.5 py-1 text-[10px] ${ (t.styleKind ?? "default") === k ? "border-primary bg-primary/15 text-primary" : "border-border bg-background"}`}>
+                        {k === "default" ? "Padrão" : k === "title" ? "Título" : "Lower 3rd"}
+                      </button>
+                    ))}
+                  </div>
+                  <label className="flex items-center gap-2">
+                    <span className="w-14 text-muted-foreground">Destaque</span>
+                    <input type="color" value={t.accentColor ?? "#22c55e"} onChange={(e) => updT({ accentColor: e.target.value })}
+                      className="h-7 w-10 rounded border border-border bg-background" />
+                    <span className="ml-2 flex-1 text-[10px] text-muted-foreground">Barra/sublinhado</span>
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Subtítulo</span>
+                    <input type="text" value={t.subtitle ?? ""} onChange={(e) => updT({ subtitle: e.target.value })}
+                      placeholder="Cargo · Empresa"
+                      className="h-7 w-full rounded border border-border bg-background px-2 text-xs" />
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[10px] text-muted-foreground">Anim. In</span>
+                      <select value={t.animIn ?? "none"} onChange={(e) => updT({ animIn: e.target.value as TextAnimKind })}
+                        className="h-7 rounded border border-border bg-background px-1 text-xs">
+                        {(["none","fade","fadeUp","fadeDown","slideLeft","slideRight","zoom","pop","wipeRight","wipeLeft","typewriter","blurIn"] as TextAnimKind[]).map(a => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[10px] text-muted-foreground">Anim. Out</span>
+                      <select value={t.animOut ?? "none"} onChange={(e) => updT({ animOut: e.target.value as TextAnimKind })}
+                        className="h-7 rounded border border-border bg-background px-1 text-xs">
+                        {(["none","fade","fadeUp","fadeDown","slideLeft","slideRight","zoom","pop","wipeRight","wipeLeft","typewriter","blurIn"] as TextAnimKind[]).map(a => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[10px] text-muted-foreground">Dur. In (s)</span>
+                      <input type="number" step="0.1" min={0} max={5} value={t.animInDur ?? 0.6}
+                        onChange={(e) => updT({ animInDur: Number(e.target.value) || 0 })}
+                        className="h-7 rounded border border-border bg-background px-2 text-xs" />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[10px] text-muted-foreground">Dur. Out (s)</span>
+                      <input type="number" step="0.1" min={0} max={5} value={t.animOutDur ?? 0.5}
+                        onChange={(e) => updT({ animOutDur: Number(e.target.value) || 0 })}
+                        className="h-7 rounded border border-border bg-background px-2 text-xs" />
+                    </label>
+                  </div>
+                </div>
               </div>
             );
           })()}

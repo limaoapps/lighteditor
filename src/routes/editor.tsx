@@ -47,6 +47,12 @@ type TrackKind = "video" | "audio";
 
 type Transform = { xPct: number; yPct: number; scale: number; rotation: number };
 type TextAlign = "left" | "center" | "right";
+type TextAnimKind =
+  | "none" | "fade" | "fadeUp" | "fadeDown"
+  | "slideLeft" | "slideRight" | "zoom" | "pop"
+  | "wipeRight" | "wipeLeft" | "typewriter" | "blurIn";
+type TextStyleKind = "default" | "title" | "lowerthird";
+
 type TextProps = {
   content: string;
   fontFamily: string;
@@ -70,6 +76,16 @@ type TextProps = {
   shadowOffsetY: number;   // px
   strokeColor: string;
   strokeWidth: number;     // px
+  // ---- Animação & lower-third ----
+  subtitle?: string;
+  subtitleSize?: number;
+  subtitleColor?: string;
+  styleKind?: TextStyleKind;
+  accentColor?: string;
+  animIn?: TextAnimKind;
+  animOut?: TextAnimKind;
+  animInDur?: number;
+  animOutDur?: number;
 };
 
 // Google Fonts a serem carregadas dinamicamente (família : pesos)

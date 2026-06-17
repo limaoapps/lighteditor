@@ -27,6 +27,13 @@ export type SceneFx = {
   zoom?: { dir: "in" | "out"; speed: "slow" | "med" | "fast" } | null;
 };
 
+export type TextAnim =
+  | "none" | "fade" | "fadeUp" | "fadeDown"
+  | "slideLeft" | "slideRight" | "zoom" | "pop"
+  | "wipeRight" | "wipeLeft" | "typewriter" | "blurIn";
+
+export type TextStyleKind = "default" | "title" | "lowerthird";
+
 export type SceneTextProps = {
   content: string;
   color: string;
@@ -50,6 +57,19 @@ export type SceneTextProps = {
   shadowOffsetY?: number;
   strokeColor?: string;
   strokeWidth?: number;
+  /** Subtítulo opcional (renderizado abaixo do título principal). */
+  subtitle?: string;
+  subtitleSize?: number;
+  subtitleColor?: string;
+  /** Estilo do bloco: padrão, título cinematográfico ou lower-third. */
+  styleKind?: TextStyleKind;
+  /** Cor de destaque (barra do lower-third, sublinhado do título). */
+  accentColor?: string;
+  /** Animação de entrada/saída. */
+  animIn?: TextAnim;
+  animOut?: TextAnim;
+  animInDur?: number;  // segundos
+  animOutDur?: number; // segundos
 };
 
 export type SceneItem = {

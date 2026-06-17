@@ -2888,16 +2888,48 @@ function Editor() {
             )}
 
             {leftPanel === "titles" && (
-              <div className="space-y-2 text-xs">
-                <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Títulos e créditos</div>
-                <button onClick={addText} className="inline-flex w-full items-center gap-2 rounded-md border border-border bg-card px-3 py-2 hover:border-ring/50">
-                  <TypeIcon className="h-3.5 w-3.5 text-primary" /> Título
-                </button>
-                <button onClick={addCredits} className="inline-flex w-full items-center gap-2 rounded-md border border-border bg-card px-3 py-2 hover:border-ring/50">
-                  <FileText className="h-3.5 w-3.5 text-primary" /> Créditos
-                </button>
+              <div className="space-y-3 text-xs">
+                <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Texto simples</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={addText} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2 py-2 hover:border-ring/50">
+                    <TypeIcon className="h-3.5 w-3.5 text-primary" /> Título
+                  </button>
+                  <button onClick={addCredits} className="inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2 py-2 hover:border-ring/50">
+                    <FileText className="h-3.5 w-3.5 text-primary" /> Créditos
+                  </button>
+                </div>
+
+                <div className="px-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Títulos animados</div>
+                <div className="grid grid-cols-1 gap-1.5">
+                  {TITLE_PRESETS.map(p => (
+                    <button key={p.id} onClick={() => addTitleFromPreset(p)}
+                      className="group flex items-center justify-between rounded-md border border-border bg-card px-2.5 py-2 text-left hover:border-ring/50">
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold">{p.label}</div>
+                        <div className="truncate text-[10px] text-muted-foreground">{p.hint}</div>
+                      </div>
+                      <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-primary opacity-0 group-hover:opacity-100">+ add</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="px-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Lower Thirds</div>
+                <div className="grid grid-cols-1 gap-1.5">
+                  {LOWER_THIRD_PRESETS.map(p => (
+                    <button key={p.id} onClick={() => addTitleFromPreset(p)}
+                      className="group flex items-center justify-between rounded-md border border-border bg-card px-2.5 py-2 text-left hover:border-ring/50">
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold">{p.label}</div>
+                        <div className="truncate text-[10px] text-muted-foreground">{p.hint}</div>
+                      </div>
+                      <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-primary opacity-0 group-hover:opacity-100">+ add</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
+
+
 
             {leftPanel === "transitions" && (
               <TransitionsPanel

@@ -361,6 +361,70 @@ function roundRectPath(ctx: AnyCtx, x: number, y: number, w: number, h: number, 
   ctx.closePath();
 }
 
+function easeOutCubic(p: number) { return 1 - Math.pow(1 - p, 3); }
+function easeInCubic(p: number)  { return p * p * p; }
+function clamp01(v: number) { return Math.max(0, Math.min(1, v)); }
+
+/** Aplica transformação de animação ao contexto. Retorna progress de typewriter (0..1) e wipe info. */
+function applyTextAnim(
+  ctx: AnyCtx,
+  anim: TextAnim,
+  /** 0..1 onde 1 = totalmente visível (entrada concluída ou saída ainda não começou) */
+  p: number,
+  isExit: boolean,
+  blockW: number,
+  blockH: number,
+): { typewriter: number; clipRect: { x: number; y: number; w: number; h: number } | null; alphaMul: number; extraBlur: number } {
+  if (anim === "none" || p >= 1) return { typewriter: 1, clipRect: null, alphaMul: 1, extraBlur: 0 };
+  // Para saída, inverter direção das translações para sair pelo lado oposto.
+  const dir = isExit ? -1 : 1;
+  const eased = isExit ? 1 - easeInCubic(1 - p) : easeOutCubic(p);
+  switch (anim) {
+    case "fade":
+      return { typewriter: 1, clipRect: null, alphaMul: eased, extraBlur: 0 };
+    case "fadeUp": {
+      const dy = (1 - eased) * blockH * 0.6 * dir;
+      ctx.translate(0, dy);
+      return { typewriter: 1, clipRect: null, alphaMul: eased, extraBlur: 0 };
+    }
+    case "fadeDown": {
+      const dy = -(1 - eased) * blockH * 0.6 * dir;
+      ctx.translate(0, dy);
+      return { typewriter: 1, clipRect: null, alphaMul: eased, extraBlur: 0 };
+    }
+    case "slideLeft": {
+      const dx = (1 - eased) * blockW * 1.1 * dir;
+      ctx.translate(dx, 0);
+      return { typewriter: 1, clipRect: null, alphaMul: eased, extraBlur: 0 };
+    }
+    case "slideRight": {
+      const dx = -(1 - eased) * blockW * 1.1 * dir;
+      ctx.translate(dx, 0);
+      return { typewriter: 1, clipRect: null, alphaMul: eased, extraBlur: 0 };
+    }
+    case "zoom": {
+      const s = 0.5 + 0.5 * eased;
+      ctx.scale(s, s);
+      return { typewriter: 1, clipRect: null, alphaMul: eased, extraBlur: 0 };
+    }
+    case "pop": {
+      // overshoot suave
+      const s = isExit ? eased : (eased < 1 ? eased * (1.15 - 0.15 * eased) : 1);
+      ctx.scale(s, s);
+      return { typewriter: 1, clipRect: null, alphaMul: eased, extraBlur: 0 };
+    }
+    case "wipeRight":
+      return { typewriter: 1, clipRect: { x: -blockW / 2, y: -blockH / 2, w: blockW * eased, h: blockH }, alphaMul: 1, extraBlur: 0 };
+    case "wipeLeft":
+      return { typewriter: 1, clipRect: { x: blockW / 2 - blockW * eased, y: -blockH / 2, w: blockW * eased, h: blockH }, alphaMul: 1, extraBlur: 0 };
+    case "typewriter":
+      return { typewriter: eased, clipRect: null, alphaMul: 1, extraBlur: 0 };
+    case "blurIn":
+      return { typewriter: 1, clipRect: null, alphaMul: eased, extraBlur: (1 - eased) * 18 };
+  }
+  return { typewriter: 1, clipRect: null, alphaMul: 1, extraBlur: 0 };
+}
+
 function drawTextOverlay(
   ctx: AnyCtx,
   item: SceneItem,
@@ -392,12 +456,35 @@ function drawTextOverlay(
   const padX = t.paddingX ?? 12;
   const padY = t.paddingY ?? 6;
 
+  const styleKind: TextStyleKind = t.styleKind ?? "default";
+  const subtitle = (t.subtitle ?? "").trim();
+  const subSize = (t.subtitleSize ?? Math.round(size * 0.4)) * 1;
+  const subColor = t.subtitleColor || "rgba(255,255,255,0.85)";
+  const accent = t.accentColor || "#22c55e";
+
+  // ----- Animação de entrada/saída -----
+  const inDur = Math.max(0, t.animInDur ?? 0.6);
+  const outDur = Math.max(0, t.animOutDur ?? 0.5);
+  const animIn = (t.animIn ?? "none");
+  const animOut = (t.animOut ?? "none");
+  let phaseAnim: TextAnim = "none";
+  let phaseProg = 1;
+  let phaseExit = false;
+  if (animIn !== "none" && inDur > 0 && localT < inDur) {
+    phaseAnim = animIn;
+    phaseProg = clamp01(localT / inDur);
+    phaseExit = false;
+  } else if (animOut !== "none" && outDur > 0 && localT > dur - outDur) {
+    phaseAnim = animOut;
+    phaseProg = clamp01((dur - localT) / outDur);
+    phaseExit = true;
+  }
+
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.translate(cx, cy);
   if (rot) ctx.rotate(rot);
-  const blurPx = itemBlurPx(item.fx, targetH);
-  setFilter(ctx, blurPx > 0 ? `blur(${blurPx}px)` : "none");
+
   ctx.font = `${style} ${weight} ${size}px ${fontFamily}`;
   ctx.textBaseline = "middle";
   try { (ctx as unknown as { letterSpacing: string }).letterSpacing = `${letterSp}px`; } catch { /* ignore */ }
@@ -409,11 +496,59 @@ function drawTextOverlay(
   };
   const widths = lines.map(measureLine);
   const maxW = Math.max(1, ...widths);
-  const totalH = lines.length * lineH;
+  // medir subtítulo
+  let subW = 0;
+  let subLineH = 0;
+  if (subtitle) {
+    subLineH = subSize * 1.25;
+    ctx.save();
+    ctx.font = `${style} 500 ${subSize}px ${fontFamily}`;
+    subW = ctx.measureText(subtitle).width;
+    ctx.restore();
+  }
+  const blockW = Math.max(maxW, subW);
+  const textTotalH = lines.length * lineH;
+  const totalH = textTotalH + (subtitle ? subLineH + size * 0.12 : 0);
 
-  if ((t.bgOpacity ?? 0) > 0.001) {
-    ctx.fillStyle = hexToRgba(t.bgColor || "#000000", t.bgOpacity ?? 0);
-    roundRectPath(ctx, -maxW / 2 - padX, -totalH / 2 - padY, maxW + padX * 2, totalH + padY * 2, t.radius ?? 0);
+  // Aplica animação (após ter dimensões do bloco)
+  const animResult = applyTextAnim(ctx, phaseAnim, phaseProg, phaseExit, blockW + padX * 2, totalH + padY * 2);
+  ctx.globalAlpha = alpha * animResult.alphaMul;
+
+  const blurPx = itemBlurPx(item.fx, targetH) + animResult.extraBlur;
+  setFilter(ctx, blurPx > 0 ? `blur(${blurPx}px)` : "none");
+
+  if (animResult.clipRect) {
+    ctx.beginPath();
+    ctx.rect(animResult.clipRect.x, animResult.clipRect.y, animResult.clipRect.w, animResult.clipRect.h);
+    ctx.clip();
+  }
+
+  // ----- Lower-third / fundo -----
+  const bgOp = t.bgOpacity ?? 0;
+  if (styleKind === "lowerthird") {
+    // Barra de fundo com largura completa do bloco + uma faixa de destaque
+    const lt_padX = Math.max(padX, 24);
+    const lt_padY = Math.max(padY, 14);
+    const bgW = blockW + lt_padX * 2;
+    const bgH = totalH + lt_padY * 2;
+    const left = -bgW / 2;
+    const top = -bgH / 2;
+    // sombra do bloco
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.45)";
+    ctx.shadowBlur = 24;
+    ctx.shadowOffsetY = 6;
+    ctx.fillStyle = hexToRgba(t.bgColor || "#0b0b0d", Math.max(bgOp, 0.75));
+    roundRectPath(ctx, left, top, bgW, bgH, t.radius ?? 6);
+    ctx.fill();
+    ctx.restore();
+    // barra de destaque (à esquerda)
+    ctx.fillStyle = accent;
+    roundRectPath(ctx, left, top, Math.max(6, size * 0.12), bgH, t.radius ?? 6);
+    ctx.fill();
+  } else if (bgOp > 0.001) {
+    ctx.fillStyle = hexToRgba(t.bgColor || "#000000", bgOp);
+    roundRectPath(ctx, -blockW / 2 - padX, -totalH / 2 - padY, blockW + padX * 2, totalH + padY * 2, t.radius ?? 0);
     ctx.fill();
   }
 
@@ -425,23 +560,68 @@ function drawTextOverlay(
   }
 
   ctx.textAlign = align;
-  const anchorX = align === "left" ? -maxW / 2 : align === "right" ? maxW / 2 : 0;
+  const anchorX = align === "left" ? -blockW / 2 : align === "right" ? blockW / 2 : 0;
+  // Para lower-third, alinhar à esquerda do bloco e empurrar para a direita da barra
+  const ltOffsetX = styleKind === "lowerthird" ? (size * 0.18) : 0;
+  const textBlockTop = -totalH / 2;
+
   for (let i = 0; i < lines.length; i++) {
-    const ly = -totalH / 2 + lineH * (i + 0.5);
+    let lineText = lines[i];
+    if (animResult.typewriter < 1 && i === 0) {
+      // tipo "typewriter" só na primeira (simplificação visual)
+      const totalChars = lines.reduce((acc, l) => acc + l.length, 0);
+      const shown = Math.floor(totalChars * animResult.typewriter);
+      let remaining = shown;
+      const shownLines: string[] = [];
+      for (const l of lines) {
+        if (remaining <= 0) { shownLines.push(""); continue; }
+        if (remaining >= l.length) { shownLines.push(l); remaining -= l.length; }
+        else { shownLines.push(l.slice(0, remaining)); remaining = 0; }
+      }
+      lineText = shownLines[i];
+    } else if (animResult.typewriter < 1) {
+      // já tratado acima na primeira iteração — pula
+      continue;
+    }
+
+    const ly = textBlockTop + lineH * (i + 0.5);
     if ((t.strokeWidth ?? 0) > 0) {
       ctx.lineWidth = t.strokeWidth!;
       ctx.strokeStyle = t.strokeColor || "#000";
       ctx.lineJoin = "round";
-      ctx.strokeText(lines[i], anchorX, ly);
+      ctx.strokeText(lineText, anchorX + ltOffsetX, ly);
     }
     ctx.fillStyle = t.color || "#ffffff";
-    ctx.fillText(lines[i], anchorX, ly);
+    ctx.fillText(lineText, anchorX + ltOffsetX, ly);
     if (t.underline) {
       const w = widths[i];
-      const ux = align === "left" ? -maxW / 2 : align === "right" ? maxW / 2 - w : -w / 2;
-      ctx.fillRect(ux, ly + size * 0.45, w, Math.max(1, size * 0.06));
+      const ux = align === "left" ? -blockW / 2 : align === "right" ? blockW / 2 - w : -w / 2;
+      ctx.fillRect(ux + ltOffsetX, ly + size * 0.45, w, Math.max(1, size * 0.06));
     }
   }
+
+  // Sublinhado de destaque para títulos
+  if (styleKind === "title" && animResult.typewriter >= 1) {
+    const underlineY = textBlockTop + textTotalH + Math.max(6, size * 0.18);
+    const uw = Math.min(blockW, Math.max(48, blockW * 0.55));
+    ctx.fillStyle = accent;
+    ctx.fillRect(-uw / 2, underlineY, uw, Math.max(3, size * 0.06));
+  }
+
+  // Subtítulo
+  if (subtitle) {
+    ctx.save();
+    ctx.font = `${style} 500 ${subSize}px ${fontFamily}`;
+    ctx.fillStyle = subColor;
+    ctx.textAlign = styleKind === "lowerthird" ? "left" : align;
+    const subY = textBlockTop + textTotalH + size * 0.12 + subLineH / 2;
+    const subAnchor = styleKind === "lowerthird"
+      ? -blockW / 2 + ltOffsetX
+      : align === "left" ? -blockW / 2 : align === "right" ? blockW / 2 : 0;
+    ctx.fillText(subtitle, subAnchor, subY);
+    ctx.restore();
+  }
+
   ctx.restore();
 }
 

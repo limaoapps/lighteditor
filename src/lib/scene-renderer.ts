@@ -475,29 +475,38 @@ function getTmp(which: "a" | "b", w: number, h: number): OffscreenCanvas | HTMLC
   return c;
 }
 
-function renderClipIsolated(
+function renderItemIsolated(
   target: OffscreenCanvas | HTMLCanvasElement,
   item: SceneItem,
   absT: number,
   media: MediaResolver,
   targetW: number,
   targetH: number,
+  mode: "base" | "overlay" = "base",
 ) {
   const ctx = target.getContext("2d") as AnyCtx | null;
   if (!ctx) return false;
   ctx.save();
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, targetW, targetH);
+  ctx.clearRect(0, 0, targetW, targetH);
+  if (mode === "base") {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, targetW, targetH);
+  }
   ctx.restore();
+  const clean: SceneItem = { ...item, fadeIn: 0, fadeOut: 0, fx: item.fx ? { ...item.fx, opacity: 100 } : item.fx };
+  const dur = tlDurScene(clean);
+  const localT = Math.max(0, Math.min(dur, absT - clean.start));
+  if (clean.kind === "text" && clean.text?.content) {
+    drawTextOverlay(ctx, clean, localT, dur, targetW, targetH);
+    return true;
+  }
   const src = media.resolve(item, absT);
   if (!src) return false;
   const sw = (src as HTMLVideoElement).videoWidth || (src as HTMLImageElement).naturalWidth || item.width || targetW;
   const sh = (src as HTMLVideoElement).videoHeight || (src as HTMLImageElement).naturalHeight || item.height || targetH;
-  // Item sem fade para que a transição GL controle a mistura
-  const clean: SceneItem = { ...item, fadeIn: 0, fadeOut: 0, fx: item.fx ? { ...item.fx, opacity: 100 } : item.fx };
-  const dur = tlDurScene(clean);
-  const localT = absT - clean.start;
-  drawClipFrame(ctx, src, sw, sh, targetW, targetH, clean, Math.max(0, Math.min(dur, localT)), dur);
+  // Item sem fade para que a transição GL controle a mistura.
+  if (mode === "base") drawClipFrame(ctx, src, sw, sh, targetW, targetH, clean, localT, dur);
+  else drawVisualOverlay(ctx, src, sw, sh, clean, localT, dur, targetW, targetH, "both");
   return true;
 }
 
@@ -508,14 +517,15 @@ function renderTransitionPair(
   targetW: number,
   targetH: number,
   media: MediaResolver,
+  mode: "base" | "overlay" = "base",
 ) {
   const aEnd = s.A.start + tlDurScene(s.A);
   const tA = Math.min(aEnd - 0.0001, t);
   const tB = Math.max(s.B.start + 0.0001, t);
   const ca = getTmp("a", targetW, targetH);
   const cb = getTmp("b", targetW, targetH);
-  const okA = renderClipIsolated(ca, s.A, tA, media, targetW, targetH);
-  const okB = renderClipIsolated(cb, s.B, tB, media, targetW, targetH);
+  const okA = renderItemIsolated(ca, s.A, tA, media, targetW, targetH, mode);
+  const okB = renderItemIsolated(cb, s.B, tB, media, targetW, targetH, mode);
   if (!okA && !okB) return;
   const progress = Math.max(0, Math.min(1, (t - s.winStart) / Math.max(0.001, s.winEnd - s.winStart)));
   const def = getTransition(s.transitionId);

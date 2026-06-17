@@ -587,9 +587,21 @@ export function drawScene(
     }
   }
 
-  // Backgrounds (blur/mirror) das camadas
+  // Camadas visuais adicionais também suportam transição GL entre itens adjacentes da mesma track.
   const visual = [...scene.visualItems].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+  const visualTransitionIds = new Set<string>();
+  for (const trackId of Array.from(new Set(visual.map(it => it.trackId)))) {
+    const trackItems = visual.filter(it => it.trackId === trackId).sort((a, b) => a.start - b.start);
+    const st = findActiveTransition(trackItems, t);
+    if (!st) continue;
+    visualTransitionIds.add(st.A.id);
+    visualTransitionIds.add(st.B.id);
+    renderTransitionPair(ctx, st, t, targetW, targetH, media, "overlay");
+  }
+
+  // Backgrounds (blur/mirror) das camadas fora de uma transição ativa
   for (const it of visual) {
+    if (visualTransitionIds.has(it.id)) continue;
     const dur = tlDurScene(it);
     const localT = t - it.start;
     if (localT < 0 || localT > dur) continue;
@@ -601,8 +613,9 @@ export function drawScene(
     drawVisualOverlay(ctx, src, sw, sh, it, localT, dur, targetW, targetH, "background");
   }
 
-  // Foreground das camadas
+  // Foreground das camadas fora de uma transição ativa
   for (const it of visual) {
+    if (visualTransitionIds.has(it.id)) continue;
     const dur = tlDurScene(it);
     const localT = t - it.start;
     if (localT < 0 || localT > dur) continue;

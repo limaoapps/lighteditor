@@ -3734,6 +3734,69 @@ function Editor() {
                   </div>
                 </details>
 
+                <details className="rounded border border-border/60 bg-background/40" open={fx.chroma?.enabled}>
+                  <summary className="flex cursor-pointer items-center gap-1.5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <span className="inline-block h-2 w-2 rounded-sm" style={{ background: fx.chroma?.color ?? "#00E03C" }} />
+                    Chroma Key (fundo verde)
+                  </summary>
+                  <div className="space-y-1.5 px-2 pb-2 pt-1">
+                    <label className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">Ativar</span>
+                      <button
+                        type="button"
+                        onClick={() => patchFx({ chroma: { ...(fx.chroma ?? { color: "#00E03C", similarity: 40, smoothness: 12, spill: 50, enabled: false }), enabled: !(fx.chroma?.enabled) } })}
+                        className={`rounded border px-2 py-0.5 text-[10px] ${fx.chroma?.enabled ? "border-primary bg-primary/15 text-primary" : "border-border hover:border-ring/50"}`}>
+                        {fx.chroma?.enabled ? "LIGADO" : "DESLIGADO"}
+                      </button>
+                    </label>
+                    {fx.chroma?.enabled && (
+                      <>
+                        <label className="flex items-center gap-2">
+                          <span className="w-20 text-muted-foreground">Cor-chave</span>
+                          <input type="color" value={fx.chroma.color}
+                            onChange={(e) => patchFx({ chroma: { ...fx.chroma, color: e.target.value } })}
+                            className="h-6 w-10 cursor-pointer rounded border border-border bg-transparent" />
+                          <div className="grid flex-1 grid-cols-3 gap-1">
+                            {[["Verde","#00E03C"],["Azul","#0040FF"],["Magenta","#FF00C8"]].map(([n,c]) => (
+                              <button key={c} type="button" onClick={() => patchFx({ chroma: { ...fx.chroma, color: c } })}
+                                className="rounded border border-border px-1 py-0.5 text-[9px] hover:border-ring/50" style={{ color: c }}>{n}</button>
+                            ))}
+                          </div>
+                        </label>
+                        <label className="flex items-center gap-2" title="Duplo clique para padrão">
+                          <span className="w-20 text-muted-foreground">Similaridade</span>
+                          <input type="range" min={0} max={100} step={1} value={fx.chroma.similarity}
+                            onChange={(e) => patchFx({ chroma: { ...fx.chroma, similarity: Number(e.target.value) } })}
+                            onDoubleClick={() => patchFx({ chroma: { ...fx.chroma, similarity: 40 } })}
+                            className="flex-1 accent-[color:var(--primary)]" />
+                          <span className="w-10 text-right font-mono tabular-nums">{fx.chroma.similarity}</span>
+                        </label>
+                        <label className="flex items-center gap-2" title="Duplo clique para padrão">
+                          <span className="w-20 text-muted-foreground">Suavidade</span>
+                          <input type="range" min={0} max={100} step={1} value={fx.chroma.smoothness}
+                            onChange={(e) => patchFx({ chroma: { ...fx.chroma, smoothness: Number(e.target.value) } })}
+                            onDoubleClick={() => patchFx({ chroma: { ...fx.chroma, smoothness: 12 } })}
+                            className="flex-1 accent-[color:var(--primary)]" />
+                          <span className="w-10 text-right font-mono tabular-nums">{fx.chroma.smoothness}</span>
+                        </label>
+                        <label className="flex items-center gap-2" title="Reduz vazamento da cor-chave nas bordas. Duplo clique para padrão">
+                          <span className="w-20 text-muted-foreground">Anti-spill</span>
+                          <input type="range" min={0} max={100} step={1} value={fx.chroma.spill}
+                            onChange={(e) => patchFx({ chroma: { ...fx.chroma, spill: Number(e.target.value) } })}
+                            onDoubleClick={() => patchFx({ chroma: { ...fx.chroma, spill: 50 } })}
+                            className="flex-1 accent-[color:var(--primary)]" />
+                          <span className="w-10 text-right font-mono tabular-nums">{fx.chroma.spill}</span>
+                        </label>
+                        <p className="text-[9px] leading-tight text-muted-foreground/80">
+                          Dica: coloque um fundo (cor, vídeo ou imagem) atrás deste clipe em outra trilha para ver o resultado.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </details>
+
+
+
 
 
                 <details className="rounded border border-border/60 bg-background/40">

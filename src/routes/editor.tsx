@@ -2942,32 +2942,19 @@ function Editor() {
                 </div>
 
                 <div className="px-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Títulos animados</div>
-                <div className="grid grid-cols-1 gap-1.5">
+                <div className="grid grid-cols-3 gap-1.5">
                   {TITLE_PRESETS.map(p => (
-                    <button key={p.id} onClick={() => addTitleFromPreset(p)}
-                      className="group flex items-center justify-between rounded-md border border-border bg-card px-2.5 py-2 text-left hover:border-ring/50">
-                      <div className="min-w-0">
-                        <div className="truncate font-semibold">{p.label}</div>
-                        <div className="truncate text-[10px] text-muted-foreground">{p.hint}</div>
-                      </div>
-                      <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-primary opacity-0 group-hover:opacity-100">+ add</span>
-                    </button>
+                    <TitlePresetCard key={p.id} preset={p} onAdd={() => addTitleFromPreset(p)} />
                   ))}
                 </div>
 
                 <div className="px-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Lower Thirds</div>
-                <div className="grid grid-cols-1 gap-1.5">
+                <div className="grid grid-cols-3 gap-1.5">
                   {LOWER_THIRD_PRESETS.map(p => (
-                    <button key={p.id} onClick={() => addTitleFromPreset(p)}
-                      className="group flex items-center justify-between rounded-md border border-border bg-card px-2.5 py-2 text-left hover:border-ring/50">
-                      <div className="min-w-0">
-                        <div className="truncate font-semibold">{p.label}</div>
-                        <div className="truncate text-[10px] text-muted-foreground">{p.hint}</div>
-                      </div>
-                      <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-primary opacity-0 group-hover:opacity-100">+ add</span>
-                    </button>
+                    <TitlePresetCard key={p.id} preset={p} onAdd={() => addTitleFromPreset(p)} />
                   ))}
                 </div>
+
               </div>
             )}
 

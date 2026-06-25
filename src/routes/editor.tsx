@@ -597,52 +597,76 @@ function MasterFader({ label, db, setDb, peak, clip, onClearClip }: {
   const tickTop = (tick: number) => `${(1 - (tick - minDb) / (maxDb - minDb)) * 100}%`;
   const peakDbLabel = peak > 0.00001 ? `${peakDb >= 0 ? "+" : ""}${peakDb.toFixed(1)}` : "-∞";
   return (
-    <div className="flex h-full w-[58px] flex-col items-center gap-1 select-none">
-      <div className="text-[10px] font-bold tracking-wider text-muted-foreground">{label}</div>
+    <div className="flex h-full w-[64px] flex-col items-center gap-1.5 select-none">
+      <div className="text-[10px] font-bold tracking-[0.15em] text-muted-foreground">{label}</div>
       <button
         onClick={onClearClip}
         title={clip ? "Clipping detectado — clique para limpar" : "Sem clipping"}
-        className={`h-2 w-8 shrink-0 rounded-sm transition ${clip ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.9)] animate-pulse" : "bg-zinc-700"}`}
+        className={`h-2.5 w-10 shrink-0 rounded-sm transition ${clip ? "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.95)] animate-pulse" : "bg-gradient-to-b from-zinc-700 to-zinc-800 ring-1 ring-black/40"}`}
       />
-      <div className="flex min-h-0 flex-1 items-stretch gap-1">
-        <div className="relative w-7 shrink-0 font-mono text-[9px] leading-none tabular-nums text-muted-foreground/80">
+      <div className="flex min-h-0 flex-1 items-stretch gap-1.5">
+        {/* Escala dB */}
+        <div className="relative w-6 shrink-0 font-mono text-[9px] leading-none tabular-nums text-muted-foreground/70">
           {dbTicks.map(tick => (
-            <div key={tick} className="absolute right-0 -translate-y-1/2 px-0.5" style={{ top: tickTop(tick) }}>
-              {tick > 0 ? `+${tick}` : tick}
+            <div key={tick} className="absolute right-0 -translate-y-1/2 flex items-center gap-1" style={{ top: tickTop(tick) }}>
+              <span>{tick > 0 ? `+${tick}` : tick}</span>
+              <span className="h-px w-1 bg-muted-foreground/40" />
             </div>
           ))}
         </div>
-        {/* Meter */}
-        <div className="relative w-2 overflow-hidden rounded bg-zinc-900 ring-1 ring-zinc-800">
-          <div
-            className="absolute inset-x-0 bottom-0 transition-[height] duration-75"
-            style={{
-              height: `${meterPct * 100}%`,
-              background: "linear-gradient(to top, #22c55e 0%, #22c55e 55%, #eab308 75%, #ef4444 92%)",
-            }}
-          />
-          <div className="pointer-events-none absolute inset-x-0 h-px bg-white/40" style={{ top: `${zeroPct * 100}%` }} />
-        </div>
-        {/* Fader */}
+        {/* VU Meter + Fader unificados */}
         <div
           ref={trackRef}
           onPointerDown={onPointer}
           onDoubleClick={() => setDb(0)}
           title={`${label}: ${db > 0 ? "+" : ""}${db.toFixed(1)} dB (duplo clique = 0)`}
-          className="relative w-4 cursor-ns-resize rounded bg-zinc-900 ring-1 ring-zinc-800"
+          className="relative w-6 cursor-ns-resize rounded-md bg-zinc-950 ring-1 ring-black/60 shadow-inner overflow-hidden"
+          style={{
+            backgroundImage:
+              "repeating-linear-gradient(to top, transparent 0 3px, rgba(255,255,255,0.04) 3px 4px)",
+          }}
         >
-          <div className="absolute inset-x-1 top-0 bottom-0 rounded bg-gradient-to-b from-red-500/40 via-yellow-400/20 to-emerald-500/10" />
-          <div className="pointer-events-none absolute inset-x-0 h-px bg-white/30" style={{ top: `${zeroPct * 100}%` }} />
+          {/* Preenchimento VU — gradiente verde→amarelo→vermelho */}
           <div
-            className={`absolute left-1/2 h-2 w-5 -translate-x-1/2 rounded-sm shadow ring-1 ring-black/50 ${db > 6 ? "bg-red-500" : db > 0 ? "bg-yellow-400" : "bg-zinc-200"}`}
-            style={{ top: `calc(${knobPct * 100}% - 4px)` }}
+            className="absolute inset-x-0 bottom-0 transition-[height] duration-75"
+            style={{
+              height: `${meterPct * 100}%`,
+              background:
+                "linear-gradient(to top, #16a34a 0%, #22c55e 45%, #facc15 72%, #f97316 86%, #ef4444 96%)",
+              boxShadow: "inset 0 0 6px rgba(0,0,0,0.45)",
+            }}
           />
+          {/* LED segments overlay */}
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              backgroundImage:
+                "repeating-linear-gradient(to top, rgba(0,0,0,0.55) 0 2px, transparent 2px 6px)",
+            }}
+          />
+          {/* Linha 0 dB */}
+          <div className="pointer-events-none absolute inset-x-0 h-px bg-white/60" style={{ top: `${zeroPct * 100}%` }} />
+          {/* Fader thumb */}
+          <div
+            className="absolute left-1/2 h-3 w-7 -translate-x-1/2 rounded-[3px] shadow-[0_2px_4px_rgba(0,0,0,0.7)] ring-1 ring-black/70"
+            style={{
+              top: `calc(${knobPct * 100}% - 6px)`,
+              background:
+                db > 6
+                  ? "linear-gradient(to bottom, #fca5a5, #ef4444 55%, #991b1b)"
+                  : db > 0
+                  ? "linear-gradient(to bottom, #fde68a, #eab308 55%, #854d0e)"
+                  : "linear-gradient(to bottom, #f4f4f5, #a1a1aa 55%, #52525b)",
+            }}
+          >
+            <div className="absolute inset-x-1 top-1/2 h-px -translate-y-1/2 bg-black/60" />
+          </div>
         </div>
       </div>
       <div className={`shrink-0 font-mono text-[11px] font-semibold tabular-nums ${labelColor}`}>
         {db > 0 ? "+" : ""}{db.toFixed(1)}
       </div>
-      <div className="shrink-0 font-mono text-[9px] text-muted-foreground">pk {peakDbLabel}</div>
+      <div className="shrink-0 font-mono text-[9px] tracking-wider text-muted-foreground">pk {peakDbLabel}</div>
     </div>
   );
 }

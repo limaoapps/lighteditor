@@ -25,6 +25,13 @@ export type SceneFx = {
   blur?: number;
   opacity?: number;
   zoom?: { dir: "in" | "out"; speed: "slow" | "med" | "fast" } | null;
+  chroma?: {
+    enabled: boolean;
+    color: string;
+    similarity: number;
+    smoothness: number;
+    spill: number;
+  };
 };
 
 export type TextAnim =

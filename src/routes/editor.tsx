@@ -4358,28 +4358,21 @@ function Editor() {
                 </div>
                 <div>
                   <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Títulos animados</div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     {TITLE_PRESETS.map(p => (
-                      <button key={p.id} onClick={() => { addTitleFromPreset(p); setShowMobilePanel(false); }}
-                        className="rounded-xl border border-border bg-card p-3 text-left shadow-sm active:bg-accent">
-                        <div className="text-sm font-bold">{p.label}</div>
-                        <div className="text-[10px] text-muted-foreground">{p.hint}</div>
-                      </button>
+                      <TitlePresetCard key={p.id} preset={p} onAdd={() => { addTitleFromPreset(p); setShowMobilePanel(false); }} />
                     ))}
                   </div>
                 </div>
                 <div>
                   <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Lower Thirds</div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     {LOWER_THIRD_PRESETS.map(p => (
-                      <button key={p.id} onClick={() => { addTitleFromPreset(p); setShowMobilePanel(false); }}
-                        className="rounded-xl border border-border bg-card p-3 text-left shadow-sm active:bg-accent">
-                        <div className="text-sm font-bold">{p.label}</div>
-                        <div className="text-[10px] text-muted-foreground">{p.hint}</div>
-                      </button>
+                      <TitlePresetCard key={p.id} preset={p} onAdd={() => { addTitleFromPreset(p); setShowMobilePanel(false); }} />
                     ))}
                   </div>
                 </div>
+
               </div>
             )}
 

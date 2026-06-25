@@ -17,6 +17,23 @@ import { computeItemBounds, type ProjectAspect } from "./scene-geometry";
 import { sharedRuntime as sharedGLRuntime } from "./transitions/gl-runtime";
 import { getTransition } from "./transitions/registry";
 import { fallback2D } from "./transitions/fallback";
+import { applyChromaKey } from "./fx/chroma-key";
+
+/** Se o item tem chroma habilitado, retorna o canvas processado (com a cor-chave transparente). */
+function maybeChromaSource(item: SceneItem, source: MediaSource, srcW: number, srcH: number): MediaSource {
+  const ck = item.fx?.chroma;
+  if (!ck?.enabled) return source;
+  if (item.kind !== "video" && item.kind !== "image") return source;
+  // limita a 1280 para custo previsível em vídeos grandes; o resultado é escalado depois.
+  const maxDim = 1280;
+  const k = Math.min(1, maxDim / Math.max(srcW, srcH));
+  const w = Math.max(2, Math.round(srcW * k));
+  const h = Math.max(2, Math.round(srcH * k));
+  const out = applyChromaKey(source as unknown as TexImageSource, w, h, ck);
+  return (out as unknown as MediaSource) ?? source;
+}
+
+
 
 export type SceneFx = {
   fillMode: "bars" | "blur" | "mirror" | "stretch" | "color";
@@ -25,6 +42,13 @@ export type SceneFx = {
   blur?: number;
   opacity?: number;
   zoom?: { dir: "in" | "out"; speed: "slow" | "med" | "fast" } | null;
+  chroma?: {
+    enabled: boolean;
+    color: string;
+    similarity: number;
+    smoothness: number;
+    spill: number;
+  };
 };
 
 export type TextAnim =
@@ -251,8 +275,9 @@ function drawClipFrame(
   if (rot) ctx.rotate(rot);
   ctx.scale(sc, sc);
   setFilter(ctx, visualBlurPx > 0 ? `blur(${visualBlurPx}px)` : "none");
+  const drawSrc = maybeChromaSource(item, source, srcW, srcH);
   if (fillMode === "stretch") {
-    ctx.drawImage(source, -targetW / 2, -targetH / 2, targetW, targetH);
+    ctx.drawImage(drawSrc, -targetW / 2, -targetH / 2, targetW, targetH);
   } else if (previewBox) {
     const boxW = (previewBox.wPct / 100) * targetW;
     const boxH = (previewBox.hPct / 100) * targetH;
@@ -261,11 +286,11 @@ function drawClipFrame(
     let drawW: number, drawH: number;
     if (srcAR >= boxAR) { drawW = boxW; drawH = boxW / srcAR; }
     else { drawH = boxH; drawW = boxH * srcAR; }
-    ctx.drawImage(source, -drawW / 2, -drawH / 2, drawW, drawH);
+    ctx.drawImage(drawSrc, -drawW / 2, -drawH / 2, drawW, drawH);
   } else {
     const contain = Math.min(targetW / srcW, targetH / srcH);
     const w = srcW * contain, h = srcH * contain;
-    ctx.drawImage(source, -w / 2, -h / 2, w, h);
+    ctx.drawImage(drawSrc, -w / 2, -h / 2, w, h);
   }
   setFilter(ctx, "none");
   ctx.restore();
@@ -332,7 +357,7 @@ function drawVisualOverlay(
   let drawWo: number, drawHo: number;
   if (srcARo >= boxARo) { drawWo = boxW; drawHo = boxW / srcARo; }
   else { drawHo = boxH; drawWo = boxH * srcARo; }
-  ctx.drawImage(source, -drawWo / 2, -drawHo / 2, drawWo, drawHo);
+  ctx.drawImage(maybeChromaSource(item, source, srcW, srcH), -drawWo / 2, -drawHo / 2, drawWo, drawHo);
   setFilter(ctx, "none");
   ctx.restore();
 }

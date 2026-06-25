@@ -25,6 +25,7 @@ import { DEFAULT_AUDIO_FX_PRO, type AudioFxPro } from "@/lib/audio/types";
 import { computeItemBounds } from "@/lib/scene-geometry";
 import { PreviewCanvas } from "@/components/editor/PreviewCanvas";
 import { Waveform } from "@/components/editor/Waveform";
+import { TitlePresetCard } from "@/components/editor/TitlePresetCard";
 import { VideoFilmstrip } from "@/components/editor/VideoFilmstrip";
 import { MediaThumb } from "@/components/editor/MediaThumb";
 import type { SceneItem } from "@/lib/scene-renderer";
@@ -2942,32 +2943,19 @@ function Editor() {
                 </div>
 
                 <div className="px-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Títulos animados</div>
-                <div className="grid grid-cols-1 gap-1.5">
+                <div className="grid grid-cols-3 gap-1.5">
                   {TITLE_PRESETS.map(p => (
-                    <button key={p.id} onClick={() => addTitleFromPreset(p)}
-                      className="group flex items-center justify-between rounded-md border border-border bg-card px-2.5 py-2 text-left hover:border-ring/50">
-                      <div className="min-w-0">
-                        <div className="truncate font-semibold">{p.label}</div>
-                        <div className="truncate text-[10px] text-muted-foreground">{p.hint}</div>
-                      </div>
-                      <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-primary opacity-0 group-hover:opacity-100">+ add</span>
-                    </button>
+                    <TitlePresetCard key={p.id} preset={p} onAdd={() => addTitleFromPreset(p)} />
                   ))}
                 </div>
 
                 <div className="px-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Lower Thirds</div>
-                <div className="grid grid-cols-1 gap-1.5">
+                <div className="grid grid-cols-3 gap-1.5">
                   {LOWER_THIRD_PRESETS.map(p => (
-                    <button key={p.id} onClick={() => addTitleFromPreset(p)}
-                      className="group flex items-center justify-between rounded-md border border-border bg-card px-2.5 py-2 text-left hover:border-ring/50">
-                      <div className="min-w-0">
-                        <div className="truncate font-semibold">{p.label}</div>
-                        <div className="truncate text-[10px] text-muted-foreground">{p.hint}</div>
-                      </div>
-                      <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-primary opacity-0 group-hover:opacity-100">+ add</span>
-                    </button>
+                    <TitlePresetCard key={p.id} preset={p} onAdd={() => addTitleFromPreset(p)} />
                   ))}
                 </div>
+
               </div>
             )}
 
@@ -3162,39 +3150,45 @@ function Editor() {
                     : "none";
                   const stroke = t.strokeWidth > 0
                     ? `${t.strokeWidth}px ${t.strokeColor}` : undefined;
+                  // Quando o WYSIWYG (canvas) está ativo, o texto animado já é desenhado
+                  // pelo motor de render. O elemento DOM deve ficar visualmente invisível
+                  // para não aparecer uma versão estática sobreposta — mas manter as
+                  // dimensões/posição para drag, seleção e handles.
+                  const hideForCanvas = useCanvasPreview;
                   const txtStyle: React.CSSProperties = {
                     position: "absolute",
                     left: `${tr.xPct}%`, top: `${tr.yPct}%`,
                     transform: `translate(-50%,-50%) scale(${tr.scale}) rotate(${tr.rotation}deg)`,
-                    color: t.color,
+                    color: hideForCanvas ? "transparent" : t.color,
                     fontFamily: t.fontFamily,
                     fontSize: t.size,
                     fontWeight: t.bold ? 800 : 400,
                     fontStyle: t.italic ? "italic" : "normal",
-                    textDecoration: t.underline ? "underline" : "none",
+                    textDecoration: hideForCanvas ? "none" : (t.underline ? "underline" : "none"),
                     textAlign: t.align,
                     letterSpacing: `${t.letterSpacing}px`,
                     lineHeight: t.lineHeight,
-                    textShadow: shadow,
-                    WebkitTextStroke: stroke,
-                    background: t.bgOpacity > 0 ? bgRgba : "transparent",
+                    textShadow: hideForCanvas ? "none" : shadow,
+                    WebkitTextStroke: hideForCanvas ? undefined : stroke,
+                    background: hideForCanvas ? "transparent" : (t.bgOpacity > 0 ? bgRgba : "transparent"),
                     padding: `${t.paddingY}px ${t.paddingX}px`,
                     borderRadius: t.radius,
                     whiteSpace: "pre-wrap",
                     cursor: "move",
-                    opacity: (computeVisualOpacity(ov, playhead)) * t.opacity,
-                    filter: cssFilter(ov.fx),
+                    opacity: hideForCanvas ? 0.001 : (computeVisualOpacity(ov, playhead)) * t.opacity,
+                    filter: hideForCanvas ? "none" : cssFilter(ov.fx),
                     zIndex: isSel ? 40 : trackZ(ov.trackId),
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
                     maxWidth: "90%",
                   };
                   return (
                     <div key={ov.id} style={txtStyle} onMouseDown={(e) => startMove(ov.id, e, tr)}>
-                      {t.content}
+                      <span style={hideForCanvas ? { visibility: "hidden" } : undefined}>{t.content}</span>
                       {isSel && <CornerHandles id={ov.id} tr={tr} onStartScale={startScale} />}
                     </div>
                   );
                 }
+
                 return null;
               })}
 
@@ -4365,28 +4359,21 @@ function Editor() {
                 </div>
                 <div>
                   <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Títulos animados</div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     {TITLE_PRESETS.map(p => (
-                      <button key={p.id} onClick={() => { addTitleFromPreset(p); setShowMobilePanel(false); }}
-                        className="rounded-xl border border-border bg-card p-3 text-left shadow-sm active:bg-accent">
-                        <div className="text-sm font-bold">{p.label}</div>
-                        <div className="text-[10px] text-muted-foreground">{p.hint}</div>
-                      </button>
+                      <TitlePresetCard key={p.id} preset={p} onAdd={() => { addTitleFromPreset(p); setShowMobilePanel(false); }} />
                     ))}
                   </div>
                 </div>
                 <div>
                   <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Lower Thirds</div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     {LOWER_THIRD_PRESETS.map(p => (
-                      <button key={p.id} onClick={() => { addTitleFromPreset(p); setShowMobilePanel(false); }}
-                        className="rounded-xl border border-border bg-card p-3 text-left shadow-sm active:bg-accent">
-                        <div className="text-sm font-bold">{p.label}</div>
-                        <div className="text-[10px] text-muted-foreground">{p.hint}</div>
-                      </button>
+                      <TitlePresetCard key={p.id} preset={p} onAdd={() => { addTitleFromPreset(p); setShowMobilePanel(false); }} />
                     ))}
                   </div>
                 </div>
+
               </div>
             )}
 

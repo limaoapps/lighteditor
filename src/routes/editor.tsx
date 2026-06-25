@@ -26,6 +26,7 @@ import { computeItemBounds } from "@/lib/scene-geometry";
 import { PreviewCanvas } from "@/components/editor/PreviewCanvas";
 import { Waveform } from "@/components/editor/Waveform";
 import { VideoFilmstrip } from "@/components/editor/VideoFilmstrip";
+import { MediaThumb } from "@/components/editor/MediaThumb";
 import type { SceneItem } from "@/lib/scene-renderer";
 import type { CachedMediaItem } from "@/lib/media-cache";
 import { TransitionsPanel } from "@/components/editor/transitions/TransitionsPanel";

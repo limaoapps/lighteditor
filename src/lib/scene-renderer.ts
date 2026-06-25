@@ -17,6 +17,23 @@ import { computeItemBounds, type ProjectAspect } from "./scene-geometry";
 import { sharedRuntime as sharedGLRuntime } from "./transitions/gl-runtime";
 import { getTransition } from "./transitions/registry";
 import { fallback2D } from "./transitions/fallback";
+import { applyChromaKey } from "./fx/chroma-key";
+
+/** Se o item tem chroma habilitado, retorna o canvas processado (com a cor-chave transparente). */
+function maybeChromaSource(item: SceneItem, source: MediaSource, srcW: number, srcH: number): MediaSource {
+  const ck = item.fx?.chroma;
+  if (!ck?.enabled) return source;
+  if (item.kind !== "video" && item.kind !== "image") return source;
+  // limita a 1280 para custo previsível em vídeos grandes; o resultado é escalado depois.
+  const maxDim = 1280;
+  const k = Math.min(1, maxDim / Math.max(srcW, srcH));
+  const w = Math.max(2, Math.round(srcW * k));
+  const h = Math.max(2, Math.round(srcH * k));
+  const out = applyChromaKey(source as unknown as TexImageSource, w, h, ck);
+  return (out as unknown as MediaSource) ?? source;
+}
+
+
 
 export type SceneFx = {
   fillMode: "bars" | "blur" | "mirror" | "stretch" | "color";

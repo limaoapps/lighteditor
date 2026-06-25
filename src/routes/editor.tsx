@@ -4301,16 +4301,25 @@ function Editor() {
                   className="glow-primary flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-4 text-sm font-bold text-primary-foreground shadow-lg active:scale-95 transition-transform">
                   <Plus className="h-5 w-5" /> Adicionar Mídia
                 </button>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-2">
                   {media.map(a => {
                     const Icon = a.kind === "audio" ? Music2 : a.kind === "image" ? ImageIcon : VideoIcon;
                     return (
                       <div key={a.id} onClick={() => { addAssetToTimeline(a); setShowMobilePanel(false); }}
-                        className="flex flex-col gap-2 rounded-xl border border-border bg-card p-2 text-xs shadow-sm active:bg-accent transition-colors">
-                        <div className="aspect-video w-full rounded-lg bg-muted flex items-center justify-center">
-                          <Icon className="h-8 w-8 text-primary/60" />
+                        className="group relative flex flex-col overflow-hidden rounded-xl border border-border bg-card text-xs shadow-sm active:bg-accent transition-colors">
+                        <div className="relative aspect-square w-full bg-muted">
+                          <MediaThumb
+                            kind={a.kind}
+                            url={a.url}
+                            file={a.file}
+                            name={a.name}
+                            className="absolute inset-0 h-full w-full object-cover"
+                          />
+                          <div className="absolute left-1 top-1 rounded bg-background/80 p-0.5 backdrop-blur-sm">
+                            <Icon className="h-3 w-3 text-primary" />
+                          </div>
                         </div>
-                        <span className="px-1 truncate font-medium">{a.name}</span>
+                        <span className="truncate px-1.5 py-1 text-[10px] font-medium">{a.name}</span>
                       </div>
                     );
                   })}

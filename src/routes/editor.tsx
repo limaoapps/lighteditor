@@ -3162,39 +3162,45 @@ function Editor() {
                     : "none";
                   const stroke = t.strokeWidth > 0
                     ? `${t.strokeWidth}px ${t.strokeColor}` : undefined;
+                  // Quando o WYSIWYG (canvas) está ativo, o texto animado já é desenhado
+                  // pelo motor de render. O elemento DOM deve ficar visualmente invisível
+                  // para não aparecer uma versão estática sobreposta — mas manter as
+                  // dimensões/posição para drag, seleção e handles.
+                  const hideForCanvas = useCanvasPreview;
                   const txtStyle: React.CSSProperties = {
                     position: "absolute",
                     left: `${tr.xPct}%`, top: `${tr.yPct}%`,
                     transform: `translate(-50%,-50%) scale(${tr.scale}) rotate(${tr.rotation}deg)`,
-                    color: t.color,
+                    color: hideForCanvas ? "transparent" : t.color,
                     fontFamily: t.fontFamily,
                     fontSize: t.size,
                     fontWeight: t.bold ? 800 : 400,
                     fontStyle: t.italic ? "italic" : "normal",
-                    textDecoration: t.underline ? "underline" : "none",
+                    textDecoration: hideForCanvas ? "none" : (t.underline ? "underline" : "none"),
                     textAlign: t.align,
                     letterSpacing: `${t.letterSpacing}px`,
                     lineHeight: t.lineHeight,
-                    textShadow: shadow,
-                    WebkitTextStroke: stroke,
-                    background: t.bgOpacity > 0 ? bgRgba : "transparent",
+                    textShadow: hideForCanvas ? "none" : shadow,
+                    WebkitTextStroke: hideForCanvas ? undefined : stroke,
+                    background: hideForCanvas ? "transparent" : (t.bgOpacity > 0 ? bgRgba : "transparent"),
                     padding: `${t.paddingY}px ${t.paddingX}px`,
                     borderRadius: t.radius,
                     whiteSpace: "pre-wrap",
                     cursor: "move",
-                    opacity: (computeVisualOpacity(ov, playhead)) * t.opacity,
-                    filter: cssFilter(ov.fx),
+                    opacity: hideForCanvas ? 0.001 : (computeVisualOpacity(ov, playhead)) * t.opacity,
+                    filter: hideForCanvas ? "none" : cssFilter(ov.fx),
                     zIndex: isSel ? 40 : trackZ(ov.trackId),
                     outline: isSel ? "1.5px dashed var(--primary)" : "none",
                     maxWidth: "90%",
                   };
                   return (
                     <div key={ov.id} style={txtStyle} onMouseDown={(e) => startMove(ov.id, e, tr)}>
-                      {t.content}
+                      <span style={hideForCanvas ? { visibility: "hidden" } : undefined}>{t.content}</span>
                       {isSel && <CornerHandles id={ov.id} tr={tr} onStartScale={startScale} />}
                     </div>
                   );
                 }
+
                 return null;
               })}
 

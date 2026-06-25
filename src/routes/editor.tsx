@@ -2816,7 +2816,7 @@ function Editor() {
               );
             })}
           </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-2 p-3">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-y-auto app-scrollbar p-3">
             <input ref={fileInputRef} type="file" multiple hidden
               accept="video/*,audio/*,image/*,.mp4,.mov,.avi,.mkv,.webm,.mp3,.wav,.ogg,.png,.jpg,.jpeg"
               onChange={(e) => { addFiles(e.target.files); if (fileInputRef.current) fileInputRef.current.value = ""; }} />

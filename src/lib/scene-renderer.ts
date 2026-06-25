@@ -357,7 +357,7 @@ function drawVisualOverlay(
   let drawWo: number, drawHo: number;
   if (srcARo >= boxARo) { drawWo = boxW; drawHo = boxW / srcARo; }
   else { drawHo = boxH; drawWo = boxH * srcARo; }
-  ctx.drawImage(source, -drawWo / 2, -drawHo / 2, drawWo, drawHo);
+  ctx.drawImage(maybeChromaSource(item, source, srcW, srcH), -drawWo / 2, -drawHo / 2, drawWo, drawHo);
   setFilter(ctx, "none");
   ctx.restore();
 }

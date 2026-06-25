@@ -25,6 +25,7 @@ import { DEFAULT_AUDIO_FX_PRO, type AudioFxPro } from "@/lib/audio/types";
 import { computeItemBounds } from "@/lib/scene-geometry";
 import { PreviewCanvas } from "@/components/editor/PreviewCanvas";
 import { Waveform } from "@/components/editor/Waveform";
+import { TitlePresetCard } from "@/components/editor/TitlePresetCard";
 import { VideoFilmstrip } from "@/components/editor/VideoFilmstrip";
 import { MediaThumb } from "@/components/editor/MediaThumb";
 import type { SceneItem } from "@/lib/scene-renderer";

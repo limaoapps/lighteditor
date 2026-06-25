@@ -275,8 +275,9 @@ function drawClipFrame(
   if (rot) ctx.rotate(rot);
   ctx.scale(sc, sc);
   setFilter(ctx, visualBlurPx > 0 ? `blur(${visualBlurPx}px)` : "none");
+  const drawSrc = maybeChromaSource(item, source, srcW, srcH);
   if (fillMode === "stretch") {
-    ctx.drawImage(source, -targetW / 2, -targetH / 2, targetW, targetH);
+    ctx.drawImage(drawSrc, -targetW / 2, -targetH / 2, targetW, targetH);
   } else if (previewBox) {
     const boxW = (previewBox.wPct / 100) * targetW;
     const boxH = (previewBox.hPct / 100) * targetH;
@@ -285,11 +286,11 @@ function drawClipFrame(
     let drawW: number, drawH: number;
     if (srcAR >= boxAR) { drawW = boxW; drawH = boxW / srcAR; }
     else { drawH = boxH; drawW = boxH * srcAR; }
-    ctx.drawImage(source, -drawW / 2, -drawH / 2, drawW, drawH);
+    ctx.drawImage(drawSrc, -drawW / 2, -drawH / 2, drawW, drawH);
   } else {
     const contain = Math.min(targetW / srcW, targetH / srcH);
     const w = srcW * contain, h = srcH * contain;
-    ctx.drawImage(source, -w / 2, -h / 2, w, h);
+    ctx.drawImage(drawSrc, -w / 2, -h / 2, w, h);
   }
   setFilter(ctx, "none");
   ctx.restore();

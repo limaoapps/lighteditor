@@ -26,6 +26,7 @@ import { computeItemBounds } from "@/lib/scene-geometry";
 import { PreviewCanvas } from "@/components/editor/PreviewCanvas";
 import { Waveform } from "@/components/editor/Waveform";
 import { VideoFilmstrip } from "@/components/editor/VideoFilmstrip";
+import { MediaThumb } from "@/components/editor/MediaThumb";
 import type { SceneItem } from "@/lib/scene-renderer";
 import type { CachedMediaItem } from "@/lib/media-cache";
 import { TransitionsPanel } from "@/components/editor/transitions/TransitionsPanel";
@@ -2808,7 +2809,7 @@ function Editor() {
                 </div>
                 <div
                   ref={mediaListRef}
-                  className="relative flex-1 space-y-1 overflow-y-auto pr-1"
+                  className="relative grid flex-1 grid-cols-3 content-start gap-2 overflow-y-auto pr-1"
                   onMouseDown={(e) => {
                     // só inicia box-select quando clica em área vazia (não em item / botão)
                     if ((e.target as HTMLElement).closest("[data-media-item]")) return;
@@ -2857,20 +2858,37 @@ function Editor() {
                         onDoubleClick={() => addAssetToTimeline(a)}
                         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setMediaCtx({ x: e.clientX, y: e.clientY, mediaId: a.id }); }}
                         title="Arraste para a timeline. Shift/Ctrl+clique ou arraste no fundo para selecionar várias."
-                        className={`group flex w-full cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs active:cursor-grabbing ${isSel ? "border-primary bg-primary/15 ring-1 ring-primary/40" : used ? "border-primary/40 bg-primary/5" : "border-border bg-card hover:border-ring/50"}`}>
-                        <Icon className="h-3.5 w-3.5 text-primary" />
-                        <span className="min-w-0 flex-1 truncate">{a.name}</span>
-                        {used && <Check className="h-3 w-3 text-primary" />}
-                        <button onClick={(e) => { e.stopPropagation(); addAssetToTimeline(a); }} className="rounded p-0.5 opacity-0 hover:bg-background group-hover:opacity-100" title="Adicionar à timeline">
-                          <Plus className="h-3 w-3" />
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); removeMedia(a.id); }} className="rounded p-0.5 opacity-0 text-destructive hover:bg-background group-hover:opacity-100" title="Excluir mídia">
-                          <Trash2 className="h-3 w-3" />
-                        </button>
+                        className={`group relative flex cursor-grab flex-col overflow-hidden rounded-md border text-left text-[10px] active:cursor-grabbing ${isSel ? "border-primary ring-1 ring-primary/40" : used ? "border-primary/40" : "border-border hover:border-ring/50"}`}>
+                        <div className="relative aspect-square w-full bg-muted">
+                          <MediaThumb
+                            kind={a.kind}
+                            url={a.url}
+                            file={a.file}
+                            name={a.name}
+                            className="absolute inset-0 h-full w-full object-cover"
+                          />
+                          <div className="absolute left-1 top-1 rounded bg-background/80 p-0.5 backdrop-blur-sm">
+                            <Icon className="h-3 w-3 text-primary" />
+                          </div>
+                          {used && (
+                            <div className="absolute right-1 top-1 rounded-full bg-primary p-0.5">
+                              <Check className="h-2.5 w-2.5 text-primary-foreground" />
+                            </div>
+                          )}
+                          <div className="absolute inset-x-0 bottom-0 flex justify-end gap-0.5 bg-gradient-to-t from-background/90 to-transparent p-1 opacity-0 group-hover:opacity-100">
+                            <button onClick={(e) => { e.stopPropagation(); addAssetToTimeline(a); }} className="rounded bg-background/90 p-1 hover:bg-background" title="Adicionar à timeline">
+                              <Plus className="h-3 w-3" />
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); removeMedia(a.id); }} className="rounded bg-background/90 p-1 text-destructive hover:bg-background" title="Excluir mídia">
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="truncate bg-card px-1.5 py-1 text-[10px]" title={a.name}>{a.name}</div>
                       </div>
                     );
                   })}
-                  {!media.length && <div className="rounded-md border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">Clique em "Adicionar Arquivo" para importar mídia. Depois arraste para a timeline.</div>}
+                  {!media.length && <div className="col-span-3 rounded-md border border-dashed border-border p-4 text-center text-[11px] text-muted-foreground">Clique em "Adicionar Arquivo" para importar mídia. Depois arraste para a timeline.</div>}
                   {mediaBoxSel && (
                     <div
                       className="pointer-events-none absolute z-10 rounded-sm border border-primary bg-primary/10"
@@ -4283,16 +4301,25 @@ function Editor() {
                   className="glow-primary flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-4 text-sm font-bold text-primary-foreground shadow-lg active:scale-95 transition-transform">
                   <Plus className="h-5 w-5" /> Adicionar Mídia
                 </button>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-2">
                   {media.map(a => {
                     const Icon = a.kind === "audio" ? Music2 : a.kind === "image" ? ImageIcon : VideoIcon;
                     return (
                       <div key={a.id} onClick={() => { addAssetToTimeline(a); setShowMobilePanel(false); }}
-                        className="flex flex-col gap-2 rounded-xl border border-border bg-card p-2 text-xs shadow-sm active:bg-accent transition-colors">
-                        <div className="aspect-video w-full rounded-lg bg-muted flex items-center justify-center">
-                          <Icon className="h-8 w-8 text-primary/60" />
+                        className="group relative flex flex-col overflow-hidden rounded-xl border border-border bg-card text-xs shadow-sm active:bg-accent transition-colors">
+                        <div className="relative aspect-square w-full bg-muted">
+                          <MediaThumb
+                            kind={a.kind}
+                            url={a.url}
+                            file={a.file}
+                            name={a.name}
+                            className="absolute inset-0 h-full w-full object-cover"
+                          />
+                          <div className="absolute left-1 top-1 rounded bg-background/80 p-0.5 backdrop-blur-sm">
+                            <Icon className="h-3 w-3 text-primary" />
+                          </div>
                         </div>
-                        <span className="px-1 truncate font-medium">{a.name}</span>
+                        <span className="truncate px-1.5 py-1 text-[10px] font-medium">{a.name}</span>
                       </div>
                     );
                   })}

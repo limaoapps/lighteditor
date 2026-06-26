@@ -4304,6 +4304,7 @@ function Editor() {
             { id: "titles" as LeftPanel, icon: TypeIcon, label: "Texto" },
             { id: "transitions" as LeftPanel, icon: RefreshCw, label: "Transições" },
             { id: "effects" as LeftPanel, icon: Wand2, label: "Efeitos" },
+            { id: "captions" as LeftPanel, icon: Captions, label: "Legendas" },
           ].map(tab => {
             const Icon = tab.icon;
             const active = leftPanel === tab.id;

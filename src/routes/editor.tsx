@@ -4517,6 +4517,21 @@ function Editor() {
                 ))}
               </div>
             )}
+            {leftPanel === "captions" && (
+              <CaptionsPanel
+                sources={items
+                  .filter(i => (i.kind === "audio" || i.kind === "video") && !!i.url)
+                  .map<CaptionSource>(i => ({
+                    id: i.id,
+                    label: `${i.name} (${i.kind === "audio" ? "áudio" : "vídeo"})`,
+                    url: i.url!,
+                    timelineStart: i.start,
+                    inPoint: i.inPoint,
+                    outPoint: i.outPoint,
+                  }))}
+                onAddToTimeline={(segs) => { addCaptionsFromSegments(segs); setShowMobilePanel(false); }}
+              />
+            )}
           </div>
         </div>
       )}

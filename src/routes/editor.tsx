@@ -1802,6 +1802,27 @@ function Editor() {
     setSelectedId(it.id);
   }, [tracks, ensureTrack, setItems, playhead]);
 
+  /** Cria itens de texto na timeline a partir de segmentos transcritos pelo Whisper. */
+  const addCaptionsFromSegments = useCallback((segs: CaptionSegment[]) => {
+    if (!segs.length) return;
+    const trackId = ensureTrack("video");
+    const base = defaultText();
+    const newItems: TLItem[] = segs.map(s => ({
+      id: crypto.randomUUID(),
+      kind: "text",
+      trackId,
+      name: "Legenda",
+      start: Math.max(0, s.start),
+      inPoint: 0,
+      outPoint: Math.max(0.4, s.end - s.start),
+      sourceDuration: 9999,
+      text: { ...base, content: s.text, size: 48, bold: true, bgColor: "#000000", bgOpacity: 0.55, paddingX: 16, paddingY: 8 },
+      fx: { ...DEFAULT_FX },
+      transform: { xPct: 50, yPct: 88, scale: 1, rotation: 0 },
+    }));
+    setItems(prev => [...prev, ...newItems]);
+  }, [ensureTrack, setItems]);
+
   const deleteItem = (id: string) => {
     setItems(prev => prev.filter(i => i.id !== id));
     if (selectedId === id) setSelectedId(null);

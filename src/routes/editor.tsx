@@ -7,7 +7,10 @@ import {
   Lock, Unlock, Undo2, Redo2, Check, Copy as CopyIcon, ClipboardPaste,
   Sparkles, Sliders, Wand2, RotateCcw, Palette, Mic, MicOff,
   Settings as SettingsIcon, FileText, RefreshCw, Cpu, Info, Magnet, Gauge,
+  Captions,
 } from "lucide-react";
+import { CaptionsPanel, type CaptionSource } from "@/components/editor/CaptionsPanel";
+import type { CaptionSegment } from "@/lib/captions";
 import {
   DEFAULT_AUDIO_FX as DEFAULT_AUDIO_FX_REF,
   EQ_BANDS,
@@ -717,7 +720,7 @@ const FX_DEFAULT_VAL: Record<string, number> = {
   sharpness: 0, exposure: 0, shadows: 0, highlights: 0, blur: 0, opacity: 100,
 };
 
-type LeftPanel = "media" | "titles" | "transitions" | "effects";
+type LeftPanel = "media" | "titles" | "transitions" | "effects" | "captions";
 type TimelineEffectId = "blur" | "background-blur";
 const EFFECT_DND_TYPE = "application/x-vle-effect";
 const TIMELINE_EFFECTS: Array<{ id: TimelineEffectId; label: string; hint: string }> = [

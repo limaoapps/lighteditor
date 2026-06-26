@@ -7,7 +7,10 @@ import {
   Lock, Unlock, Undo2, Redo2, Check, Copy as CopyIcon, ClipboardPaste,
   Sparkles, Sliders, Wand2, RotateCcw, Palette, Mic, MicOff,
   Settings as SettingsIcon, FileText, RefreshCw, Cpu, Info, Magnet, Gauge,
+  Captions,
 } from "lucide-react";
+import { CaptionsPanel, type CaptionSource } from "@/components/editor/CaptionsPanel";
+import type { CaptionSegment } from "@/lib/captions";
 import {
   DEFAULT_AUDIO_FX as DEFAULT_AUDIO_FX_REF,
   EQ_BANDS,
@@ -717,7 +720,7 @@ const FX_DEFAULT_VAL: Record<string, number> = {
   sharpness: 0, exposure: 0, shadows: 0, highlights: 0, blur: 0, opacity: 100,
 };
 
-type LeftPanel = "media" | "titles" | "transitions" | "effects";
+type LeftPanel = "media" | "titles" | "transitions" | "effects" | "captions";
 type TimelineEffectId = "blur" | "background-blur";
 const EFFECT_DND_TYPE = "application/x-vle-effect";
 const TIMELINE_EFFECTS: Array<{ id: TimelineEffectId; label: string; hint: string }> = [
@@ -1799,6 +1802,27 @@ function Editor() {
     setSelectedId(it.id);
   }, [tracks, ensureTrack, setItems, playhead]);
 
+  /** Cria itens de texto na timeline a partir de segmentos transcritos pelo Whisper. */
+  const addCaptionsFromSegments = useCallback((segs: CaptionSegment[]) => {
+    if (!segs.length) return;
+    const trackId = ensureTrack("video");
+    const base = defaultText();
+    const newItems: TLItem[] = segs.map(s => ({
+      id: crypto.randomUUID(),
+      kind: "text",
+      trackId,
+      name: "Legenda",
+      start: Math.max(0, s.start),
+      inPoint: 0,
+      outPoint: Math.max(0.4, s.end - s.start),
+      sourceDuration: 9999,
+      text: { ...base, content: s.text, size: 48, bold: true, bgColor: "#000000", bgOpacity: 0.55, paddingX: 16, paddingY: 8 },
+      fx: { ...DEFAULT_FX },
+      transform: { xPct: 50, yPct: 88, scale: 1, rotation: 0 },
+    }));
+    setItems(prev => [...prev, ...newItems]);
+  }, [ensureTrack, setItems]);
+
   const deleteItem = (id: string) => {
     setItems(prev => prev.filter(i => i.id !== id));
     if (selectedId === id) setSelectedId(null);
@@ -2815,6 +2839,7 @@ function Editor() {
               { id: "titles" as LeftPanel, icon: TypeIcon, label: "Texto" },
               { id: "transitions" as LeftPanel, icon: RefreshCw, label: "Transições" },
               { id: "effects" as LeftPanel, icon: Wand2, label: "Efeitos" },
+              { id: "captions" as LeftPanel, icon: Captions, label: "Legendas" },
             ]).map(tab => {
               const Icon = tab.icon;
               const active = leftPanel === tab.id;
@@ -3010,6 +3035,22 @@ function Editor() {
                   </button>
                 ))}
               </div>
+            )}
+
+            {leftPanel === "captions" && (
+              <CaptionsPanel
+                sources={items
+                  .filter(i => (i.kind === "audio" || i.kind === "video") && !!i.url)
+                  .map<CaptionSource>(i => ({
+                    id: i.id,
+                    label: `${i.name} (${i.kind === "audio" ? "áudio" : "vídeo"})`,
+                    url: i.url!,
+                    timelineStart: i.start,
+                    inPoint: i.inPoint,
+                    outPoint: i.outPoint,
+                  }))}
+                onAddToTimeline={addCaptionsFromSegments}
+              />
             )}
           </div>
         </aside>
@@ -4263,6 +4304,7 @@ function Editor() {
             { id: "titles" as LeftPanel, icon: TypeIcon, label: "Texto" },
             { id: "transitions" as LeftPanel, icon: RefreshCw, label: "Transições" },
             { id: "effects" as LeftPanel, icon: Wand2, label: "Efeitos" },
+            { id: "captions" as LeftPanel, icon: Captions, label: "Legendas" },
           ].map(tab => {
             const Icon = tab.icon;
             const active = leftPanel === tab.id;
@@ -4474,6 +4516,21 @@ function Editor() {
                   </button>
                 ))}
               </div>
+            )}
+            {leftPanel === "captions" && (
+              <CaptionsPanel
+                sources={items
+                  .filter(i => (i.kind === "audio" || i.kind === "video") && !!i.url)
+                  .map<CaptionSource>(i => ({
+                    id: i.id,
+                    label: `${i.name} (${i.kind === "audio" ? "áudio" : "vídeo"})`,
+                    url: i.url!,
+                    timelineStart: i.start,
+                    inPoint: i.inPoint,
+                    outPoint: i.outPoint,
+                  }))}
+                onAddToTimeline={(segs) => { addCaptionsFromSegments(segs); setShowMobilePanel(false); }}
+              />
             )}
           </div>
         </div>

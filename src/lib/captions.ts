@@ -1,6 +1,6 @@
-// Auto-Legendas IA — Whisper offline via @xenova/transformers (WASM).
+// Auto-Legendas IA — Whisper offline via @huggingface/transformers (WASM).
 // Modelo "small" (~250MB no 1º uso, cacheado depois).
-import { pipeline, env, type Pipeline } from "@xenova/transformers";
+import { pipeline, env, type Pipeline } from "@huggingface/transformers";
 
 export type CaptionSegment = { start: number; end: number; text: string };
 
